@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orchestratemcp.dev/orchestratedash/contracts/agent.manifest.v2.schema.json",
+  "title": "OrchestrateDASH agent manifest v2",
+  "description": "Additive v2 manifest. It preserves the telemetry v1 fields and adds an Agent DOM declaration. Unknown fields remain forward-compatible. Credential values are forbidden; connection fields describe requirements only.",
+  "type": "object",
+  "required": ["manifest_version", "agent", "planned_route", "safety_contract", "monitoring", "provenance", "agent_dom"],
+  "properties": {
+    "manifest_version": { "const": 2 },
+    "agent": {
+      "type": "object",
+      "required": ["name", "goal", "plan_source", "playbook_id", "route_id", "build_target"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "display_name": { "type": "string", "minLength": 1 },
+        "goal": { "type": "string", "minLength": 1 },
+        "plan_source": { "enum": ["playbook", "composed"] },
+        "playbook_id": { "type": "string" },
+        "route_id": { "type": "string" },
+        "build_target": { "enum": ["cowork", "cursor", "chatgpt_gpt", "code"] }
+      }
+    },
+    "planned_route": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step", "component_id", "risk_level", "model_tier"],
+        "properties": {
+          "step": { "type": "integer", "minimum": 1 },
+          "component_id": { "type": "string", "minLength": 1 },
+          "risk_level": { "enum": ["low", "medium", "high", "critical"] },
+          "model_tier": { "enum": ["none", "small", "standard", "frontier"] }
+        }
+      }
+    },
+    "safety_contract": {
+      "type": "object",
+      "required": ["automation_clearance", "enforced_approval_gates", "irreversible_components"],
+      "properties": {
+        "automation_clearance": { "enum": ["L0", "L1", "L2", "L3", "L4"] },
+        "enforced_approval_gates": { "type": "array", "items": { "type": "string" } },
+        "irreversible_components": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "required": ["events", "endpoint_env", "token_env", "output_location"],
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": { "enum": ["run_started", "step_started", "step_completed", "gate_requested", "gate_resolved", "run_completed", "run_failed"] }
+        },
+        "endpoint_env": { "type": "string" },
+        "token_env": { "type": "string" },
+        "output_location": { "type": "string" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["generated_by", "registry_fingerprint", "generated_at"],
+      "properties": {
+        "generated_by": { "type": "string" },
+        "registry_fingerprint": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "agent_dom": {
+      "type": "object",
+      "required": ["dom_version", "runtime", "trigger", "locations", "connections", "control", "memory"],
+      "properties": {
+        "dom_version": { "const": 1 },
+        "runtime": {
+          "type": "object",
+          "required": ["class", "label", "availability", "continues_when_dash_closed"],
+          "properties": {
+            "class": { "enum": ["local_process", "managed_worker", "scheduled_job", "workflow_platform", "client_session", "other"] },
+            "provider": { "type": "string" },
+            "label": { "type": "string", "minLength": 1 },
+            "availability": { "enum": ["always_on", "scheduled", "while_client_open", "on_demand", "unknown"] },
+            "continues_when_dash_closed": { "type": "boolean" }
+          }
+        },
+        "trigger": {
+          "type": "object",
+          "required": ["type", "label"],
+          "properties": {
+            "type": { "enum": ["manual", "schedule", "webhook", "event", "poll", "client_session", "other"] },
+            "label": { "type": "string", "minLength": 1 },
+            "schedule": { "type": "string" },
+            "technical": { "type": "object" }
+          }
+        },
+        "locations": {
+          "type": "object",
+          "required": ["runtime", "control", "interaction"],
+          "properties": {
+            "runtime": { "$ref": "#/$defs/location" },
+            "control": { "type": "array", "items": { "$ref": "#/$defs/location" } },
+            "interaction": { "type": "array", "items": { "$ref": "#/$defs/location" } }
+          }
+        },
+        "connections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/connectionRequirement" }
+        },
+        "control": {
+          "type": "object",
+          "required": ["supported", "command_version", "commands"],
+          "properties": {
+            "supported": { "type": "boolean" },
+            "command_version": { "const": 1 },
+            "location_id": { "type": "string" },
+            "commands": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["approve", "reject", "choose", "retry", "pause", "resume", "cancel"] }
+            }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "supported": { "const": false } }, "required": ["supported"] },
+              "then": { "properties": { "commands": { "type": "array", "maxItems": 0 } } }
+            }
+          ]
+        },
+        "memory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "description", "visibility", "retention"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "description": { "type": "string", "minLength": 1 },
+              "visibility": { "const": "user_visible" },
+              "retention": { "enum": ["descriptor_only", "user_approved"] }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "required": ["id", "label", "kind"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["local", "remote", "provider_ui", "dash", "client", "other"] },
+        "uri": { "type": "string", "format": "uri-reference" },
+        "offline_behavior": { "type": "string", "minLength": 1 }
+      }
+    },
+    "connectionRequirement": {
+      "type": "object",
+      "propertyNames": {
+        "not": { "enum": ["value", "secret", "password", "token", "access_token", "refresh_token", "client_secret", "api_key", "credential_value"] }
+      },
+      "required": ["id", "provider", "label", "purpose", "ownership", "capabilities", "fields", "validation_action"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "provider": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "purpose": { "type": "string", "minLength": 1 },
+        "ownership": { "enum": ["dash_managed", "agent_managed", "external"] },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "access"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "access": { "enum": ["read", "write"] },
+              "technical": { "type": "object" }
+            }
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "not": { "enum": ["value", "secret", "password", "token", "access_token", "refresh_token", "client_secret", "api_key", "credential_value"] }
+            },
+            "required": ["id", "label", "purpose", "kind", "required"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "purpose": { "type": "string", "minLength": 1 },
+              "kind": { "enum": ["secret", "non_secret", "oauth_reauthorization"] },
+              "required": { "type": "boolean" },
+              "help": { "type": "string" },
+              "technical": {
+                "type": "object",
+                "properties": {
+                  "environment_name": { "type": "string" },
+                  "provider_scopes": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
+        },
+        "validation_action": {
+          "type": "object",
+          "required": ["id", "label", "behavior"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "label": { "type": "string", "minLength": 1 },
+            "behavior": { "enum": ["test", "reconnect_test_switch"] }
+          }
+        }
+      }
+    }
+  }
+}

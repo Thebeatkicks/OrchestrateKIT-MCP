@@ -1,0 +1,190 @@
+{
+  "manifest_version": 2,
+  "agent": {
+    "name": "hubspot-contact-reporter",
+    "goal": "Read HubSpot contacts on request and write a local JSON report.",
+    "plan_source": "composed",
+    "playbook_id": "",
+    "route_id": "",
+    "build_target": "code"
+  },
+  "planned_route": [
+    {
+      "step": 1,
+      "component_id": "crm_record_read",
+      "risk_level": "low",
+      "model_tier": "none"
+    },
+    {
+      "step": 2,
+      "component_id": "audit_log",
+      "risk_level": "low",
+      "model_tier": "none"
+    }
+  ],
+  "safety_contract": {
+    "automation_clearance": "L1",
+    "enforced_approval_gates": [],
+    "irreversible_components": []
+  },
+  "monitoring": {
+    "events": [
+      "run_started",
+      "step_started",
+      "step_completed",
+      "gate_requested",
+      "gate_resolved",
+      "run_completed",
+      "run_failed"
+    ],
+    "endpoint_env": "DASH_INGEST_URL",
+    "token_env": "DASH_INGEST_TOKEN",
+    "output_location": "Local JSON report"
+  },
+  "connections": [
+    {
+      "connection_id": "hubspot",
+      "label": "HubSpot",
+      "serves_components": [
+        "crm_record_read"
+      ],
+      "grants": "Read contacts and deals",
+      "acquisition_paths": [
+        {
+          "kind": "broker_connection_mcp",
+          "rank": 1,
+          "label": "HubSpot connection server (broker-backed)",
+          "ownership_location": "dash",
+          "availability": "planned",
+          "how": "Not available yet — no connection server exists to authorize against.",
+          "reuse": "Planned: authorize once against the connection server; chat dry-runs, Cursor and the deployed agent then all use that one connection.",
+          "caveat": "Needs someone to operate the verified provider OAuth app (directly or via a broker). MAR-383; until it ships, use the actionable path below."
+        },
+        {
+          "kind": "mcp_server",
+          "rank": 2,
+          "label": "HubSpot MCP server (community)",
+          "ownership_location": "external_manager",
+          "availability": "requires setup",
+          "how": "Install and authorize the community MCP server, then point this agent at it. The server holds the provider token; the agent only calls the server.",
+          "reuse": "Any MCP client you point at this server reuses it, but each client still connects to the server itself — the provider grant is never copied between applications.",
+          "caveat": "No official server here — community packages vary in quality and hold a live token, so review one before trusting it."
+        },
+        {
+          "kind": "raw_oauth",
+          "rank": 3,
+          "label": "HubSpot direct credentials (scripts/connect.mjs)",
+          "ownership_location": "agent",
+          "availability": "advanced",
+          "how": "Run `node scripts/connect.mjs`: it opens the Private App token (HubSpot, read scope) / OAuth2 (Salesforce) flow, live-probes the credential and writes the agent's local .env.",
+          "reuse": "Serves this agent only — another app, or another copy of this agent, authorizes again.",
+          "caveat": "You operate the provider app yourself, including any verification it requires."
+        }
+      ],
+      "actionable_path_kind": "mcp_server",
+      "verification_requirement": null,
+      "scopes": [
+        "crm.objects.contacts.read",
+        "crm.objects.deals.read",
+        "crm.objects.companies.read"
+      ]
+    }
+  ],
+  "provenance": {
+    "generated_by": "orchestratekit-mcp export_build_brief",
+    "registry_fingerprint": "531d33b7039db3ca",
+    "generated_at": "2026-07-26T20:00:00.000Z"
+  },
+  "agent_dom": {
+    "dom_version": 1,
+    "runtime": {
+      "class": "local_process",
+      "label": "DASH Agent Runner on this computer",
+      "availability": "on_demand",
+      "continues_when_dash_closed": true
+    },
+    "trigger": {
+      "type": "manual",
+      "label": "Manual run request",
+      "technical": {
+        "what_wakes_it_up": "The runner starts a registered process when a person requests a run.",
+        "offline_behavior": "No run starts while the computer or runner is off.",
+        "limitation": "No schedule or inbound event is configured."
+      }
+    },
+    "locations": {
+      "runtime": {
+        "id": "hubspot-contact-reporter-runtime",
+        "label": "DASH Agent Runner on this computer",
+        "kind": "local",
+        "offline_behavior": "Continues after the DASH window closes while this computer and runner remain on."
+      },
+      "control": [
+        {
+          "id": "dash_agent_runner_control",
+          "label": "DASH Agent Runner control adapter",
+          "kind": "dash",
+          "offline_behavior": "Unavailable while the computer or runner is off."
+        }
+      ],
+      "interaction": [
+        {
+          "id": "dash_workspace",
+          "label": "DASH agent workspace",
+          "kind": "dash",
+          "offline_behavior": "Last safe state is read-only while the runner is unavailable."
+        }
+      ]
+    },
+    "connections": [
+      {
+        "id": "hubspot",
+        "provider": "hubspot",
+        "label": "HubSpot",
+        "purpose": "Read contacts and deals",
+        "ownership": "external",
+        "capabilities": [
+          {
+            "id": "hubspot.crm_record_read",
+            "label": "Read the selected HubSpot contacts.",
+            "access": "read"
+          }
+        ],
+        "fields": [
+          {
+            "id": "hubspot-authorization",
+            "label": "HubSpot authorization",
+            "purpose": "Read contacts and deals",
+            "kind": "oauth_reauthorization",
+            "required": true,
+            "help": "Install and authorize the community MCP server, then point this agent at it. The server holds the provider token; the agent only calls the server.",
+            "technical": {
+              "provider_scopes": [
+                "crm.objects.contacts.read",
+                "crm.objects.deals.read",
+                "crm.objects.companies.read"
+              ]
+            }
+          }
+        ],
+        "validation_action": {
+          "id": "test-hubspot",
+          "label": "Test HubSpot connection",
+          "behavior": "test"
+        }
+      }
+    ],
+    "control": {
+      "supported": true,
+      "command_version": 1,
+      "location_id": "dash_agent_runner_control",
+      "commands": [
+        "retry",
+        "pause",
+        "resume",
+        "cancel"
+      ]
+    },
+    "memory": []
+  }
+}

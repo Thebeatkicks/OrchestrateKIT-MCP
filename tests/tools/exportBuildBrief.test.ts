@@ -22,6 +22,7 @@ function planAndBrief(
   handoff_targets: ("prompt" | "linear" | "obsidian")[] = ["prompt"],
 ) {
   const plan = planWorkflow({ goal, must_have_capabilities: [], must_avoid: [] }, registry);
+  const wizard = plan.goal_to_product_wizard;
   return exportBuildBrief({
     goal: plan.goal,
     plan_source: plan.plan_source,
@@ -37,6 +38,11 @@ function planAndBrief(
     worker_pipeline: plan.worker_pipeline,
     loop_guidance: plan.loop_guidance,
     approval_gate_advisory: plan.approval_gate_advisory,
+    runtime_requirements: wizard.runtime_requirements,
+    runtime_recommendation: wizard.runtime_recommendation,
+    control_surface: wizard.control_surface,
+    interaction_surface: wizard.interaction_surface,
+    trigger_explanation: wizard.trigger_explanation,
     handoff_targets,
     llm_provider: "anthropic",
   });
@@ -174,10 +180,20 @@ describe("export_build_brief — input schema accepts plan_workflow's literal ou
       worker_pipeline: plan.worker_pipeline,
       loop_guidance: plan.loop_guidance,
       approval_gate_advisory: plan.approval_gate_advisory,
+      runtime_requirements: plan.goal_to_product_wizard.runtime_requirements,
+      runtime_recommendation: plan.goal_to_product_wizard.runtime_recommendation,
+      control_surface: plan.goal_to_product_wizard.control_surface,
+      interaction_surface: plan.goal_to_product_wizard.interaction_surface,
+      trigger_explanation: plan.goal_to_product_wizard.trigger_explanation,
       handoff_targets: ["prompt"],
       llm_provider: "anthropic",
     });
     expect(parsed.success, parsed.success ? "" : JSON.stringify((parsed as { error: unknown }).error)).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.runtime_recommendation?.continues_when_dash_closed).toBe(
+        plan.goal_to_product_wizard.runtime_recommendation.continues_when_dash_closed,
+      );
+    }
   });
 
   it("still accepts worker_pipeline entirely omitted (back-compat)", () => {

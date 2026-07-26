@@ -17,8 +17,8 @@
  *   §9 Observability wiring — DASH run-event wiring (MAR-296 / DASH-02)
  *
  * Also emits a deterministic `agent.manifest.json` (`agent_manifest`) conforming
- * to orchestratedash's DASH-01 telemetry contract — data in the brief, never
- * sent anywhere.
+ * to orchestratedash's manifest-v2 contract while preserving telemetry-v1 run
+ * events — data in the brief, never sent anywhere.
  *
  * STATELESS CONTRACT: stores nothing, makes no network calls. The brief is the
  * paste-ready artifact; the human takes it to their IDE or Lab.
@@ -32,8 +32,12 @@ import {
   detectConstraintSignals,
   outboundComponentsExcludedByConstraints,
 } from "../lib/constraintSignals.js";
-import { registryContentFingerprint } from "../registry/loadRegistryBundled.js";
 import {
+  loadRegistryBundled,
+  registryContentFingerprint,
+} from "../registry/loadRegistryBundled.js";
+import {
+  agentSlug,
   buildAgentManifest,
   DASH_ENDPOINT_ENV,
   DASH_TOKEN_ENV,
@@ -41,7 +45,13 @@ import {
   type ManifestBuildTarget,
 } from "../lib/observabilityContract.js";
 import { buildConnectArtifacts, s11Connect, type ConnectArtifacts } from "../lib/connectContract.js";
-import { connectionContractForComponents } from "./planWorkflow.js";
+import {
+  connectionContractForComponents,
+  type PlacementAxis,
+  type RuntimeOption,
+  type RuntimeRequirements,
+  type TriggerExplanation,
+} from "./planWorkflow.js";
 import {
   AUTHORIZATION_NOTE,
   type ConnectionRequirement,
@@ -103,6 +113,54 @@ const LoopContractShape = z
     human_gate_required_for: z.array(z.string()),
     reviewer_independent: z.boolean(),
     no_write_until_final_gate: z.boolean(),
+  })
+  .passthrough();
+
+const PlacementOptionInputShape = z
+  .object({
+    id: z.string(),
+    label: z.string(),
+    appropriate_when: z.string(),
+    limitation: z.string(),
+    availability: z.enum(["available now", "requires setup", "planned", "advanced"]),
+  })
+  .passthrough();
+
+const PlacementAxisInputShape = z
+  .object({
+    recommended: PlacementOptionInputShape,
+    alternatives: z.array(PlacementOptionInputShape),
+  })
+  .passthrough();
+
+const RuntimeRequirementsInputShape = z
+  .object({
+    trigger_mode: z.enum(["interactive", "scheduled", "event", "polling", "manual"]),
+    operation_mode: z.enum(["interactive", "scheduled", "event-driven", "continuous"]),
+    expected_duration: z.enum(["short", "long-running"]),
+    persistent_state_needed: z.boolean(),
+    durable_approval_needed: z.boolean(),
+    must_run_while_user_offline: z.boolean(),
+    data_sensitivity: z.enum(["low", "medium", "high"]),
+    estimated_operational_complexity: z.enum(["low", "medium", "high"]),
+  })
+  .passthrough();
+
+const RuntimeOptionInputShape = PlacementOptionInputShape.extend({
+  runtime_class: z.string(),
+  reason: z.string(),
+  offline_behavior: z.string(),
+  continues_when_dash_closed: z.boolean().default(false),
+  install_action: z.string().nullable(),
+}).passthrough();
+
+const TriggerExplanationInputShape = z
+  .object({
+    mode: z.enum(["interactive", "scheduled", "event", "polling", "manual"]),
+    label: z.string(),
+    what_wakes_it_up: z.string(),
+    offline_behavior: z.string(),
+    limitation: z.string(),
   })
   .passthrough();
 
@@ -178,6 +236,21 @@ export const InputShape = {
     .nullable()
     .optional()
     .describe("plan_workflow.approval_gate_advisory — non-null when gate is downgraded to advisory."),
+  runtime_requirements: RuntimeRequirementsInputShape.optional().describe(
+    "plan_workflow.goal_to_product_wizard.runtime_requirements — pass the confirmed runtime facts through to manifest v2.",
+  ),
+  runtime_recommendation: RuntimeOptionInputShape.optional().describe(
+    "The confirmed plan_workflow runtime recommendation or selected alternative; becomes agent_dom.runtime.",
+  ),
+  control_surface: PlacementAxisInputShape.optional().describe(
+    "The confirmed plan_workflow control_surface; becomes agent_dom.locations.control.",
+  ),
+  interaction_surface: PlacementAxisInputShape.optional().describe(
+    "The confirmed plan_workflow interaction_surface; becomes agent_dom.locations.interaction.",
+  ),
+  trigger_explanation: TriggerExplanationInputShape.optional().describe(
+    "plan_workflow.goal_to_product_wizard.trigger_explanation; becomes agent_dom.trigger.",
+  ),
   // handoff targets — optional, default to prose only
   handoff_targets: z
     .array(z.enum(["prompt", "linear", "obsidian"]))
@@ -286,10 +359,10 @@ export type BuildBriefOutput = {
   artifact_index: BuildArtifactIndex;
   artifact_package: BuildArtifactPackage;
   /**
-   * The `agent.manifest.json` for this plan (MAR-296 / DASH-02) — deterministic,
-   * conforms to orchestratedash `contracts/agent.manifest.schema.json`. Write it
-   * next to the built agent and import it into DASH. The MCP never sends it
-   * anywhere; it is data in the brief.
+   * The `agent.manifest.json` for this plan (MAR-426 / CONTRACT-01) —
+   * deterministic, conforms to orchestratedash
+   * `contracts/agent.manifest.v2.schema.json`, and retains telemetry-v1 events.
+   * The MCP never sends or executes it; it is data in the brief.
    */
   agent_manifest: AgentManifest;
   /**
@@ -1168,7 +1241,7 @@ function s8DefinitionOfDone(
 }
 
 /**
- * §9 — DASH observability wiring (MAR-296 / DASH-02).
+ * §9 — DASH manifest-v2 handoff + telemetry-v1 wiring (MAR-426).
  *
  * Instructs the building LLM to emit run events per the DASH-v1 contract. Renders
  * for every build_target (env-var endpoint/token are build-target-agnostic). The
@@ -1177,12 +1250,53 @@ function s8DefinitionOfDone(
  */
 function s9Observability(manifest: AgentManifest): string {
   const irreversible = manifest.safety_contract.irreversible_components;
+  const selfHosted =
+    manifest.agent.build_target === "code" || manifest.agent.build_target === "cursor";
+  const runtime = manifest.agent_dom.runtime;
+  const commands = manifest.agent_dom.control.commands;
   const lines = [
-    "**§9 Observability wiring** _(DASH telemetry contract v1 — 🟢 grounded, advisory to wire)_",
+    "**§9 Observability wiring and DASH runtime handoff** _(manifest v2 + telemetry v1 — 🟢 grounded)_",
     "",
     `This plan ships with an \`agent.manifest.json\` (the \`agent_manifest\` field of this ` +
-      `result). Write it beside the built agent and import it into DASH — the agent card ` +
-      `appears with this planned route. Then have the agent POST run events as it executes:`,
+      `result). It declares manifest v2 and Agent DOM v1; run events remain telemetry v1. ` +
+      `Manifest v1 is historical/read-only and is never runner-hostable.`,
+    "",
+  ];
+  if (selfHosted) {
+    lines.push(
+      `- **Runner handoff:** write the manifest beside the built agent. A separately ` +
+        `installed DASH Agent Runner can validate and host it after a registration names ` +
+        `the command, working directory, and manifest path. This export does not register ` +
+        `or execute anything.`,
+      `- **Lifecycle boundary:** start and stop belong to the runner lifecycle API; trigger ` +
+        `describes what wakes the workflow. Neither is an Agent DOM command.`,
+      runtime.continues_when_dash_closed
+        ? `- **Window/offline behavior:** closing the DASH window does not stop this declared ` +
+          `runtime. ${manifest.agent_dom.locations.runtime.offline_behavior ?? ""}`.trim()
+        : `- **Window/offline behavior:** this declared runtime does not continue when its ` +
+          `client/session closes. ${manifest.agent_dom.locations.runtime.offline_behavior ?? ""}`.trim(),
+    );
+    if (manifest.agent_dom.control.supported) {
+      lines.push(
+        `- **Agent DOM commands:** implement and enforce exactly ` +
+          `${commands.map((command) => `\`${command}\``).join(", ")} at the declared control ` +
+          `location. Do not add lifecycle verbs to this list.`,
+      );
+    } else {
+      lines.push(
+        "- **Agent DOM commands:** none declared; DASH must render this agent read-only.",
+      );
+    }
+  } else {
+    lines.push(
+      `- **Not runner-hostable:** build target \`${manifest.agent.build_target}\` is an ` +
+        `assistant/client surface, not a separately registered process. Keep this manifest ` +
+        `only as a future code-build contract; do not describe the assistant artifact as hosted.`,
+    );
+  }
+  lines.push(
+    "",
+    "Have a compatible code build POST telemetry-v1 run events as it executes:",
     "",
     `- **Endpoint / token:** read from env — \`${DASH_ENDPOINT_ENV}\` and \`${DASH_TOKEN_ENV}\` ` +
       `(static bearer token per agent). \`POST {${DASH_ENDPOINT_ENV}}/api/events\` with ` +
@@ -1194,7 +1308,7 @@ function s9Observability(manifest: AgentManifest): string {
       `must never break the agent run.`,
     `- **No secrets, no PII:** events carry ids, statuses, counts, costs — never message ` +
       `bodies, tokens, or credentials. Keep \`detail\` a short, PII-free hint.`,
-  ];
+  );
   if (irreversible.length > 0) {
     lines.push(
       `- **Gate compliance:** before each irreversible step ` +
@@ -2117,6 +2231,11 @@ export type ExportBuildBriefInput = {
     guardrail_checklist: string[];
   } | null;
   approval_gate_advisory?: { gate: string; write_components: string[]; reason: string } | null;
+  runtime_requirements?: RuntimeRequirements;
+  runtime_recommendation?: RuntimeOption;
+  control_surface?: PlacementAxis;
+  interaction_surface?: PlacementAxis;
+  trigger_explanation?: TriggerExplanation;
   handoff_targets: ("prompt" | "linear" | "obsidian")[];
   delivery_mode?: "compact" | "full" | "plan_passport";
   // ── MAR-296 / DASH-02 (all optional; sensible deterministic defaults) ──
@@ -2239,6 +2358,9 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
 
   const registryFingerprint = input.registry_fingerprint ?? registryContentFingerprint();
   const buildTarget = input.build_target ?? "code";
+  const manifestAgentName =
+    input.agent_name?.trim() ||
+    agentSlug(input.playbook_id ?? "", input.goal);
 
   // MAR-383: per-connection acquisition paths — same data the plan surfaces, so
   // the brief, the manifest and plan_workflow can never disagree.
@@ -2246,37 +2368,63 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     recommendedRoute.map((s) => s.component_id),
   );
 
-  // MAR-296: deterministic agent.manifest.json for DASH (no network, no LLM).
-  const agent_manifest = buildAgentManifest({
-    goal: input.goal,
-    plan_source: input.plan_source,
-    playbook_id: input.playbook_id ?? "",
-    route_id: input.route_id ?? "",
-    build_target: buildTarget,
-    route_steps: recommendedRoute.map((s) => ({
-      step: s.step,
-      component_id: s.component_id,
-      risk_level: s.risk_level,
-      model_tier: s.model_tier,
-    })),
-    automation_clearance: automationClearance.level,
-    enforced_approval_gates: input.enforced_approval_gates,
-    output_location: input.output_location ?? "",
-    registry_fingerprint: registryFingerprint,
-    agent_name: input.agent_name,
-    generated_at: input.generated_at,
-    connections: connectionContract,
-  });
-
   // MAR-364: credential manifest + connect.mjs source, derived from the route.
   const connect = buildConnectArtifacts({
     route_steps: recommendedRoute.map((s) => ({
       component_id: s.component_id,
       model_tier: s.model_tier,
     })),
-    agent_name: agent_manifest.agent.name,
+    agent_name: manifestAgentName,
     registry_fingerprint: registryFingerprint,
     llm_provider: input.llm_provider,
+  });
+
+  // Registry permissions are the grounded read/write source for Agent DOM
+  // connection capabilities. Unknown sparse candidate steps stay read-only
+  // rather than being promoted to a write by naming heuristics.
+  const registry = loadRegistryBundled({
+    includeBeta: true,
+    includeCandidates: true,
+    strict: false,
+  });
+  const accessByComponent = new Map(
+    registry.components.map((component) => [
+      component.id,
+      component.permissions.write.length > 0 ? "write" as const : "read" as const,
+    ]),
+  );
+  const manifestRouteSteps = recommendedRoute.map((step) => ({
+    step: step.step,
+    component_id: step.component_id,
+    component_name: step.component_name,
+    purpose: step.purpose,
+    risk_level: step.risk_level,
+    model_tier: step.model_tier,
+    connection_access: accessByComponent.get(step.component_id) ?? "read" as const,
+  }));
+
+  // MAR-426: deterministic hostable manifest v2. Telemetry remains v1; this
+  // only adds the Agent DOM declaration consumed by compatible runners.
+  const agent_manifest = buildAgentManifest({
+    goal: input.goal,
+    plan_source: input.plan_source,
+    playbook_id: input.playbook_id ?? "",
+    route_id: input.route_id ?? "",
+    build_target: buildTarget,
+    route_steps: manifestRouteSteps,
+    automation_clearance: automationClearance.level,
+    enforced_approval_gates: input.enforced_approval_gates,
+    output_location: input.output_location ?? "",
+    registry_fingerprint: registryFingerprint,
+    agent_name: manifestAgentName,
+    generated_at: input.generated_at,
+    connections: connectionContract,
+    credential_requirements: connect.credential_manifest,
+    runtime_requirements: input.runtime_requirements,
+    runtime_recommendation: input.runtime_recommendation,
+    control_surface: input.control_surface,
+    interaction_surface: input.interaction_surface,
+    trigger_explanation: input.trigger_explanation,
   });
 
   const sections: BuildBriefOutput["sections"] = {
@@ -2503,10 +2651,10 @@ export function registerExportBuildBrief(server: McpServer): void {
       title: "Export Build Brief",
       description:
         "Takes a plan_workflow result and emits a provenance-tagged Build Brief — " +
-        "a self-contained handoff document (§0 Constraints → §9 Observability wiring) " +
+        "a self-contained handoff document (§0 Constraints → §9 runtime/observability wiring) " +
         "ready to paste into an IDE agent prompt, a Linear issue, or an Obsidian note. " +
-        "Also emits a deterministic agent.manifest.json (agent_manifest) for DASH " +
-        "monitoring. The plan_workflow wizard uses compact delivery for Claude-safe inline " +
+        "Also emits a deterministic DASH manifest v2 (agent_manifest) with Agent DOM " +
+        "placement metadata and telemetry-v1 events. The plan_workflow wizard uses compact delivery for Claude-safe inline " +
         "results; request full delivery for the complete rendered issue bundle, or " +
         "delivery_mode='plan_passport' for a deterministic build/test contract. " +
         "Stateless: stores nothing, makes no network calls. " +
@@ -2532,6 +2680,11 @@ export function registerExportBuildBrief(server: McpServer): void {
           worker_pipeline: input.worker_pipeline as { workers: z.infer<typeof WorkerShape>[]; feedback_loops: object[] } | undefined,
           loop_guidance: input.loop_guidance as { playbook_id: string; worker_sequence: string[]; loop_contract: z.infer<typeof LoopContractShape>; guardrail_checklist: string[] } | undefined,
           approval_gate_advisory: input.approval_gate_advisory as { gate: string; write_components: string[]; reason: string } | undefined,
+          runtime_requirements: input.runtime_requirements as RuntimeRequirements | undefined,
+          runtime_recommendation: input.runtime_recommendation as RuntimeOption | undefined,
+          control_surface: input.control_surface as PlacementAxis | undefined,
+          interaction_surface: input.interaction_surface as PlacementAxis | undefined,
+          trigger_explanation: input.trigger_explanation as TriggerExplanation | undefined,
           handoff_targets: input.handoff_targets,
           delivery_mode: input.delivery_mode,
           playbook_id: input.playbook_id,

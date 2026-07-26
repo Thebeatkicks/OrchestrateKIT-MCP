@@ -39,6 +39,7 @@ function expectCompleteRuntime(option: RuntimeOption) {
   expect(option.runtime_class).not.toBe("");
   expect(option.reason).not.toBe("");
   expect(option.offline_behavior).not.toBe("");
+  expect(typeof option.continues_when_dash_closed).toBe("boolean");
   expect(option.limitation).not.toBe("");
   expect(["available now", "requires setup", "planned", "advanced"]).toContain(option.availability);
 }

@@ -2,8 +2,9 @@
 
 Built from an OrchestrateMCP `plan_workflow` → `export_build_brief` output
 (playbook `email_lead_to_crm`, route `email_lead_crm_route_v1`). See
-`agent.manifest.json` for the DASH-importable manifest OrchestrateMCP
-generated for this route.
+`agent.manifest.json` for the historical manifest-v1 telemetry fixture
+OrchestrateMCP generated for this route. DASH may read it for monitoring, but a
+v1 manifest is read-only and never runner-hostable; current exports emit v2.
 
 Goal: read new Gmail leads, draft a reply, pause for human approval, then
 update the CRM and alert sales in Slack.

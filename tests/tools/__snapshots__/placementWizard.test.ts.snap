@@ -76,6 +76,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
       {
         "appropriate_when": "Fits privacy or infrastructure-control requirements.",
         "availability": "advanced",
+        "continues_when_dash_closed": true,
         "id": "self_hosted_runtime",
         "install_action": null,
         "label": "Self-hosted server/runtime",
@@ -87,6 +88,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
       {
         "appropriate_when": "A short morning check needs a durable timer, not an always-on worker.",
         "availability": "requires setup",
+        "continues_when_dash_closed": true,
         "id": "managed_scheduled_job",
         "install_action": null,
         "label": "Managed scheduled job",
@@ -99,6 +101,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
     "runtime_recommendation": {
       "appropriate_when": "Gmail events or polling plus persistent deduplication and durable approval must outlive a client session.",
       "availability": "requires setup",
+      "continues_when_dash_closed": true,
       "id": "managed_durable_background_runtime",
       "install_action": null,
       "label": "Managed background worker / durable workflow",
@@ -185,6 +188,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
       {
         "appropriate_when": "Can fit connector-heavy schedules when a supported adapter is selected.",
         "availability": "requires setup",
+        "continues_when_dash_closed": true,
         "id": "workflow_automation_adapter",
         "install_action": null,
         "label": "Supported workflow-automation adapter",
@@ -196,6 +200,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
       {
         "appropriate_when": "Fits privacy or infrastructure-control requirements.",
         "availability": "advanced",
+        "continues_when_dash_closed": true,
         "id": "self_hosted_runtime",
         "install_action": null,
         "label": "Self-hosted server/runtime",
@@ -208,6 +213,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
     "runtime_recommendation": {
       "appropriate_when": "A short morning check needs a durable timer, not an always-on worker.",
       "availability": "requires setup",
+      "continues_when_dash_closed": true,
       "id": "managed_scheduled_job",
       "install_action": null,
       "label": "Managed scheduled job",
@@ -287,6 +293,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
       {
         "appropriate_when": "Fits a richer multi-user interface when chat is no longer sufficient.",
         "availability": "requires setup",
+        "continues_when_dash_closed": true,
         "id": "generated_web_application",
         "install_action": null,
         "label": "Generated web application",
@@ -298,6 +305,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
       {
         "appropriate_when": "Useful for development and manual testing.",
         "availability": "requires setup",
+        "continues_when_dash_closed": true,
         "id": "local_runtime",
         "install_action": null,
         "label": "This computer",
@@ -310,6 +318,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
     "runtime_recommendation": {
       "appropriate_when": "Best for attended, on-demand work that starts only when the user asks in chat.",
       "availability": "available now",
+      "continues_when_dash_closed": false,
       "id": "client_chat_runtime",
       "install_action": null,
       "label": "Client/chat runtime",

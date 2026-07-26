@@ -620,6 +620,13 @@ export type RuntimeOption = PlacementOption & {
   runtime_class: string;
   reason: string;
   offline_behavior: string;
+  /**
+   * Structured runtime-lifecycle fact for manifest v2. This is deliberately
+   * separate from `offline_behavior`: closing the DASH window and turning off
+   * the computer are different events, and downstream consumers must not parse
+   * prose to tell them apart.
+   */
+  continues_when_dash_closed: boolean;
   install_action: string | null;
 };
 
@@ -3131,6 +3138,7 @@ function runtimeOption(
   offlineBehavior: string,
   limitation: string,
   availability: PlacementAvailability,
+  continuesWhenDashClosed: boolean,
   installAction: string | null = null,
 ): RuntimeOption {
   return {
@@ -3138,6 +3146,7 @@ function runtimeOption(
     runtime_class: runtimeClass,
     reason,
     offline_behavior: offlineBehavior,
+    continues_when_dash_closed: continuesWhenDashClosed,
     install_action: installAction,
   };
 }
@@ -3229,6 +3238,7 @@ function buildPlacementContract(input: {
     "Stops when the client/session closes; that is correct for explicitly attended work.",
     "Cannot run scheduled or background work after the client closes.",
     "available now",
+    false,
   );
   const managedScheduled = runtimeOption(
     "managed_scheduled_job",
@@ -3238,6 +3248,7 @@ function buildPlacementContract(input: {
     "Keeps running on schedule while the user's computer and client are closed.",
     "Requires a selected scheduled-job runtime, secrets, state, retries, and cost controls.",
     "requires setup",
+    true,
   );
   const managedDurable = runtimeOption(
     "managed_durable_background_runtime",
@@ -3247,6 +3258,7 @@ function buildPlacementContract(input: {
     "Keeps watching and can wait for approval while the user is offline.",
     "No built-in Orchestrate Runner or one-click installer exists; a real external durable runtime must be selected and configured.",
     "requires setup",
+    true,
   );
   const selfHosted = runtimeOption(
     "self_hosted_runtime",
@@ -3256,6 +3268,7 @@ function buildPlacementContract(input: {
     "Can run offline from the user's device if the server stays up.",
     "You own uptime, security, updates, backups, retries, and cost.",
     "advanced",
+    true,
   );
   const localRuntime = runtimeOption(
     "local_runtime",
@@ -3265,6 +3278,7 @@ function buildPlacementContract(input: {
     "Stops when the computer, network, or process stops.",
     "Does not satisfy an offline/background requirement.",
     "requires setup",
+    true,
   );
   const workflowAdapter = runtimeOption(
     "workflow_automation_adapter",
@@ -3274,6 +3288,7 @@ function buildPlacementContract(input: {
     "Runs according to the adapter's hosted execution guarantees.",
     "Availability and limits depend on the selected supported adapter; none is selected by this plan.",
     "requires setup",
+    true,
   );
   const generatedUiRuntime = runtimeOption(
     "generated_web_application",
@@ -3283,6 +3298,7 @@ function buildPlacementContract(input: {
     "Runs only after a real application backend is deployed.",
     "More setup than this attended read-only route needs.",
     "requires setup",
+    true,
   );
 
   const runtimeRecommendation = interactive
