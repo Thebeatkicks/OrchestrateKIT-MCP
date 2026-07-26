@@ -276,6 +276,7 @@ export const PlanWorkflowOutputShape = z
             persistent_state_needed: z.boolean(),
             durable_approval_needed: z.boolean(),
             must_run_while_user_offline: z.boolean(),
+            must_run_while_computer_off: z.boolean(),
             data_sensitivity: z.enum(["low", "medium", "high"]),
             estimated_operational_complexity: z.enum(["low", "medium", "high"]),
           })
@@ -360,6 +361,16 @@ export const PlanWorkflowOutputShape = z
                     description: z.string().optional(),
                     hidden_when: z
                       .object({ round: z.string(), answer_in: z.array(z.string()) })
+                      .passthrough()
+                      .optional(),
+                    scope_selection: z
+                      .object({
+                        runtime_recommendation_id: z.string().optional(),
+                        monitoring_option_id: z
+                          .enum(["dash_import", "log_to_file", "manual_none"])
+                          .optional(),
+                        control_surface_id: z.string().optional(),
+                      })
                       .passthrough()
                       .optional(),
                   })

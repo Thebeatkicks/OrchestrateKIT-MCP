@@ -144,6 +144,42 @@ describe("MAR-387 — golden journey (mechanical client, always picks ⭐)", () 
     );
   });
 
+  it("pairs the MAR-427 runner-hosted journey with its computer-off absence", () => {
+    const presence = JOURNEY_FIXTURES.find(
+      (fixture) => fixture.name === "dash_local_long_running",
+    );
+    const absence = JOURNEY_FIXTURES.find(
+      (fixture) => fixture.name === "dash_computer_off_absence",
+    );
+    if (!presence || !absence) {
+      throw new Error("MAR-427 paired fixtures are missing");
+    }
+
+    const presentTranscript = runMechanicalJourney(presence, registry);
+    const absentTranscript = runMechanicalJourney(absence, registry);
+    expect(presentTranscript.steps.at(-1)).toMatchObject({
+      kind: "terminal:prepare_runtime",
+      runtime_class: "local_process",
+      manifest_version: 2,
+      manifest_runtime_class: "local_process",
+      manifest_runtime_label: "DASH Agent Runner",
+      manifest_control_surface_ids: ["dash_control"],
+    });
+    expect(absentTranscript.steps.at(-1)).toMatchObject({
+      kind: "terminal:prepare_runtime",
+      runtime_class: "managed_durable_background",
+      manifest_version: 2,
+      manifest_runtime_class: "managed_worker",
+    });
+    expect(
+      (
+        absentTranscript.steps.at(-1) as {
+          manifest_control_surface_ids?: string[];
+        }
+      ).manifest_control_surface_ids,
+    ).not.toContain("dash_control");
+  });
+
   it("cross-references a real route, gate, and prohibition in one compiled brief", () => {
     const fixture = JOURNEY_FIXTURES.find((item) => item.name === "golden_email_calendar");
     if (!fixture) throw new Error("golden_email_calendar fixture is missing");

@@ -101,6 +101,7 @@ const LOCAL_RUNNER_REQUIREMENTS: RuntimeRequirements = {
   persistent_state_needed: true,
   durable_approval_needed: true,
   must_run_while_user_offline: false,
+  must_run_while_computer_off: false,
   data_sensitivity: "high",
   estimated_operational_complexity: "medium",
 };

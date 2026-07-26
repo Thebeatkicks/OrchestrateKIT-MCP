@@ -49,10 +49,260 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > comp
     },
     {
       "kind": "terminal:prepare_runtime",
+      "manifest_control_surface_ids": [
+        "runtime_provider_control",
+      ],
+      "manifest_interaction_surface_ids": [
+        "slack_interaction",
+      ],
+      "manifest_runtime_class": "scheduled_job",
+      "manifest_runtime_label": "Managed scheduled job",
+      "manifest_version": 2,
       "next_achievable_step": "[text]",
       "recommended_setup_availability": "requires setup",
       "recommended_setup_label": "Prepare runtime and connections",
       "runtime_class": "managed_scheduled_job",
+    },
+  ],
+  "terminal": "prepare_runtime",
+  "transcript_version": "orchestratekit.golden_journey.v1",
+}
+`;
+
+exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > dash_computer_off_absence > matches the golden transcript snapshot 1`] = `
+{
+  "final_goal": "[text]",
+  "fixture": "dash_computer_off_absence",
+  "initial_goal": "[text]",
+  "steps": [
+    {
+      "automation_clearance_level": "L3",
+      "clarifying_question_ids": [
+        "run_trigger",
+        "build_surface",
+        "hosting_monitoring",
+      ],
+      "coverage_label": "full",
+      "enforced_approval_gates": [
+        "human_approval_gate",
+      ],
+      "kind": "plan",
+      "plan_source": "composed",
+      "playbook_id": null,
+      "recommended_next_click": {
+        "action": "assistant:ask_clarifying_questions",
+        "id": "answer_clarifying_questions",
+        "label": "Answer the quick questions",
+      },
+      "round": 0,
+      "route": [
+        "page_monitor",
+        "email_read",
+        "retry_policy",
+        "schema_validation",
+        "email_draft",
+        "state_store",
+        "human_approval_gate",
+        "auth_failure_handler",
+        "crm_note_write",
+        "audit_log",
+      ],
+      "route_status": "candidate",
+    },
+    {
+      "canned_answer": "Start on each new Gmail event.",
+      "kind": "answer_clarifying_question",
+      "question_id": "run_trigger",
+    },
+    {
+      "canned_answer": "Build it in Codex as code.",
+      "kind": "answer_clarifying_question",
+      "question_id": "build_surface",
+    },
+    {
+      "canned_answer": "Run it on a hosted endpoint and log each run to a file.",
+      "kind": "answer_clarifying_question",
+      "question_id": "hosting_monitoring",
+    },
+    {
+      "automation_clearance_level": "L3",
+      "clarifying_question_ids": [],
+      "coverage_label": "poor",
+      "enforced_approval_gates": [
+        "human_approval_gate",
+      ],
+      "kind": "plan",
+      "plan_source": "composed",
+      "playbook_id": null,
+      "recommended_next_click": {
+        "action": "assistant:attended_dry_run_in_chat",
+        "id": "dry_run_in_chat",
+        "label": "Dry run it attended in this chat now — nothing persists, then build",
+      },
+      "round": 1,
+      "route": [
+        "page_monitor",
+        "email_read",
+        "schema_validation",
+        "codebase_scan",
+        "code_editing",
+        "email_draft",
+        "state_store",
+        "human_approval_gate",
+        "auth_failure_handler",
+        "crm_note_write",
+        "audit_log",
+      ],
+      "route_status": "candidate",
+    },
+    {
+      "durable_build_goal": true,
+      "honest_disclosure": true,
+      "kind": "attended_dry_run_option",
+      "present": true,
+      "walking_skeleton_disclosed": true,
+    },
+    {
+      "attended": true,
+      "kind": "dry_run",
+      "nothing_persists": true,
+      "scope_size": "medium",
+    },
+    {
+      "kind": "terminal:prepare_runtime",
+      "manifest_control_surface_ids": [
+        "provider_neutral_approval_inbox",
+      ],
+      "manifest_interaction_surface_ids": [
+        "approval_inbox_interaction",
+      ],
+      "manifest_runtime_class": "managed_worker",
+      "manifest_runtime_label": "Managed background worker / durable workflow",
+      "manifest_version": 2,
+      "next_achievable_step": "[text]",
+      "recommended_setup_availability": "requires setup",
+      "recommended_setup_label": "Prepare runtime and connections",
+      "runtime_class": "managed_durable_background",
+    },
+  ],
+  "terminal": "prepare_runtime",
+  "transcript_version": "orchestratekit.golden_journey.v1",
+}
+`;
+
+exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > dash_local_long_running > matches the golden transcript snapshot 1`] = `
+{
+  "final_goal": "[text]",
+  "fixture": "dash_local_long_running",
+  "initial_goal": "[text]",
+  "steps": [
+    {
+      "automation_clearance_level": "L3",
+      "clarifying_question_ids": [
+        "run_trigger",
+        "build_surface",
+        "hosting_monitoring",
+      ],
+      "coverage_label": "partial",
+      "enforced_approval_gates": [
+        "human_approval_gate",
+      ],
+      "kind": "plan",
+      "plan_source": "composed",
+      "playbook_id": null,
+      "recommended_next_click": {
+        "action": "assistant:ask_clarifying_questions",
+        "id": "answer_clarifying_questions",
+        "label": "Answer the quick questions",
+      },
+      "round": 0,
+      "route": [
+        "page_monitor",
+        "email_read",
+        "schema_validation",
+        "email_draft",
+        "state_store",
+        "human_approval_gate",
+        "auth_failure_handler",
+        "crm_note_write",
+        "audit_log",
+      ],
+      "route_status": "candidate",
+    },
+    {
+      "canned_answer": "Start on each new Gmail event.",
+      "kind": "answer_clarifying_question",
+      "question_id": "run_trigger",
+    },
+    {
+      "canned_answer": "Build it in Codex as code.",
+      "kind": "answer_clarifying_question",
+      "question_id": "build_surface",
+    },
+    {
+      "canned_answer": "[text]",
+      "kind": "answer_clarifying_question",
+      "question_id": "hosting_monitoring",
+    },
+    {
+      "automation_clearance_level": "L3",
+      "clarifying_question_ids": [],
+      "coverage_label": "partial",
+      "enforced_approval_gates": [
+        "human_approval_gate",
+      ],
+      "kind": "plan",
+      "plan_source": "composed",
+      "playbook_id": null,
+      "recommended_next_click": {
+        "action": "assistant:attended_dry_run_in_chat",
+        "id": "dry_run_in_chat",
+        "label": "Dry run it attended in this chat now — nothing persists, then build",
+      },
+      "round": 1,
+      "route": [
+        "page_monitor",
+        "email_read",
+        "schema_validation",
+        "codebase_scan",
+        "code_editing",
+        "email_draft",
+        "state_store",
+        "human_approval_gate",
+        "auth_failure_handler",
+        "crm_note_write",
+        "audit_log",
+      ],
+      "route_status": "candidate",
+    },
+    {
+      "durable_build_goal": true,
+      "honest_disclosure": true,
+      "kind": "attended_dry_run_option",
+      "present": true,
+      "walking_skeleton_disclosed": true,
+    },
+    {
+      "attended": true,
+      "kind": "dry_run",
+      "nothing_persists": true,
+      "scope_size": "medium",
+    },
+    {
+      "kind": "terminal:prepare_runtime",
+      "manifest_control_surface_ids": [
+        "dash_control",
+      ],
+      "manifest_interaction_surface_ids": [
+        "approval_inbox_interaction",
+      ],
+      "manifest_runtime_class": "local_process",
+      "manifest_runtime_label": "DASH Agent Runner",
+      "manifest_version": 2,
+      "next_achievable_step": "[text]",
+      "recommended_setup_availability": "available now",
+      "recommended_setup_label": "Prepare DASH Agent Runner handoff",
+      "runtime_class": "local_process",
     },
   ],
   "terminal": "prepare_runtime",
@@ -109,6 +359,15 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > full
     },
     {
       "kind": "terminal:prepare_runtime",
+      "manifest_control_surface_ids": [
+        "runtime_provider_control",
+      ],
+      "manifest_interaction_surface_ids": [
+        "slack_interaction",
+      ],
+      "manifest_runtime_class": "scheduled_job",
+      "manifest_runtime_label": "Managed scheduled job",
+      "manifest_version": 2,
       "next_achievable_step": "[text]",
       "recommended_setup_availability": "requires setup",
       "recommended_setup_label": "Prepare runtime and connections",
@@ -280,6 +539,15 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > gold
     },
     {
       "kind": "terminal:prepare_runtime",
+      "manifest_control_surface_ids": [
+        "provider_neutral_approval_inbox",
+      ],
+      "manifest_interaction_surface_ids": [
+        "approval_inbox_interaction",
+      ],
+      "manifest_runtime_class": "managed_worker",
+      "manifest_runtime_label": "Managed background worker / durable workflow",
+      "manifest_version": 2,
       "next_achievable_step": "[text]",
       "recommended_setup_availability": "requires setup",
       "recommended_setup_label": "Prepare runtime and connections",
