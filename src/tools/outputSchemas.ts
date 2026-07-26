@@ -77,6 +77,7 @@ const RuntimeOptionShape = PlacementOptionShape.extend({
   runtime_class: z.string(),
   reason: z.string(),
   offline_behavior: z.string(),
+  continues_when_dash_closed: z.boolean(),
   install_action: z.string().nullable(),
 }).passthrough();
 

@@ -490,6 +490,7 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
       {
         "appropriate_when": "Fits privacy or infrastructure-control requirements.",
         "availability": "advanced",
+        "continues_when_dash_closed": true,
         "id": "self_hosted_runtime",
         "install_action": null,
         "label": "Self-hosted server/runtime",
@@ -501,6 +502,7 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
       {
         "appropriate_when": "A short morning check needs a durable timer, not an always-on worker.",
         "availability": "requires setup",
+        "continues_when_dash_closed": true,
         "id": "managed_scheduled_job",
         "install_action": null,
         "label": "Managed scheduled job",
@@ -513,6 +515,7 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
     "runtime_recommendation": {
       "appropriate_when": "Best for attended, on-demand work that starts only when the user asks in chat.",
       "availability": "available now",
+      "continues_when_dash_closed": false,
       "id": "client_chat_runtime",
       "install_action": null,
       "label": "Client/chat runtime",
@@ -1306,6 +1309,7 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
       {
         "appropriate_when": "Can fit connector-heavy schedules when a supported adapter is selected.",
         "availability": "requires setup",
+        "continues_when_dash_closed": true,
         "id": "workflow_automation_adapter",
         "install_action": null,
         "label": "Supported workflow-automation adapter",
@@ -1317,6 +1321,7 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
       {
         "appropriate_when": "Fits privacy or infrastructure-control requirements.",
         "availability": "advanced",
+        "continues_when_dash_closed": true,
         "id": "self_hosted_runtime",
         "install_action": null,
         "label": "Self-hosted server/runtime",
@@ -1329,6 +1334,7 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
     "runtime_recommendation": {
       "appropriate_when": "A short morning check needs a durable timer, not an always-on worker.",
       "availability": "requires setup",
+      "continues_when_dash_closed": true,
       "id": "managed_scheduled_job",
       "install_action": null,
       "label": "Managed scheduled job",
@@ -2314,6 +2320,7 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
       {
         "appropriate_when": "Fits privacy or infrastructure-control requirements.",
         "availability": "advanced",
+        "continues_when_dash_closed": true,
         "id": "self_hosted_runtime",
         "install_action": null,
         "label": "Self-hosted server/runtime",
@@ -2325,6 +2332,7 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
       {
         "appropriate_when": "A short morning check needs a durable timer, not an always-on worker.",
         "availability": "requires setup",
+        "continues_when_dash_closed": true,
         "id": "managed_scheduled_job",
         "install_action": null,
         "label": "Managed scheduled job",
@@ -2337,6 +2345,7 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
     "runtime_recommendation": {
       "appropriate_when": "Best for attended, on-demand work that starts only when the user asks in chat.",
       "availability": "available now",
+      "continues_when_dash_closed": false,
       "id": "client_chat_runtime",
       "install_action": null,
       "label": "Client/chat runtime",
@@ -3244,6 +3253,149 @@ exports[`MAR-249 — export_build_brief output schema > compact structuredConten
       "playbook_id": "",
       "route_id": "",
     },
+    "agent_dom": {
+      "connections": [
+        {
+          "capabilities": [
+            {
+              "access": "read",
+              "id": "gmail.email_read",
+              "label": "Reads emails from a mailbox (IMAP or API) and extracts structured message data",
+            },
+            {
+              "access": "read",
+              "id": "gmail.email_draft",
+              "label": "[text]",
+            },
+          ],
+          "fields": [
+            {
+              "help": "[text]",
+              "id": "gmail-authorization",
+              "kind": "oauth_reauthorization",
+              "label": "Gmail authorization",
+              "purpose": "Read your inbox; Write drafts (never send)",
+              "required": true,
+              "technical": {
+                "provider_scopes": [
+                  "https://www.googleapis.com/auth/gmail.readonly",
+                  "https://www.googleapis.com/auth/gmail.compose",
+                ],
+              },
+            },
+          ],
+          "id": "gmail",
+          "label": "Gmail",
+          "ownership": "external",
+          "provider": "gmail",
+          "purpose": "Read your inbox; Write drafts (never send)",
+          "validation_action": {
+            "behavior": "test",
+            "id": "test-gmail",
+            "label": "Test Gmail connection",
+          },
+        },
+        {
+          "capabilities": [
+            {
+              "access": "write",
+              "id": "hubspot.crm_note_write",
+              "label": "Writes a structured note or activity record to a CRM system after human approval",
+            },
+          ],
+          "fields": [
+            {
+              "help": "[text]",
+              "id": "hubspot-authorization",
+              "kind": "oauth_reauthorization",
+              "label": "HubSpot authorization",
+              "purpose": "Write contacts and notes",
+              "required": true,
+              "technical": {
+                "provider_scopes": [
+                  "crm.objects.contacts.read",
+                  "crm.objects.contacts.write",
+                  "crm.objects.notes.write",
+                ],
+              },
+            },
+          ],
+          "id": "hubspot",
+          "label": "HubSpot",
+          "ownership": "external",
+          "provider": "hubspot",
+          "purpose": "Write contacts and notes",
+          "validation_action": {
+            "behavior": "test",
+            "id": "test-hubspot",
+            "label": "Test HubSpot connection",
+          },
+        },
+        {
+          "capabilities": [
+            {
+              "access": "write",
+              "id": "sendgrid.optional_email_send",
+              "label": "Sends a composed email draft after receiving explicit human approval",
+            },
+          ],
+          "fields": [],
+          "id": "sendgrid",
+          "label": "SendGrid",
+          "ownership": "agent_managed",
+          "provider": "sendgrid",
+          "purpose": "Email sender (transactional)",
+          "validation_action": {
+            "behavior": "test",
+            "id": "test-sendgrid",
+            "label": "Test SendGrid connection",
+          },
+        },
+      ],
+      "control": {
+        "command_version": 1,
+        "commands": [
+          "approve",
+          "reject",
+          "choose",
+          "retry",
+          "pause",
+          "resume",
+          "cancel",
+        ],
+        "location_id": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac-agent-dom",
+        "supported": true,
+      },
+      "dom_version": 1,
+      "locations": {
+        "control": [
+          {
+            "id": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac-agent-dom",
+            "kind": "other",
+            "label": "Agent DOM control adapter",
+            "offline_behavior": "State and commands are unavailable while the agent runtime is offline.",
+          },
+        ],
+        "interaction": [],
+        "runtime": {
+          "id": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac-runtime",
+          "kind": "other",
+          "label": "Runtime not declared in this export",
+          "offline_behavior": "Runtime availability was not declared in this export.",
+        },
+      },
+      "memory": [],
+      "runtime": {
+        "availability": "unknown",
+        "class": "other",
+        "continues_when_dash_closed": false,
+        "label": "Runtime not declared in this export",
+      },
+      "trigger": {
+        "label": "Trigger not declared in this export",
+        "type": "other",
+      },
+    },
     "connections": [
       {
         "acquisition_paths": [
@@ -3375,7 +3527,7 @@ exports[`MAR-249 — export_build_brief output schema > compact structuredConten
         "verification_requirement": null,
       },
     ],
-    "manifest_version": 1,
+    "manifest_version": 2,
     "monitoring": {
       "endpoint_env": "DASH_INGEST_URL",
       "events": [
@@ -3797,6 +3949,149 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
       "playbook_id": "",
       "route_id": "",
     },
+    "agent_dom": {
+      "connections": [
+        {
+          "capabilities": [
+            {
+              "access": "read",
+              "id": "gmail.email_read",
+              "label": "Reads emails from a mailbox (IMAP or API) and extracts structured message data",
+            },
+            {
+              "access": "read",
+              "id": "gmail.email_draft",
+              "label": "[text]",
+            },
+          ],
+          "fields": [
+            {
+              "help": "[text]",
+              "id": "gmail-authorization",
+              "kind": "oauth_reauthorization",
+              "label": "Gmail authorization",
+              "purpose": "Read your inbox; Write drafts (never send)",
+              "required": true,
+              "technical": {
+                "provider_scopes": [
+                  "https://www.googleapis.com/auth/gmail.readonly",
+                  "https://www.googleapis.com/auth/gmail.compose",
+                ],
+              },
+            },
+          ],
+          "id": "gmail",
+          "label": "Gmail",
+          "ownership": "external",
+          "provider": "gmail",
+          "purpose": "Read your inbox; Write drafts (never send)",
+          "validation_action": {
+            "behavior": "test",
+            "id": "test-gmail",
+            "label": "Test Gmail connection",
+          },
+        },
+        {
+          "capabilities": [
+            {
+              "access": "write",
+              "id": "hubspot.crm_note_write",
+              "label": "Writes a structured note or activity record to a CRM system after human approval",
+            },
+          ],
+          "fields": [
+            {
+              "help": "[text]",
+              "id": "hubspot-authorization",
+              "kind": "oauth_reauthorization",
+              "label": "HubSpot authorization",
+              "purpose": "Write contacts and notes",
+              "required": true,
+              "technical": {
+                "provider_scopes": [
+                  "crm.objects.contacts.read",
+                  "crm.objects.contacts.write",
+                  "crm.objects.notes.write",
+                ],
+              },
+            },
+          ],
+          "id": "hubspot",
+          "label": "HubSpot",
+          "ownership": "external",
+          "provider": "hubspot",
+          "purpose": "Write contacts and notes",
+          "validation_action": {
+            "behavior": "test",
+            "id": "test-hubspot",
+            "label": "Test HubSpot connection",
+          },
+        },
+        {
+          "capabilities": [
+            {
+              "access": "write",
+              "id": "sendgrid.optional_email_send",
+              "label": "Sends a composed email draft after receiving explicit human approval",
+            },
+          ],
+          "fields": [],
+          "id": "sendgrid",
+          "label": "SendGrid",
+          "ownership": "agent_managed",
+          "provider": "sendgrid",
+          "purpose": "Email sender (transactional)",
+          "validation_action": {
+            "behavior": "test",
+            "id": "test-sendgrid",
+            "label": "Test SendGrid connection",
+          },
+        },
+      ],
+      "control": {
+        "command_version": 1,
+        "commands": [
+          "approve",
+          "reject",
+          "choose",
+          "retry",
+          "pause",
+          "resume",
+          "cancel",
+        ],
+        "location_id": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac-agent-dom",
+        "supported": true,
+      },
+      "dom_version": 1,
+      "locations": {
+        "control": [
+          {
+            "id": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac-agent-dom",
+            "kind": "other",
+            "label": "Agent DOM control adapter",
+            "offline_behavior": "State and commands are unavailable while the agent runtime is offline.",
+          },
+        ],
+        "interaction": [],
+        "runtime": {
+          "id": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac-runtime",
+          "kind": "other",
+          "label": "Runtime not declared in this export",
+          "offline_behavior": "Runtime availability was not declared in this export.",
+        },
+      },
+      "memory": [],
+      "runtime": {
+        "availability": "unknown",
+        "class": "other",
+        "continues_when_dash_closed": false,
+        "label": "Runtime not declared in this export",
+      },
+      "trigger": {
+        "label": "Trigger not declared in this export",
+        "type": "other",
+      },
+    },
     "connections": [
       {
         "acquisition_paths": [
@@ -3928,7 +4223,7 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
         "verification_requirement": null,
       },
     ],
-    "manifest_version": 1,
+    "manifest_version": 2,
     "monitoring": {
       "endpoint_env": "DASH_INGEST_URL",
       "events": [
@@ -4640,6 +4935,149 @@ exports[`MAR-249 — export_build_brief output schema > runtime structuredConten
       "playbook_id": "",
       "route_id": "",
     },
+    "agent_dom": {
+      "connections": [
+        {
+          "capabilities": [
+            {
+              "access": "read",
+              "id": "gmail.email_read",
+              "label": "Reads emails from a mailbox (IMAP or API) and extracts structured message data",
+            },
+            {
+              "access": "read",
+              "id": "gmail.email_draft",
+              "label": "[text]",
+            },
+          ],
+          "fields": [
+            {
+              "help": "[text]",
+              "id": "gmail-authorization",
+              "kind": "oauth_reauthorization",
+              "label": "Gmail authorization",
+              "purpose": "Read your inbox; Write drafts (never send)",
+              "required": true,
+              "technical": {
+                "provider_scopes": [
+                  "https://www.googleapis.com/auth/gmail.readonly",
+                  "https://www.googleapis.com/auth/gmail.compose",
+                ],
+              },
+            },
+          ],
+          "id": "gmail",
+          "label": "Gmail",
+          "ownership": "external",
+          "provider": "gmail",
+          "purpose": "Read your inbox; Write drafts (never send)",
+          "validation_action": {
+            "behavior": "test",
+            "id": "test-gmail",
+            "label": "Test Gmail connection",
+          },
+        },
+        {
+          "capabilities": [
+            {
+              "access": "write",
+              "id": "hubspot.crm_note_write",
+              "label": "Writes a structured note or activity record to a CRM system after human approval",
+            },
+          ],
+          "fields": [
+            {
+              "help": "[text]",
+              "id": "hubspot-authorization",
+              "kind": "oauth_reauthorization",
+              "label": "HubSpot authorization",
+              "purpose": "Write contacts and notes",
+              "required": true,
+              "technical": {
+                "provider_scopes": [
+                  "crm.objects.contacts.read",
+                  "crm.objects.contacts.write",
+                  "crm.objects.notes.write",
+                ],
+              },
+            },
+          ],
+          "id": "hubspot",
+          "label": "HubSpot",
+          "ownership": "external",
+          "provider": "hubspot",
+          "purpose": "Write contacts and notes",
+          "validation_action": {
+            "behavior": "test",
+            "id": "test-hubspot",
+            "label": "Test HubSpot connection",
+          },
+        },
+        {
+          "capabilities": [
+            {
+              "access": "write",
+              "id": "sendgrid.optional_email_send",
+              "label": "Sends a composed email draft after receiving explicit human approval",
+            },
+          ],
+          "fields": [],
+          "id": "sendgrid",
+          "label": "SendGrid",
+          "ownership": "agent_managed",
+          "provider": "sendgrid",
+          "purpose": "Email sender (transactional)",
+          "validation_action": {
+            "behavior": "test",
+            "id": "test-sendgrid",
+            "label": "Test SendGrid connection",
+          },
+        },
+      ],
+      "control": {
+        "command_version": 1,
+        "commands": [
+          "approve",
+          "reject",
+          "choose",
+          "retry",
+          "pause",
+          "resume",
+          "cancel",
+        ],
+        "location_id": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac-agent-dom",
+        "supported": true,
+      },
+      "dom_version": 1,
+      "locations": {
+        "control": [
+          {
+            "id": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac-agent-dom",
+            "kind": "other",
+            "label": "Agent DOM control adapter",
+            "offline_behavior": "State and commands are unavailable while the agent runtime is offline.",
+          },
+        ],
+        "interaction": [],
+        "runtime": {
+          "id": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac-runtime",
+          "kind": "other",
+          "label": "Runtime not declared in this export",
+          "offline_behavior": "Runtime availability was not declared in this export.",
+        },
+      },
+      "memory": [],
+      "runtime": {
+        "availability": "unknown",
+        "class": "other",
+        "continues_when_dash_closed": false,
+        "label": "Runtime not declared in this export",
+      },
+      "trigger": {
+        "label": "Trigger not declared in this export",
+        "type": "other",
+      },
+    },
     "connections": [
       {
         "acquisition_paths": [
@@ -4771,7 +5209,7 @@ exports[`MAR-249 — export_build_brief output schema > runtime structuredConten
         "verification_requirement": null,
       },
     ],
-    "manifest_version": 1,
+    "manifest_version": 2,
     "monitoring": {
       "endpoint_env": "DASH_INGEST_URL",
       "events": [

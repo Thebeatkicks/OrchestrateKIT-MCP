@@ -30,7 +30,7 @@ const validateManifest = ajv.compile(
 const validateEvent = ajv.compile(loadJson("run-event.schema.json") as object);
 
 describe("MAR-363 telemetry producer conformance", () => {
-  it("locks both canonical DASH v1 schema fingerprints", () => {
+  it("locks canonical DASH v1 telemetry and manifest-v2 schema fingerprints", () => {
     const lock = loadJson("contract.lock.json") as {
       version: number;
       schema_semantic_sha256: Record<string, string>;
