@@ -375,6 +375,13 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
         {
           "appropriate_when": "[text]",
           "availability": "requires setup",
+          "id": "dash_control",
+          "label": "DASH",
+          "limitation": "[text]",
+        },
+        {
+          "appropriate_when": "[text]",
+          "availability": "requires setup",
           "id": "runtime_provider_control",
           "label": "Selected runtime's provider UI and logs",
           "limitation": "[text]",
@@ -488,6 +495,18 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
     },
     "runtime_alternatives": [
       {
+        "appropriate_when": "[text]",
+        "availability": "requires setup",
+        "continues_when_dash_closed": true,
+        "id": "dash_agent_runner_local",
+        "install_action": null,
+        "label": "DASH Agent Runner",
+        "limitation": "[text]",
+        "offline_behavior": "[text]",
+        "reason": "[text]",
+        "runtime_class": "local_process",
+      },
+      {
         "appropriate_when": "Fits privacy or infrastructure-control requirements.",
         "availability": "advanced",
         "continues_when_dash_closed": true,
@@ -498,18 +517,6 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
         "offline_behavior": "Can run offline from the user's device if the server stays up.",
         "reason": "Fits privacy or infrastructure-control requirements.",
         "runtime_class": "self_hosted",
-      },
-      {
-        "appropriate_when": "A short morning check needs a durable timer, not an always-on worker.",
-        "availability": "requires setup",
-        "continues_when_dash_closed": true,
-        "id": "managed_scheduled_job",
-        "install_action": null,
-        "label": "Managed scheduled job",
-        "limitation": "[text]",
-        "offline_behavior": "Keeps running on schedule while the user's computer and client are closed.",
-        "reason": "A short morning check needs a durable timer, not an always-on worker.",
-        "runtime_class": "managed_scheduled_job",
       },
     ],
     "runtime_recommendation": {
@@ -529,6 +536,7 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
       "durable_approval_needed": true,
       "estimated_operational_complexity": "medium",
       "expected_duration": "short",
+      "must_run_while_computer_off": false,
       "must_run_while_user_offline": false,
       "operation_mode": "interactive",
       "persistent_state_needed": true,
@@ -786,6 +794,14 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
             "label": "Cowork — a no-code assistant surface",
           },
           {
+            "description": "[text]",
+            "id": "dash_agent_runner",
+            "label": "DASH Agent Runner — a local runtime on this computer",
+            "scope_selection": {
+              "runtime_recommendation_id": "dash_agent_runner_local",
+            },
+          },
+          {
             "description": "Your code, your machine. It cannot run while the computer is asleep or off.",
             "id": "self_host_local",
             "label": "A local app on your own computer — runs while your computer is on",
@@ -818,6 +834,7 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
             "description": "Nothing persists after you close the client — there is no run history.",
             "hidden_when": {
               "answer_in": [
+                "dash_agent_runner",
                 "self_host_local",
                 "self_host_hosted",
               ],
@@ -838,7 +855,7 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
             "label": "Local logs — write each run to a file or table you already have",
           },
           {
-            "description": "Needs an exported agent manifest, which only a self-hosted build produces.",
+            "description": "[text]",
             "hidden_when": {
               "answer_in": [
                 "cowork",
@@ -846,7 +863,11 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
               "round": "build_surface",
             },
             "id": "dash",
-            "label": "DASH — import the agent manifest and monitor runs",
+            "label": "DASH — monitor and control a compatible manifest v2 agent",
+            "scope_selection": {
+              "control_surface_id": "dash_control",
+              "monitoring_option_id": "dash_import",
+            },
           },
           {
             "description": "Your own monitoring, or none — a failed run then goes unnoticed.",
@@ -1254,6 +1275,13 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
         {
           "appropriate_when": "[text]",
           "availability": "requires setup",
+          "id": "dash_control",
+          "label": "DASH",
+          "limitation": "[text]",
+        },
+        {
+          "appropriate_when": "[text]",
+          "availability": "requires setup",
           "id": "runtime_provider_control",
           "label": "Selected runtime's provider UI and logs",
           "limitation": "[text]",
@@ -1307,6 +1335,18 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
     },
     "runtime_alternatives": [
       {
+        "appropriate_when": "[text]",
+        "availability": "requires setup",
+        "continues_when_dash_closed": true,
+        "id": "dash_agent_runner_local",
+        "install_action": null,
+        "label": "DASH Agent Runner",
+        "limitation": "[text]",
+        "offline_behavior": "[text]",
+        "reason": "[text]",
+        "runtime_class": "local_process",
+      },
+      {
         "appropriate_when": "Can fit connector-heavy schedules when a supported adapter is selected.",
         "availability": "requires setup",
         "continues_when_dash_closed": true,
@@ -1317,18 +1357,6 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
         "offline_behavior": "Runs according to the adapter's hosted execution guarantees.",
         "reason": "Can fit connector-heavy schedules when a supported adapter is selected.",
         "runtime_class": "workflow_automation",
-      },
-      {
-        "appropriate_when": "Fits privacy or infrastructure-control requirements.",
-        "availability": "advanced",
-        "continues_when_dash_closed": true,
-        "id": "self_hosted_runtime",
-        "install_action": null,
-        "label": "Self-hosted server/runtime",
-        "limitation": "You own uptime, security, updates, backups, retries, and cost.",
-        "offline_behavior": "Can run offline from the user's device if the server stays up.",
-        "reason": "Fits privacy or infrastructure-control requirements.",
-        "runtime_class": "self_hosted",
       },
     ],
     "runtime_recommendation": {
@@ -1348,6 +1376,7 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
       "durable_approval_needed": true,
       "estimated_operational_complexity": "medium",
       "expected_duration": "short",
+      "must_run_while_computer_off": false,
       "must_run_while_user_offline": true,
       "operation_mode": "scheduled",
       "persistent_state_needed": false,
@@ -1623,6 +1652,14 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
             "label": "Cowork — a no-code assistant surface",
           },
           {
+            "description": "[text]",
+            "id": "dash_agent_runner",
+            "label": "DASH Agent Runner — a local runtime on this computer",
+            "scope_selection": {
+              "runtime_recommendation_id": "dash_agent_runner_local",
+            },
+          },
+          {
             "description": "Your code, your machine. It cannot run while the computer is asleep or off.",
             "id": "self_host_local",
             "label": "A local app on your own computer — runs while your computer is on",
@@ -1655,6 +1692,7 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
             "description": "Nothing persists after you close the client — there is no run history.",
             "hidden_when": {
               "answer_in": [
+                "dash_agent_runner",
                 "self_host_local",
                 "self_host_hosted",
               ],
@@ -1675,7 +1713,7 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
             "label": "Local logs — write each run to a file or table you already have",
           },
           {
-            "description": "Needs an exported agent manifest, which only a self-hosted build produces.",
+            "description": "[text]",
             "hidden_when": {
               "answer_in": [
                 "cowork",
@@ -1683,7 +1721,11 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
               "round": "build_surface",
             },
             "id": "dash",
-            "label": "DASH — import the agent manifest and monitor runs",
+            "label": "DASH — monitor and control a compatible manifest v2 agent",
+            "scope_selection": {
+              "control_surface_id": "dash_control",
+              "monitoring_option_id": "dash_import",
+            },
           },
           {
             "description": "Your own monitoring, or none — a failed run then goes unnoticed.",
@@ -2205,6 +2247,13 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
         {
           "appropriate_when": "[text]",
           "availability": "requires setup",
+          "id": "dash_control",
+          "label": "DASH",
+          "limitation": "[text]",
+        },
+        {
+          "appropriate_when": "[text]",
+          "availability": "requires setup",
           "id": "runtime_provider_control",
           "label": "Selected runtime's provider UI and logs",
           "limitation": "[text]",
@@ -2318,6 +2367,18 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
     },
     "runtime_alternatives": [
       {
+        "appropriate_when": "[text]",
+        "availability": "requires setup",
+        "continues_when_dash_closed": true,
+        "id": "dash_agent_runner_local",
+        "install_action": null,
+        "label": "DASH Agent Runner",
+        "limitation": "[text]",
+        "offline_behavior": "[text]",
+        "reason": "[text]",
+        "runtime_class": "local_process",
+      },
+      {
         "appropriate_when": "Fits privacy or infrastructure-control requirements.",
         "availability": "advanced",
         "continues_when_dash_closed": true,
@@ -2328,18 +2389,6 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
         "offline_behavior": "Can run offline from the user's device if the server stays up.",
         "reason": "Fits privacy or infrastructure-control requirements.",
         "runtime_class": "self_hosted",
-      },
-      {
-        "appropriate_when": "A short morning check needs a durable timer, not an always-on worker.",
-        "availability": "requires setup",
-        "continues_when_dash_closed": true,
-        "id": "managed_scheduled_job",
-        "install_action": null,
-        "label": "Managed scheduled job",
-        "limitation": "[text]",
-        "offline_behavior": "Keeps running on schedule while the user's computer and client are closed.",
-        "reason": "A short morning check needs a durable timer, not an always-on worker.",
-        "runtime_class": "managed_scheduled_job",
       },
     ],
     "runtime_recommendation": {
@@ -2359,6 +2408,7 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
       "durable_approval_needed": true,
       "estimated_operational_complexity": "medium",
       "expected_duration": "short",
+      "must_run_while_computer_off": false,
       "must_run_while_user_offline": false,
       "operation_mode": "interactive",
       "persistent_state_needed": true,
@@ -2616,6 +2666,14 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
             "label": "Cowork — a no-code assistant surface",
           },
           {
+            "description": "[text]",
+            "id": "dash_agent_runner",
+            "label": "DASH Agent Runner — a local runtime on this computer",
+            "scope_selection": {
+              "runtime_recommendation_id": "dash_agent_runner_local",
+            },
+          },
+          {
             "description": "Your code, your machine. It cannot run while the computer is asleep or off.",
             "id": "self_host_local",
             "label": "A local app on your own computer — runs while your computer is on",
@@ -2648,6 +2706,7 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
             "description": "Nothing persists after you close the client — there is no run history.",
             "hidden_when": {
               "answer_in": [
+                "dash_agent_runner",
                 "self_host_local",
                 "self_host_hosted",
               ],
@@ -2668,7 +2727,7 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
             "label": "Local logs — write each run to a file or table you already have",
           },
           {
-            "description": "Needs an exported agent manifest, which only a self-hosted build produces.",
+            "description": "[text]",
             "hidden_when": {
               "answer_in": [
                 "cowork",
@@ -2676,7 +2735,11 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
               "round": "build_surface",
             },
             "id": "dash",
-            "label": "DASH — import the agent manifest and monitor runs",
+            "label": "DASH — monitor and control a compatible manifest v2 agent",
+            "scope_selection": {
+              "control_surface_id": "dash_control",
+              "monitoring_option_id": "dash_import",
+            },
           },
           {
             "description": "Your own monitoring, or none — a failed run then goes unnoticed.",

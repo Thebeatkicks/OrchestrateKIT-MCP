@@ -545,7 +545,8 @@ export type HostingOptionId =
   | "hosted_cron"
   | "hosted_endpoint"
   | "in_client"
-  | "manual_local";
+  | "manual_local"
+  | "dash_agent_runner_local";
 
 /** MAR-315: stable ids for the monitoring recommendation. */
 export type MonitoringOptionId = "dash_import" | "log_to_file" | "manual_none";
@@ -612,6 +613,12 @@ export type RuntimeRequirements = {
   persistent_state_needed: boolean;
   durable_approval_needed: boolean;
   must_run_while_user_offline: boolean;
+  /**
+   * A local runner may outlive the user and the DASH window, but it cannot
+   * outlive the computer. Keep that requirement separate from user/session
+   * absence so local and managed runtimes are never conflated.
+   */
+  must_run_while_computer_off: boolean;
   data_sensitivity: "low" | "medium" | "high";
   estimated_operational_complexity: "low" | "medium" | "high";
 };
@@ -741,6 +748,16 @@ export type QuestionFlowOption = {
    * (`other`) so a filter can never leave the user with nothing to click.
    */
   hidden_when?: { round: string; answer_in: string[] };
+  /**
+   * Stable ids a client folds into the human-confirmed scope before calling
+   * export_build_brief. The referenced full objects remain in the existing
+   * MAR-378 wizard fields; this avoids a second runtime-fit contract.
+   */
+  scope_selection?: {
+    runtime_recommendation_id?: string;
+    monitoring_option_id?: MonitoringOptionId;
+    control_surface_id?: string;
+  };
 };
 
 /**
@@ -918,8 +935,9 @@ export type PlanWorkflowOutput = {
   /**
    * Deterministic hosting + monitoring recommendation (MAR-315): where this
    * plan should run, derived from the route's trigger shape, and how to watch
-   * it once it runs (simple logs are the recommended monitoring option — the
-   * manifest already ships in `export_build_brief`). Present on every plan;
+   * it once it runs. DASH is recommended only when the MAR-378 runtime/control
+   * decision says a compatible manifest-v2 route and available surface support
+   * it; otherwise logs remain the grounded default. Present on every plan;
    * never null. Registry/route-shape derived — no LLM, no network call.
    */
   hosting_and_monitoring: HostingAndMonitoring;
@@ -2509,6 +2527,7 @@ const HOSTING_OPTION_LABELS: Record<HostingOptionId, string> = {
   hosted_endpoint: "Always-on endpoint (serverless function or small VPS)",
   in_client: "Runs inside an available agent client (Claude Cowork, ChatGPT agent mode, or Workspace Agents where available)",
   manual_local: "Manual, on-demand run from your own environment",
+  dash_agent_runner_local: "DASH Agent Runner (local runtime)",
 };
 
 /** MAR-315: realistic alternatives per recommended id (excludes itself). */
@@ -2518,13 +2537,14 @@ const HOSTING_ALTERNATIVES: Record<HostingOptionId, HostingOptionId[]> = {
   hosted_endpoint: ["hosted_cron", "local_cron"],
   in_client: ["hosted_endpoint"],
   manual_local: ["local_cron", "hosted_cron"],
+  dash_agent_runner_local: ["hosted_endpoint", "local_cron"],
 };
 
 const MONITORING_OPTION_LABELS: Record<MonitoringOptionId, string> = {
   // MAR-406: no private-tool names in user-facing copy. "LAB" is an internal
   // program the user does not have and cannot get; naming it here pointed every
   // user at software that isn't theirs.
-  dash_import: "Import the manifest into DASH",
+  dash_import: "DASH — monitor/control a compatible manifest v2 agent",
   log_to_file: "Log runs to a file or table you already have",
   manual_none: "None — run it manually and check the results yourself",
 };
@@ -2536,6 +2556,7 @@ const HOSTING_MENU_SHORT: Record<HostingOptionId, string> = {
   hosted_endpoint: "always-on endpoint",
   in_client: "in the client",
   manual_local: "manual run",
+  dash_agent_runner_local: "DASH Agent Runner",
 };
 const MONITORING_MENU_SHORT: Record<MonitoringOptionId, string> = {
   dash_import: "DASH import",
@@ -2557,6 +2578,7 @@ const HOSTING_STATED_SIGNALS = [
   "already hosted", "already running on", "runs locally", "run it locally",
   "on my machine", "on my laptop", "in the cloud already", "as a github action",
   "in cowork", "as a custom gpt", "inside chatgpt", "inside claude",
+  "dash agent runner",
 ];
 
 /** Goal phrases that already STATE how the agent will be watched (never-nag). */
@@ -2595,12 +2617,74 @@ function goalNeedsBackgroundRunner(goal: string, routeComponentIds: string[]): b
       "laptop is off",
       "client closes",
       "client is closed",
+      "dash window closes",
+      "dash is closed",
       "keep working when",
       "always-on",
       "always on",
       "in the background",
     ])
   );
+}
+
+function goalRequiresComputerOff(goal: string): boolean {
+  return anySignal(goal.toLowerCase(), [
+    "computer is off",
+    "computer off",
+    "computer is asleep",
+    "computer sleeps",
+    "laptop is off",
+    "laptop off",
+    "laptop is asleep",
+    "machine is off",
+    "pc is off",
+    "powered off",
+  ]);
+}
+
+function dashAgentRunnerDeclaredAvailable(goal: string): boolean {
+  return anySignal(goal.toLowerCase(), [
+    "dash agent runner is installed",
+    "installed dash agent runner",
+    "dash agent runner is available",
+    "have dash agent runner installed",
+    "separately installed dash agent runner",
+    "use the dash agent runner",
+    "using the dash agent runner",
+    "run it with dash agent runner",
+    "run this with dash agent runner",
+    "select dash agent runner",
+  ]);
+}
+
+function dashMonitoringDeclared(goal: string): boolean {
+  return anySignal(goal.toLowerCase(), [
+    "monitor in dash",
+    "monitor it in dash",
+    "monitor/control in dash",
+    "use dash to monitor",
+    "watch it in dash",
+    "dash monitoring",
+    "dash monitor",
+    "dash control",
+  ]);
+}
+
+function dashControlDeclaredAvailable(goal: string): boolean {
+  return (
+    dashAgentRunnerDeclaredAvailable(goal) ||
+    anySignal(goal.toLowerCase(), [
+      "dash is installed",
+      "installed dash",
+      "have dash installed",
+      "dash is available",
+      "dash app is installed",
+    ])
+  );
+}
+
+function supportsManifestV2Build(target: BuildTarget | undefined): boolean {
+  return target === undefined || target === "code" || target === "cursor";
 }
 
 function deriveHostingBase(goal: string, routeComponentIds: string[]): HostingOptionId {
@@ -2669,14 +2753,36 @@ function buildHostingBlock(
  * usable with logs/tables. When the goal already states its own monitoring
  * answer, that statement is echoed in `reason` instead of being ignored.
  */
-function buildMonitoringBlock(goal: string): HostingAndMonitoring["monitoring"] {
+function buildMonitoringBlock(
+  goal: string,
+  placement: Pick<GoalToProductWizard, "control_surface">,
+): HostingAndMonitoring["monitoring"] {
   const stated = anySignal(goal.toLowerCase(), MONITORING_STATED_SIGNALS);
+  const controls = [
+    placement.control_surface.recommended,
+    ...placement.control_surface.alternatives,
+  ];
+  const dashReachable = controls.some((option) => option.id === "dash_control");
+  const dashRecommended = placement.control_surface.recommended.id === "dash_control";
+  if (dashRecommended) {
+    return {
+      recommended: monitoringOption("dash_import"),
+      alternatives: [monitoringOption("log_to_file"), monitoringOption("manual_none")],
+      reason:
+        "DASH is the selected monitor/control surface for this compatible manifest-v2 agent; execution remains with the separately selected runtime.",
+    };
+  }
   const reason = stated
-    ? "Your goal already describes a monitoring approach; keep that and make failures visible in the build."
-    : "Default: log each run to a file or table you already have; keep monitoring simple until a dashboard is ready.";
+    ? "Your goal already describes a monitoring approach; keep that choice explicit and make failures visible in the build."
+    : dashReachable
+    ? "Default: record each run in a file or table. DASH remains an optional monitor/control surface for this compatible manifest-v2 code build."
+    : "Default: record each run in a file or table so failures and retries remain inspectable.";
   return {
     recommended: monitoringOption("log_to_file"),
-    alternatives: [monitoringOption("manual_none")],
+    alternatives: [
+      ...(dashReachable ? [monitoringOption("dash_import")] : []),
+      monitoringOption("manual_none"),
+    ],
     reason,
   };
 }
@@ -2687,10 +2793,24 @@ function buildHostingAndMonitoring(
   routeComponentIds: string[],
   localOrHosted: "local" | "hosted" | "either" | undefined,
   outputDepth: "guided" | "brief" | "standard" | "technical" | "deep",
+  placement: Pick<
+    GoalToProductWizard,
+    "control_surface" | "runtime_recommendation"
+  >,
 ): HostingAndMonitoring {
+  const runtimeIsDashRunner =
+    placement.runtime_recommendation.id === "dash_agent_runner_local";
+  const hosting = runtimeIsDashRunner
+    ? {
+        recommended: hostingOption("dash_agent_runner_local"),
+        alternatives: HOSTING_ALTERNATIVES.dash_agent_runner_local.map(hostingOption),
+        reason:
+          "The selected runtime is the separately installed local DASH Agent Runner; it survives closing the DASH window but requires this computer to remain on.",
+      }
+    : buildHostingBlock(goal, routeComponentIds, localOrHosted);
   const full: HostingAndMonitoring = {
-    hosting: buildHostingBlock(goal, routeComponentIds, localOrHosted),
-    monitoring: buildMonitoringBlock(goal),
+    hosting,
+    monitoring: buildMonitoringBlock(goal, placement),
   };
   // MAR-256 payload diet: at Layer-1 depths the JSON carries only the
   // recommended picks — alternatives + reason prose ship at technical/deep
@@ -2800,6 +2920,7 @@ function renderOperatingBundleFull(wizard: GoalToProductWizard): string[] {
     `- Persistent state needed: ${wizard.runtime_requirements.persistent_state_needed ? "yes" : "no"}`,
     `- Durable approval needed: ${wizard.runtime_requirements.durable_approval_needed ? "yes" : "no"}`,
     `- Must run while user is offline: ${wizard.runtime_requirements.must_run_while_user_offline ? "yes" : "no"}`,
+    `- Must run while computer is asleep/off: ${wizard.runtime_requirements.must_run_while_computer_off ? "yes" : "no"}`,
     `- Data sensitivity: ${wizard.runtime_requirements.data_sensitivity}`,
     `- Operational complexity: ${wizard.runtime_requirements.estimated_operational_complexity}`,
     ``,
@@ -3009,7 +3130,8 @@ function buildHostMonitorChoices(hm: HostingAndMonitoring): WizardChoice[] {
       kind: "host_monitor",
       best_for: "Manual or developer-operated runs.",
       tradeoffs: "Simple to start; uptime and alerts are on you.",
-      recommended: hosting === "manual_local",
+      recommended:
+        hosting === "manual_local" || hosting === "dash_agent_runner_local",
       action: "choose_hosting:local",
     },
     {
@@ -3156,6 +3278,7 @@ function buildPlacementContract(input: {
   steps: RouteStep[];
   whatYouNeed: IntegrationNeed[];
   enforcedGates: string[];
+  buildTarget: BuildTarget | undefined;
 }): Pick<
   GoalToProductWizard,
   | "runtime_requirements"
@@ -3186,6 +3309,17 @@ function buildPlacementContract(input: {
     ids.has("state_store") || ids.has("deduplication") || ids.has("page_monitor") || emailCalendar;
   const durableApproval = input.enforcedGates.includes("human_approval_gate") && !interactive;
   const offline = !interactive && (scheduled || emailCalendar || webhook || goalNeedsBackgroundRunner(input.goal, Array.from(ids)));
+  const computerOff = goalRequiresComputerOff(input.goal);
+  const manifestV2Compatible = supportsManifestV2Build(input.buildTarget);
+  const dashControlsCompatible =
+    input.steps.length > 0 &&
+    input.enforcedGates.every((gate) => gate === "human_approval_gate");
+  const dashMonitoringFits = manifestV2Compatible && dashControlsCompatible;
+  const dashRunnerFits = dashMonitoringFits && !computerOff;
+  const dashRunnerAvailable = dashAgentRunnerDeclaredAvailable(input.goal);
+  const dashMonitorRequested =
+    manifestV2Compatible && dashControlsCompatible && dashMonitoringDeclared(input.goal);
+  const dashControlAvailable = dashControlDeclaredAvailable(input.goal);
 
   const triggerMode: RuntimeRequirements["trigger_mode"] = interactive
     ? "interactive"
@@ -3215,6 +3349,7 @@ function buildPlacementContract(input: {
     persistent_state_needed: interactive ? false : persistentState,
     durable_approval_needed: durableApproval,
     must_run_while_user_offline: offline,
+    must_run_while_computer_off: computerOff,
     data_sensitivity:
       emailCalendar || hasGoalSignal(input.goal, ["customer", "document", "gmail", "calendar"])
         ? "high"
@@ -3256,7 +3391,7 @@ function buildPlacementContract(input: {
     "managed_durable_background",
     "Gmail events or polling plus persistent deduplication and durable approval must outlive a client session.",
     "Keeps watching and can wait for approval while the user is offline.",
-    "No built-in Orchestrate Runner or one-click installer exists; a real external durable runtime must be selected and configured.",
+    "No managed Orchestrate runtime is provided; a real external durable runtime must be selected and configured.",
     "requires setup",
     true,
   );
@@ -3280,6 +3415,18 @@ function buildPlacementContract(input: {
     "requires setup",
     true,
   );
+  const dashAgentRunner = runtimeOption(
+    "dash_agent_runner_local",
+    "DASH Agent Runner",
+    "local_process",
+    dashRunnerAvailable
+      ? "The separately installed DASH Agent Runner is declared available, and this manifest-v2 code route fits local execution."
+      : "A separately installed DASH Agent Runner can host this compatible manifest-v2 code build after setup and registration.",
+    "Continues after the DASH window closes while this computer and the separately installed runner remain on.",
+    "Stops while the computer is asleep or off; it cannot satisfy a computer-off requirement.",
+    dashRunnerAvailable ? "available now" : "requires setup",
+    true,
+  );
   const workflowAdapter = runtimeOption(
     "workflow_automation_adapter",
     "Supported workflow-automation adapter",
@@ -3301,18 +3448,34 @@ function buildPlacementContract(input: {
     true,
   );
 
-  const runtimeRecommendation = interactive
+  const baseRuntimeRecommendation = interactive
     ? clientRuntime
     : scheduled
     ? managedScheduled
     : emailCalendar || webhook || offline
     ? managedDurable
     : clientRuntime;
-  const runtimeAlternatives = interactive
+  const baseRuntimeAlternatives = interactive
     ? [generatedUiRuntime, localRuntime]
     : scheduled
     ? [workflowAdapter, selfHosted]
     : [selfHosted, managedScheduled];
+  const dashRunnerRecommended = dashRunnerFits && dashRunnerAvailable;
+  const runtimeRecommendation = dashRunnerRecommended
+    ? dashAgentRunner
+    : baseRuntimeRecommendation;
+  const runtimeAlternatives = Array.from(
+    new Map(
+      (
+        dashRunnerRecommended
+          ? [baseRuntimeRecommendation, ...baseRuntimeAlternatives]
+          : [
+              ...(dashRunnerFits ? [dashAgentRunner] : []),
+              ...baseRuntimeAlternatives,
+            ]
+      ).map((option) => [option.id, option]),
+    ).values(),
+  ).slice(0, 2);
 
   const websiteBroker = placementOption(
     "website_install_broker",
@@ -3349,11 +3512,37 @@ function buildPlacementContract(input: {
     "Needs setup and is not a complete approval experience.",
     "requires setup",
   );
-  const controlSurface: PlacementAxis = interactive
+  const dashControl = placementOption(
+    "dash_control",
+    "DASH",
+    "Monitor a compatible manifest-v2 agent and submit only its declared Agent DOM commands.",
+    "DASH is the monitor/control surface, not the runtime; it depends on the separately selected runner or external agent being available.",
+    dashControlAvailable ? "available now" : "requires setup",
+  );
+  const baseControlSurface: PlacementAxis = interactive
     ? { recommended: clientControl, alternatives: [websiteBroker] }
     : durableApproval
     ? { recommended: approvalControl, alternatives: [providerControl, websiteBroker] }
     : { recommended: providerControl, alternatives: [logsControl, websiteBroker] };
+  const dashControlRecommended =
+    dashRunnerRecommended || (dashMonitorRequested && dashControlAvailable);
+  const controlSurface: PlacementAxis = dashControlRecommended
+    ? {
+        recommended: dashControl,
+        alternatives: [
+          baseControlSurface.recommended,
+          ...baseControlSurface.alternatives,
+        ].slice(0, 3),
+      }
+    : dashMonitoringFits
+    ? {
+        recommended: baseControlSurface.recommended,
+        alternatives: [
+          dashControl,
+          ...baseControlSurface.alternatives,
+        ].slice(0, 3),
+      }
+    : baseControlSurface;
 
   const clientInteraction = placementOption(
     "client_interaction",
@@ -3406,7 +3595,7 @@ function buildPlacementContract(input: {
     ? { recommended: slackInteraction, alternatives: [clientInteraction] }
     : { recommended: approvalInteraction, alternatives: [draftInteraction, clientInteraction, slackInteraction] };
 
-  const triggerExplanation: TriggerExplanation = interactive
+  const baseTriggerExplanation: TriggerExplanation = interactive
     ? {
         mode: "interactive",
         label: "A request in chat",
@@ -3437,12 +3626,25 @@ function buildPlacementContract(input: {
         offline_behavior: webhook ? "Works offline from the user's device only after a real endpoint is deployed." : "Does not run after the client closes.",
         limitation: webhook ? "Requires a reachable endpoint and source-side webhook setup." : "No background trigger is configured.",
       };
+  const triggerExplanation: TriggerExplanation = dashRunnerRecommended
+    ? {
+        ...baseTriggerExplanation,
+        offline_behavior:
+          "The declared trigger can wake the workflow after the DASH window closes only while this computer and the separately installed runner remain on.",
+        limitation:
+          `${baseTriggerExplanation.limitation} The local runner cannot start or continue a run while the computer is asleep or off.`,
+      }
+    : baseTriggerExplanation;
 
   const connectionNames = joinWithAnd(recommendedConnectionLabels(input.goal, input.steps, input.whatYouNeed));
-  const blocker = interactive
+  const blocker = dashRunnerRecommended
+    ? "The MCP is stateless and only emits the design/build handoff; the separately installed DASH Agent Runner executes the registered agent outside the MCP process."
+    : interactive
     ? "Document-source selection still needs setup; the MCP worker is stateless and does not run customer agents."
-    : "This product has no runtime installer or Orchestrate Runner; the MCP worker is stateless and must not run customer agents.";
-  const nextStep = emailCalendar
+    : "The MCP worker is stateless and has no runtime installer; a separately installed local runner or external runtime must execute the agent.";
+  const nextStep = dashRunnerRecommended
+    ? `Connect ${connectionNames}, export the runner-hostable manifest v2 build, and register it with the separately installed DASH Agent Runner.`
+    : emailCalendar
     ? `Connect ${connectionNames}, choose a supported durable runtime, and prepare a provider-neutral approval inbox. Keep sending disabled.`
     : scheduled && slack && priceMonitor
     ? `Choose Slack delivery mode (approve every post or automate low-risk price-change alerts), connect ${connectionNames}, then prepare a managed scheduled job with persistent change-detection state.`
@@ -3460,7 +3662,11 @@ function buildPlacementContract(input: {
     interaction_surface: interactionSurface,
     trigger_explanation: triggerExplanation,
     recommended_setup: {
-      label: interactive ? "Prepare attended client run" : "Prepare runtime and connections",
+      label: dashRunnerRecommended
+        ? "Prepare DASH Agent Runner handoff"
+        : interactive
+        ? "Prepare attended client run"
+        : "Prepare runtime and connections",
       availability: interactive ? "requires setup" : runtimeRecommendation.availability,
       action: null,
       blocker,
@@ -3705,6 +3911,16 @@ function buildGoalToProductWizard(input: {
   whatYouNeed: IntegrationNeed[];
   enforcedGates: string[];
   buildTarget: BuildTarget | undefined;
+  placement: Pick<
+    GoalToProductWizard,
+    | "runtime_requirements"
+    | "runtime_recommendation"
+    | "runtime_alternatives"
+    | "control_surface"
+    | "interaction_surface"
+    | "trigger_explanation"
+    | "recommended_setup"
+  >;
   hostingAndMonitoring: HostingAndMonitoring;
   clarifyingQuestions: ClarifyingQuestion[];
   outputDepth: "guided" | "brief" | "standard" | "technical" | "deep";
@@ -3715,12 +3931,7 @@ function buildGoalToProductWizard(input: {
 }): { wizard: GoalToProductWizard; scope: ScopeAssessment } {
   const buildChoices = buildWizardChoices(input.buildTarget);
   const artifactChoices = buildArtifactChoices();
-  const placement = buildPlacementContract({
-    goal: input.goal,
-    steps: input.steps,
-    whatYouNeed: input.whatYouNeed,
-    enforcedGates: input.enforcedGates,
-  });
+  const placement = input.placement;
   // MAR-395: the choice-suppression rule used to be `offline || interactive`.
   // The `interactive` half was backwards: "when I ask in chat" is EXACTLY the
   // shape that belongs in a no-code assistant surface, yet it suppressed the
@@ -3779,6 +3990,9 @@ function recommendedBuildSurface(
   wizard: GoalToProductWizard,
   hm: HostingAndMonitoring,
 ): string {
+  if (wizard.runtime_recommendation.id === "dash_agent_runner_local") {
+    return "dash_agent_runner";
+  }
   if (wizard.recommended_next_click.id === "build_in_assistant") return "cowork";
   const hosting = hm.hosting.recommended.id;
   if (hosting === "in_client") return "cowork";
@@ -3836,6 +4050,20 @@ function buildQuestionFlow(
   // Computed once and shared with the monitoring round, so the two ⭐s cannot
   // recommend a pair the `hidden_when` rules call incoherent (MAR-411).
   const recommendedSurface = recommendedBuildSurface(wizard, hm);
+  const runtimeOptions = [
+    wizard.runtime_recommendation,
+    ...wizard.runtime_alternatives,
+  ];
+  const dashRunnerReachable = runtimeOptions.some(
+    (option) => option.id === "dash_agent_runner_local",
+  );
+  const controlOptions = [
+    wizard.control_surface.recommended,
+    ...wizard.control_surface.alternatives,
+  ];
+  const dashMonitoringReachable = controlOptions.some(
+    (option) => option.id === "dash_control",
+  );
 
   const rounds: QuestionFlowRound[] = [
     {
@@ -3871,6 +4099,19 @@ function buildQuestionFlow(
           label: "Cowork — a no-code assistant surface",
           description: "You configure it in the assistant; it runs when the session is open.",
         },
+        ...(dashRunnerReachable
+          ? [
+              {
+                id: "dash_agent_runner",
+                label: "DASH Agent Runner — a local runtime on this computer",
+                description:
+                  "Uses a separately installed runner and manifest v2. Closing DASH does not stop it; sleep or power-off does.",
+                scope_selection: {
+                  runtime_recommendation_id: "dash_agent_runner_local",
+                },
+              },
+            ]
+          : []),
         {
           // MAR-410: this read like a script on a cron and nobody recognised it
           // as "build me a local app". Say what you get, then the tradeoff.
@@ -3906,7 +4147,14 @@ function buildQuestionFlow(
           // Incoherent once the agent lives outside the chat: a self-hosted
           // agent keeps running after the session closes, so "you watch it in
           // the session" is not a monitoring answer for it.
-          hidden_when: { round: "build_surface", answer_in: ["self_host_local", "self_host_hosted"] },
+          hidden_when: {
+            round: "build_surface",
+            answer_in: [
+              ...(dashRunnerReachable ? ["dash_agent_runner"] : []),
+              "self_host_local",
+              "self_host_hosted",
+            ],
+          },
         },
         {
           // MAR-410: was "LAB — log each run locally". LAB is a private internal
@@ -3918,14 +4166,23 @@ function buildQuestionFlow(
           description: "You read the log yourself; nothing alerts you when a run fails.",
           hidden_when: { round: "build_surface", answer_in: ["cowork"] },
         },
-        {
-          id: "dash",
-          label: "DASH — import the agent manifest and monitor runs",
-          description: "Needs an exported agent manifest, which only a self-hosted build produces.",
-          // DASH monitors an EXPORTED agent manifest; a Cowork build never
-          // produces one, so offering it there promises a link that can't exist.
-          hidden_when: { round: "build_surface", answer_in: ["cowork"] },
-        },
+        ...(dashMonitoringReachable
+          ? [
+              {
+                id: "dash",
+                label: "DASH — monitor and control a compatible manifest v2 agent",
+                description:
+                  "DASH is the monitor/control surface. The separately selected local runner or external runtime still runs the agent.",
+                // DASH monitors an EXPORTED agent manifest; a Cowork build never
+                // produces one, so offering it there promises a link that can't exist.
+                hidden_when: { round: "build_surface", answer_in: ["cowork"] },
+                scope_selection: {
+                  monitoring_option_id: "dash_import" as const,
+                  control_surface_id: "dash_control",
+                },
+              },
+            ]
+          : []),
         // Always present: the escape hatch a filter must never remove.
         {
           id: "other",
@@ -5637,11 +5894,22 @@ export function planWorkflow(
       : input.local_or_hosted === "hosted"
       ? "hosted"
       : "either";
+  // MAR-427: compute the MAR-378 placement contract once. Monitoring, the
+  // question flow, compact/technical prose, and export handoff all re-project
+  // this same decision instead of independently inferring a DASH pairing.
+  const placement = buildPlacementContract({
+    goal: input.goal,
+    steps,
+    whatYouNeed: what_you_need,
+    enforcedGates: enforced_approval_gates,
+    buildTarget: input.build_target,
+  });
   const hosting_and_monitoring = buildHostingAndMonitoring(
     input.goal,
     routeComponentIds,
     localOrHosted,
     outputDepth,
+    placement,
   );
 
   // ── MAR-226: standardized, machine-consumable next-action menu ──
@@ -5672,6 +5940,7 @@ export function planWorkflow(
     whatYouNeed: what_you_need,
     enforcedGates: enforced_approval_gates,
     buildTarget: input.build_target,
+    placement,
     hostingAndMonitoring: hosting_and_monitoring,
     clarifyingQuestions: clarifying_questions,
     outputDepth,
@@ -6021,6 +6290,11 @@ export function registerPlanWorkflow(server: McpServer): void {
         "`terminal`, so do not author your own closing or " +
         "approval prompt. Only when the client has no clickable choice UI, render " +
         "`question_flow.fallback_menu_markdown` as a lettered list instead. " +
+        "When a selected setup option carries `scope_selection`, resolve those stable ids " +
+        "against the existing runtime/control fields in `goal_to_product_wizard`, promote the " +
+        "selected objects into the human-confirmed scope, and pass that one runtime_requirements / " +
+        "runtime_recommendation / control_surface / interaction_surface / trigger_explanation " +
+        "decision set to `export_build_brief`. " +
         "This tool is the ONLY menu author: append your own analysis freely, but never author a " +
         "second lettered menu or a competing option list of your own. " +
         "If you run the plan in-chat via connectors, declare it as the attended dry-run option — " +

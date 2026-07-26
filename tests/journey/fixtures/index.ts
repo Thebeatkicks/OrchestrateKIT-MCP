@@ -91,6 +91,86 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
       "goes straight to the prepare_runtime terminal.",
   },
   {
+    name: "dash_local_long_running",
+    goal:
+      "Build a local agent that continuously watches my Gmail for new sales leads, drafts " +
+      "replies, and waits for my approval. Never send email. The separately installed DASH " +
+      "Agent Runner is available. Keep running after the DASH window closes while this computer remains on.",
+    canned_answers: {
+      run_trigger: "Start on each new Gmail event.",
+      build_surface: "Build it in Codex as code.",
+      hosting_monitoring:
+        "Run it locally with the separately installed DASH Agent Runner and monitor/control it in DASH.",
+    },
+    coverage_tags: [],
+    expectations: {
+      resolved: {
+        runtime_recommendation_id: "dash_agent_runner_local",
+        runtime_class: "local_process",
+        control_surface_id: "dash_control",
+        interaction_surface_id: "approval_inbox_interaction",
+        monitoring_recommendation_id: "dash_import",
+        build_surface_recommendation_id: "dash_agent_runner",
+        question_flow_options: [
+          {
+            round_id: "build_surface",
+            option_id: "dash_agent_runner",
+            label_includes: ["DASH Agent Runner", "local runtime"],
+            description_includes: [
+              "separately installed runner",
+              "Closing DASH does not stop it",
+              "power-off",
+            ],
+          },
+          {
+            round_id: "monitoring",
+            option_id: "dash",
+            label_includes: ["DASH", "manifest v2"],
+            description_includes: [
+              "monitor/control surface",
+              "still runs the agent",
+            ],
+          },
+        ],
+      },
+    },
+    notes:
+      "MAR-427 presence fixture: a declared available local runner hosts the long-running " +
+      "manifest-v2 code build, DASH controls/monitors it, and the interaction surface stays separate.",
+  },
+  {
+    name: "dash_computer_off_absence",
+    goal:
+      "Build a local agent that continuously watches my Gmail for new sales leads, drafts " +
+      "replies, and waits for my approval. Never send email. The separately installed DASH " +
+      "Agent Runner is available, but it must keep working while my computer is asleep or off.",
+    canned_answers: {
+      run_trigger: "Start on each new Gmail event.",
+      build_surface: "Build it in Codex as code.",
+      hosting_monitoring: "Run it on a hosted endpoint and log each run to a file.",
+    },
+    coverage_tags: [],
+    expectations: {
+      resolved: {
+        runtime_recommendation_id: "managed_durable_background_runtime",
+        runtime_class: "managed_durable_background",
+        runtime_alternative_excludes: ["dash_agent_runner_local"],
+        interaction_surface_id: "approval_inbox_interaction",
+        monitoring_recommendation_id: "log_to_file",
+        build_surface_recommendation_id: "self_host_hosted",
+        question_flow_absent_options: [
+          {
+            round_id: "build_surface",
+            option_id: "dash_agent_runner",
+          },
+        ],
+      },
+    },
+    notes:
+      "MAR-427 paired absence fixture: the same long-running shape requires computer-off " +
+      "execution, so the local DASH Agent Runner is neither recommended nor offered as the runtime.",
+  },
+  {
     name: "one_shot_inbox_summary",
     goal: "summarize my inbox for me now",
     canned_answers: {},

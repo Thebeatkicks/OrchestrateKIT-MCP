@@ -141,6 +141,7 @@ const RuntimeRequirementsInputShape = z
     persistent_state_needed: z.boolean(),
     durable_approval_needed: z.boolean(),
     must_run_while_user_offline: z.boolean(),
+    must_run_while_computer_off: z.boolean().default(false),
     data_sensitivity: z.enum(["low", "medium", "high"]),
     estimated_operational_complexity: z.enum(["low", "medium", "high"]),
   })
@@ -1254,6 +1255,8 @@ function s9Observability(manifest: AgentManifest): string {
     manifest.agent.build_target === "code" || manifest.agent.build_target === "cursor";
   const runtime = manifest.agent_dom.runtime;
   const commands = manifest.agent_dom.control.commands;
+  const triggerLimitation =
+    manifest.agent_dom.trigger.technical?.limitation;
   const lines = [
     "**§9 Observability wiring and DASH runtime handoff** _(manifest v2 + telemetry v1 — 🟢 grounded)_",
     "",
@@ -1272,7 +1275,8 @@ function s9Observability(manifest: AgentManifest): string {
         `describes what wakes the workflow. Neither is an Agent DOM command.`,
       runtime.continues_when_dash_closed
         ? `- **Window/offline behavior:** closing the DASH window does not stop this declared ` +
-          `runtime. ${manifest.agent_dom.locations.runtime.offline_behavior ?? ""}`.trim()
+          `runtime. ${manifest.agent_dom.locations.runtime.offline_behavior ?? ""}` +
+          (triggerLimitation ? ` Limitation: ${String(triggerLimitation)}` : "")
         : `- **Window/offline behavior:** this declared runtime does not continue when its ` +
           `client/session closes. ${manifest.agent_dom.locations.runtime.offline_behavior ?? ""}`.trim(),
     );

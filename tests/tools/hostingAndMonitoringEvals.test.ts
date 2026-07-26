@@ -14,7 +14,11 @@ const registry = loadRegistry();
 
 function plan(
   goal: string,
-  opts?: { local_or_hosted?: "local" | "hosted" | "either"; output_depth?: "guided" | "brief" | "standard" | "technical" | "deep" },
+  opts?: {
+    local_or_hosted?: "local" | "hosted" | "either";
+    output_depth?: "guided" | "brief" | "standard" | "technical" | "deep";
+    build_target?: "cowork" | "cursor" | "chatgpt_gpt" | "code";
+  },
 ) {
   return planWorkflow(
     {
@@ -23,6 +27,7 @@ function plan(
       must_avoid: [],
       local_or_hosted: opts?.local_or_hosted,
       output_depth: opts?.output_depth,
+      build_target: opts?.build_target,
     },
     registry,
   );
@@ -100,12 +105,27 @@ describe("MAR-315 — local_or_hosted is honored as an override", () => {
 });
 
 describe("MAR-315 — monitoring recommendation stays first-run usable", () => {
-  it("recommends simple logs by default, with manual-only as the technical-depth alternative", () => {
+  it("recommends simple logs by default, with reachable DASH and manual alternatives", () => {
     const r = plan(G4_SCHEDULED_REPORT, { output_depth: "technical" });
     expect(r.hosting_and_monitoring.monitoring.recommended.id).toBe("log_to_file");
     expect(r.hosting_and_monitoring.monitoring.recommended.label).toMatch(/file or table/);
     const altIds = r.hosting_and_monitoring.monitoring.alternatives.map((a) => a.id);
-    expect(altIds).toEqual(["manual_none"]);
+    expect(altIds).toEqual(["dash_import", "manual_none"]);
+    expect(r.hosting_and_monitoring.monitoring.reason).toContain(
+      "optional monitor/control surface",
+    );
+  });
+
+  it("pairs reachable DASH monitoring with a Cowork absence", () => {
+    const r = plan(
+      "When I ask in chat, summarize my unread inbox in Cowork. Never run in the background.",
+      { output_depth: "technical", build_target: "cowork" },
+    );
+    const ids = [
+      r.hosting_and_monitoring.monitoring.recommended,
+      ...r.hosting_and_monitoring.monitoring.alternatives,
+    ].map((option) => option.id);
+    expect(ids).not.toContain("dash_import");
   });
 
   it("echoes the goal's own stated monitoring answer in the reason at technical depth", () => {

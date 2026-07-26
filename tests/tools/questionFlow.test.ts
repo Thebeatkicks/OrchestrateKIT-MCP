@@ -15,9 +15,19 @@ import { parseMenu } from "../../src/journey/menu.js";
 
 const registry = loadRegistry();
 
-function plan(goal: string, depth: "brief" | "standard" | "technical" = "brief") {
+function plan(
+  goal: string,
+  depth: "brief" | "standard" | "technical" = "brief",
+  build_target?: "cowork" | "cursor" | "chatgpt_gpt" | "code",
+) {
   return planWorkflow(
-    { goal, must_have_capabilities: [], must_avoid: [], output_depth: depth },
+    {
+      goal,
+      must_have_capabilities: [],
+      must_avoid: [],
+      output_depth: depth,
+      ...(build_target ? { build_target } : {}),
+    },
     registry,
   );
 }
@@ -34,6 +44,17 @@ const PRICING =
   "and sends me a Slack summary. I want to approve before anything external is changed.";
 // Under-specified goal — raises clarifying questions.
 const VAGUE = "go through my inbox and handle the sales leads automatically";
+const DASH_LOCAL =
+  "Build a local agent that watches my Gmail for meeting requests continuously. " +
+  "The separately installed DASH Agent Runner is available. Keep running after the " +
+  "DASH window closes while this computer remains on.";
+const DASH_COMPUTER_OFF =
+  "Build the same Gmail watcher with the separately installed DASH Agent Runner available, " +
+  "but it must keep working while my computer is asleep or off.";
+const DASH_EXTERNAL =
+  "Build a hosted agent that checks competitor pages every morning and posts a Slack summary. " +
+  "DASH is installed; use DASH to monitor and control the compatible agent, but the external " +
+  "managed runtime runs it even while my computer is off.";
 
 describe("MAR-401 — question_flow round spine", () => {
   it("every plan carries the fixed pre-terminal rounds, in order, at every depth", () => {
@@ -183,7 +204,7 @@ describe("MAR-411 — option-level hidden_when keeps later rounds coherent", () 
     const cowork = round.options.find((o) => o.id === "cowork")!;
     expect(cowork.hidden_when).toEqual({
       round: "build_surface",
-      answer_in: ["self_host_local", "self_host_hosted"],
+      answer_in: ["dash_agent_runner", "self_host_local", "self_host_hosted"],
     });
   });
 
@@ -252,6 +273,101 @@ describe("MAR-411 — option-level hidden_when keeps later rounds coherent", () 
         )
         .flatMap((r) => r.options.map((o) => `${r.id}/${o.id}`));
     expect(idsFor(SMALL)).toEqual(idsFor(LARGE));
+  });
+});
+
+describe("MAR-427 — runner and monitor choices carry confirmed-scope ids", () => {
+  it("pairs reachable runner/monitor choices with the computer-off absence", () => {
+    const present = plan(DASH_LOCAL, "technical", "code");
+    const absent = plan(DASH_COMPUTER_OFF, "technical", "code");
+    const presentBuild = present.question_flow.rounds.find(
+      (round) => round.id === "build_surface",
+    )!;
+    const absentBuild = absent.question_flow.rounds.find(
+      (round) => round.id === "build_surface",
+    )!;
+    const presentMonitor = present.question_flow.rounds.find(
+      (round) => round.id === "monitoring",
+    )!;
+    const runner = presentBuild.options.find(
+      (option) => option.id === "dash_agent_runner",
+    )!;
+    const dash = presentMonitor.options.find((option) => option.id === "dash")!;
+
+    expect(presentBuild.recommended_option_id).toBe("dash_agent_runner");
+    expect(runner.label).toContain("local runtime");
+    expect(runner.description).toContain("Closing DASH does not stop it");
+    expect(runner.description).toMatch(/sleep or power-off/i);
+    expect(runner.scope_selection?.runtime_recommendation_id).toBe(
+      "dash_agent_runner_local",
+    );
+    expect(presentMonitor.recommended_option_id).toBe("dash");
+    expect(dash.label).toContain("manifest v2");
+    expect(dash.description).toContain("monitor/control surface");
+    expect(dash.description).toContain("still runs the agent");
+    expect(dash.scope_selection).toEqual({
+      monitoring_option_id: "dash_import",
+      control_surface_id: "dash_control",
+    });
+
+    expect(absentBuild.options.map((option) => option.id)).not.toContain(
+      "dash_agent_runner",
+    );
+    expect(absentBuild.recommended_option_id).not.toBe("dash_agent_runner");
+  });
+
+  it("pairs external DASH monitoring with a Cowork manifest-import absence", () => {
+    const external = plan(DASH_EXTERNAL, "technical", "code");
+    const cowork = plan(
+      "When I ask in chat, summarize my unread inbox in Cowork. Never run in the background.",
+      "technical",
+      "cowork",
+    );
+    const externalBuild = external.question_flow.rounds.find(
+      (round) => round.id === "build_surface",
+    )!;
+    const externalMonitor = external.question_flow.rounds.find(
+      (round) => round.id === "monitoring",
+    )!;
+    const coworkBuild = cowork.question_flow.rounds.find(
+      (round) => round.id === "build_surface",
+    )!;
+    const coworkMonitor = cowork.question_flow.rounds.find(
+      (round) => round.id === "monitoring",
+    )!;
+
+    expect(externalBuild.recommended_option_id).toBe("self_host_hosted");
+    expect(externalMonitor.recommended_option_id).toBe("dash");
+    expect(external.goal_to_product_wizard.runtime_recommendation.runtime_class).not.toBe(
+      "local_process",
+    );
+    expect(coworkBuild.options.map((option) => option.id)).not.toContain(
+      "dash_agent_runner",
+    );
+    expect(coworkMonitor.options.map((option) => option.id)).not.toContain("dash");
+    expect(coworkMonitor.hidden_when).toEqual({
+      round: "build_surface",
+      answer_in: ["cowork"],
+    });
+  });
+
+  it("never filters a recommended chip on the recommended DASH paths", () => {
+    for (const goal of [DASH_LOCAL, DASH_EXTERNAL]) {
+      const rounds = plan(goal, "technical", "code").question_flow.rounds;
+      const answers = new Map(
+        rounds.map((round) => [round.id, round.recommended_option_id]),
+      );
+      for (const round of rounds) {
+        const recommended = round.options.find(
+          (option) => option.id === round.recommended_option_id,
+        );
+        if (!recommended?.hidden_when) continue;
+        expect(
+          recommended.hidden_when.answer_in,
+          `${goal}: ${round.id}/${recommended.id}`,
+        ).not.toContain(answers.get(recommended.hidden_when.round));
+      }
+    }
   });
 });
 

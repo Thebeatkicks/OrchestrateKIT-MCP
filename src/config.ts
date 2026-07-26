@@ -88,6 +88,10 @@ its vocabulary produces worse, less honest plans.
    \`hidden_when\` matches. A match means the question or option contradicts
    the choice the user already made. Option filtering never empties a presented
    round: every round keeps an option with no \`hidden_when\`.
+3c. When a selected setup option carries \`scope_selection\`, resolve those
+   stable ids against the existing MAR-378 fields in
+   \`goal_to_product_wizard\`. Promote the selected runtime/control objects into
+   the confirmed scope; do not invent a parallel placement contract.
 4. Only when your client has NO clickable choice UI, render
    \`question_flow.fallback_menu_markdown\` as the lettered list instead of
    the rounds.
@@ -120,7 +124,10 @@ Run the scope compiler flow in this order:
    constraint questions) before locking scope.
 2. Confirm scope: fold the user's answers into a fresh \`plan_workflow\` call
    and confirm the selected steps, connections, build target, host/monitor
-   target, tracking target, and artifact.
+   target, tracking target, and artifact. Preserve the resulting
+   \`runtime_requirements\`, selected \`runtime_recommendation\`,
+   \`control_surface\`, \`interaction_surface\`, and \`trigger_explanation\` as
+   one decision set for \`export_build_brief\`.
 3. Compile artifacts: call \`export_build_brief\` only after the user has
    confirmed the scope.
 

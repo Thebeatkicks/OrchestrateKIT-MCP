@@ -64,6 +64,7 @@ describe("MAR-426 canonical runner-hosted fixture", () => {
         persistent_state_needed: false,
         durable_approval_needed: false,
         must_run_while_user_offline: false,
+        must_run_while_computer_off: false,
         data_sensitivity: "medium",
         estimated_operational_complexity: "low",
       },

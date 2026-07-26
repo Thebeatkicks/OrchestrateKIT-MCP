@@ -20,8 +20,17 @@ function cloneForSchemaMutation<T>(value: T): T {
 function planAndBrief(
   goal: string,
   handoff_targets: ("prompt" | "linear" | "obsidian")[] = ["prompt"],
+  build_target?: "cowork" | "cursor" | "chatgpt_gpt" | "code",
 ) {
-  const plan = planWorkflow({ goal, must_have_capabilities: [], must_avoid: [] }, registry);
+  const plan = planWorkflow(
+    {
+      goal,
+      must_have_capabilities: [],
+      must_avoid: [],
+      ...(build_target ? { build_target } : {}),
+    },
+    registry,
+  );
   const wizard = plan.goal_to_product_wizard;
   return exportBuildBrief({
     goal: plan.goal,
@@ -44,6 +53,7 @@ function planAndBrief(
     interaction_surface: wizard.interaction_surface,
     trigger_explanation: wizard.trigger_explanation,
     handoff_targets,
+    build_target,
     llm_provider: "anthropic",
   });
 }
@@ -207,6 +217,92 @@ describe("export_build_brief — input schema accepts plan_workflow's literal ou
       handoff_targets: ["prompt"],
     });
     expect(parsed.success).toBe(true);
+  });
+
+  it("defaults the additive computer-off fact for pre-MAR-427 runtime inputs", () => {
+    const plan = planWorkflow(
+      {
+        goal: "When I ask in chat, summarize the documents I select.",
+        must_have_capabilities: [],
+        must_avoid: [],
+      },
+      registry,
+    );
+    const legacyRequirements = {
+      ...plan.goal_to_product_wizard.runtime_requirements,
+    } as Partial<typeof plan.goal_to_product_wizard.runtime_requirements>;
+    delete legacyRequirements.must_run_while_computer_off;
+    const parsed = InputSchema.safeParse({
+      goal: plan.goal,
+      plan_source: plan.plan_source,
+      route_status: plan.route_status,
+      recommended_route: plan.recommended_route,
+      safety_review: plan.safety_review,
+      automation_clearance: plan.automation_clearance,
+      runtime_requirements: legacyRequirements,
+      handoff_targets: ["prompt"],
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.runtime_requirements?.must_run_while_computer_off).toBe(
+        false,
+      );
+    }
+  });
+});
+
+describe("MAR-427 — confirmed DASH placement reaches the manifest-v2 handoff", () => {
+  const LOCAL_DASH_GOAL =
+    "Build a local agent that watches my Gmail for meeting requests continuously. " +
+    "The separately installed DASH Agent Runner is available. Keep running after the " +
+    "DASH window closes while this computer remains on.";
+
+  it("emits the selected runner/control pair without turning DASH into the runtime", () => {
+    const brief = planAndBrief(LOCAL_DASH_GOAL, ["prompt"], "code");
+
+    expect(brief.agent_manifest.agent_dom.runtime).toMatchObject({
+      class: "local_process",
+      label: "DASH Agent Runner",
+      continues_when_dash_closed: true,
+    });
+    expect(brief.agent_manifest.agent_dom.locations.control[0]).toMatchObject({
+      id: "dash_control",
+      label: "DASH",
+      kind: "dash",
+    });
+    expect(brief.agent_manifest.agent_dom.locations.runtime.label).toBe(
+      "DASH Agent Runner",
+    );
+    expect(brief.agent_manifest.agent_dom.locations.interaction[0]?.label).not.toBe(
+      "DASH",
+    );
+    expect(brief.agent_manifest.agent_dom.control.commands).not.toEqual(
+      expect.arrayContaining(["start", "stop", "trigger"]),
+    );
+    expect(brief.sections.s9_observability).toContain(
+      "separately installed DASH Agent Runner",
+    );
+    expect(brief.sections.s9_observability).toContain("closing the DASH window");
+    expect(brief.sections.s9_observability).toMatch(/asleep or off/i);
+  });
+
+  it("pairs the runner-hostable presence with a Cowork non-hostable absence", () => {
+    const brief = planAndBrief(
+      "When I ask in chat, summarize my unread inbox in Cowork. Never run in the background.",
+      ["prompt"],
+      "cowork",
+    );
+
+    expect(brief.agent_manifest.agent_dom.runtime.class).toBe("client_session");
+    expect(brief.agent_manifest.agent_dom.runtime.label).not.toContain(
+      "DASH Agent Runner",
+    );
+    expect(
+      brief.agent_manifest.agent_dom.locations.control.map((location) => location.kind),
+    ).not.toContain("dash");
+    expect(brief.agent_manifest.agent_dom.control.commands).toEqual([]);
+    expect(brief.sections.s9_observability).toContain("Not runner-hostable");
   });
 });
 

@@ -6,6 +6,13 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
     "control_surface": {
       "alternatives": [
         {
+          "appropriate_when": "Monitor a compatible manifest-v2 agent and submit only its declared Agent DOM commands.",
+          "availability": "requires setup",
+          "id": "dash_control",
+          "label": "DASH",
+          "limitation": "DASH is the monitor/control surface, not the runtime; it depends on the separately selected runner or external agent being available.",
+        },
+        {
           "appropriate_when": "Manage schedule, secrets, status, retries, and history where the runtime actually runs.",
           "availability": "requires setup",
           "id": "runtime_provider_control",
@@ -68,11 +75,23 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
     "recommended_setup": {
       "action": null,
       "availability": "requires setup",
-      "blocker": "This product has no runtime installer or Orchestrate Runner; the MCP worker is stateless and must not run customer agents.",
+      "blocker": "The MCP worker is stateless and has no runtime installer; a separately installed local runner or external runtime must execute the agent.",
       "label": "Prepare runtime and connections",
       "next_achievable_step": "Connect Gmail, Google Calendar, and a model provider, choose a supported durable runtime, and prepare a provider-neutral approval inbox. Keep sending disabled.",
     },
     "runtime_alternatives": [
+      {
+        "appropriate_when": "A separately installed DASH Agent Runner can host this compatible manifest-v2 code build after setup and registration.",
+        "availability": "requires setup",
+        "continues_when_dash_closed": true,
+        "id": "dash_agent_runner_local",
+        "install_action": null,
+        "label": "DASH Agent Runner",
+        "limitation": "Stops while the computer is asleep or off; it cannot satisfy a computer-off requirement.",
+        "offline_behavior": "Continues after the DASH window closes while this computer and the separately installed runner remain on.",
+        "reason": "A separately installed DASH Agent Runner can host this compatible manifest-v2 code build after setup and registration.",
+        "runtime_class": "local_process",
+      },
       {
         "appropriate_when": "Fits privacy or infrastructure-control requirements.",
         "availability": "advanced",
@@ -85,18 +104,6 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
         "reason": "Fits privacy or infrastructure-control requirements.",
         "runtime_class": "self_hosted",
       },
-      {
-        "appropriate_when": "A short morning check needs a durable timer, not an always-on worker.",
-        "availability": "requires setup",
-        "continues_when_dash_closed": true,
-        "id": "managed_scheduled_job",
-        "install_action": null,
-        "label": "Managed scheduled job",
-        "limitation": "Requires a selected scheduled-job runtime, secrets, state, retries, and cost controls.",
-        "offline_behavior": "Keeps running on schedule while the user's computer and client are closed.",
-        "reason": "A short morning check needs a durable timer, not an always-on worker.",
-        "runtime_class": "managed_scheduled_job",
-      },
     ],
     "runtime_recommendation": {
       "appropriate_when": "Gmail events or polling plus persistent deduplication and durable approval must outlive a client session.",
@@ -105,7 +112,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
       "id": "managed_durable_background_runtime",
       "install_action": null,
       "label": "Managed background worker / durable workflow",
-      "limitation": "No built-in Orchestrate Runner or one-click installer exists; a real external durable runtime must be selected and configured.",
+      "limitation": "No managed Orchestrate runtime is provided; a real external durable runtime must be selected and configured.",
       "offline_behavior": "Keeps watching and can wait for approval while the user is offline.",
       "reason": "Gmail events or polling plus persistent deduplication and durable approval must outlive a client session.",
       "runtime_class": "managed_durable_background",
@@ -115,6 +122,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
       "durable_approval_needed": true,
       "estimated_operational_complexity": "high",
       "expected_duration": "long-running",
+      "must_run_while_computer_off": false,
       "must_run_while_user_offline": true,
       "operation_mode": "event-driven",
       "persistent_state_needed": true,
@@ -131,6 +139,13 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
   "prompt_b": {
     "control_surface": {
       "alternatives": [
+        {
+          "appropriate_when": "Monitor a compatible manifest-v2 agent and submit only its declared Agent DOM commands.",
+          "availability": "requires setup",
+          "id": "dash_control",
+          "label": "DASH",
+          "limitation": "DASH is the monitor/control surface, not the runtime; it depends on the separately selected runner or external agent being available.",
+        },
         {
           "appropriate_when": "A minimal status/history surface for scheduled jobs.",
           "availability": "requires setup",
@@ -180,7 +195,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
     "recommended_setup": {
       "action": null,
       "availability": "requires setup",
-      "blocker": "This product has no runtime installer or Orchestrate Runner; the MCP worker is stateless and must not run customer agents.",
+      "blocker": "The MCP worker is stateless and has no runtime installer; a separately installed local runner or external runtime must execute the agent.",
       "label": "Prepare runtime and connections",
       "next_achievable_step": "Choose Slack delivery mode (approve every post or automate low-risk price-change alerts), connect the page monitor and Slack, then prepare a managed scheduled job with persistent change-detection state.",
     },
@@ -227,6 +242,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
       "durable_approval_needed": false,
       "estimated_operational_complexity": "medium",
       "expected_duration": "short",
+      "must_run_while_computer_off": true,
       "must_run_while_user_offline": true,
       "operation_mode": "scheduled",
       "persistent_state_needed": true,
@@ -243,6 +259,13 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
   "prompt_c": {
     "control_surface": {
       "alternatives": [
+        {
+          "appropriate_when": "Monitor a compatible manifest-v2 agent and submit only its declared Agent DOM commands.",
+          "availability": "requires setup",
+          "id": "dash_control",
+          "label": "DASH",
+          "limitation": "DASH is the monitor/control surface, not the runtime; it depends on the separately selected runner or external agent being available.",
+        },
         {
           "appropriate_when": "Guide setup and link to a selected runtime's controls.",
           "availability": "planned",
@@ -291,6 +314,18 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
     },
     "runtime_alternatives": [
       {
+        "appropriate_when": "A separately installed DASH Agent Runner can host this compatible manifest-v2 code build after setup and registration.",
+        "availability": "requires setup",
+        "continues_when_dash_closed": true,
+        "id": "dash_agent_runner_local",
+        "install_action": null,
+        "label": "DASH Agent Runner",
+        "limitation": "Stops while the computer is asleep or off; it cannot satisfy a computer-off requirement.",
+        "offline_behavior": "Continues after the DASH window closes while this computer and the separately installed runner remain on.",
+        "reason": "A separately installed DASH Agent Runner can host this compatible manifest-v2 code build after setup and registration.",
+        "runtime_class": "local_process",
+      },
+      {
         "appropriate_when": "Fits a richer multi-user interface when chat is no longer sufficient.",
         "availability": "requires setup",
         "continues_when_dash_closed": true,
@@ -301,18 +336,6 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
         "offline_behavior": "Runs only after a real application backend is deployed.",
         "reason": "Fits a richer multi-user interface when chat is no longer sufficient.",
         "runtime_class": "application_backend",
-      },
-      {
-        "appropriate_when": "Useful for development and manual testing.",
-        "availability": "requires setup",
-        "continues_when_dash_closed": true,
-        "id": "local_runtime",
-        "install_action": null,
-        "label": "This computer",
-        "limitation": "Does not satisfy an offline/background requirement.",
-        "offline_behavior": "Stops when the computer, network, or process stops.",
-        "reason": "Useful for development and manual testing.",
-        "runtime_class": "local_process",
       },
     ],
     "runtime_recommendation": {
@@ -332,6 +355,7 @@ exports[`MAR-378 — corrected runtime-fit wizard > locks the corrected three-pr
       "durable_approval_needed": false,
       "estimated_operational_complexity": "low",
       "expected_duration": "short",
+      "must_run_while_computer_off": false,
       "must_run_while_user_offline": false,
       "operation_mode": "interactive",
       "persistent_state_needed": false,

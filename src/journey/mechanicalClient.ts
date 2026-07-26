@@ -78,6 +78,23 @@ export type JourneyPlanExpectation = {
   plan_source?: "playbook" | "composed";
   playbook_id?: string | null;
   recommended_next_click_id?: string;
+  runtime_recommendation_id?: string;
+  runtime_class?: string;
+  runtime_alternative_excludes?: string[];
+  control_surface_id?: string;
+  interaction_surface_id?: string;
+  monitoring_recommendation_id?: string;
+  build_surface_recommendation_id?: string;
+  question_flow_options?: Array<{
+    round_id: "build_surface" | "monitoring";
+    option_id: string;
+    label_includes: string[];
+    description_includes: string[];
+  }>;
+  question_flow_absent_options?: Array<{
+    round_id: "build_surface" | "monitoring";
+    option_id: string;
+  }>;
   route_includes?: string[];
   route_excludes?: string[];
   enforced_approval_gates?: string[];
@@ -288,6 +305,11 @@ export type PrepareRuntimeJourneyStep = {
   recommended_setup_availability: string;
   next_achievable_step: string;
   runtime_class: string;
+  manifest_version: 2;
+  manifest_runtime_class: string;
+  manifest_runtime_label: string;
+  manifest_control_surface_ids: string[];
+  manifest_interaction_surface_ids: string[];
 };
 
 /**
@@ -430,6 +452,120 @@ export function assertFixturePlanExpectation(
   ) {
     fail(`recommended_next_click_id expected "${expected.recommended_next_click_id}", observed "${clickId}"`);
   }
+  const wizard = p.goal_to_product_wizard;
+  if (
+    expected.runtime_recommendation_id !== undefined &&
+    wizard.runtime_recommendation.id !== expected.runtime_recommendation_id
+  ) {
+    fail(
+      `runtime_recommendation_id expected "${expected.runtime_recommendation_id}", ` +
+        `observed "${wizard.runtime_recommendation.id}"`,
+    );
+  }
+  if (
+    expected.runtime_class !== undefined &&
+    wizard.runtime_recommendation.runtime_class !== expected.runtime_class
+  ) {
+    fail(
+      `runtime_class expected "${expected.runtime_class}", ` +
+      `observed "${wizard.runtime_recommendation.runtime_class}"`,
+    );
+  }
+  const runtimeAlternativeIds = wizard.runtime_alternatives.map(
+    (option) => option.id,
+  );
+  for (const excluded of expected.runtime_alternative_excludes ?? []) {
+    if (runtimeAlternativeIds.includes(excluded)) {
+      fail(`runtime_alternatives unexpectedly contains "${excluded}"`);
+    }
+  }
+  if (
+    expected.control_surface_id !== undefined &&
+    wizard.control_surface.recommended.id !== expected.control_surface_id
+  ) {
+    fail(
+      `control_surface_id expected "${expected.control_surface_id}", ` +
+        `observed "${wizard.control_surface.recommended.id}"`,
+    );
+  }
+  if (
+    expected.interaction_surface_id !== undefined &&
+    wizard.interaction_surface.recommended.id !== expected.interaction_surface_id
+  ) {
+    fail(
+      `interaction_surface_id expected "${expected.interaction_surface_id}", ` +
+        `observed "${wizard.interaction_surface.recommended.id}"`,
+    );
+  }
+  if (
+    expected.monitoring_recommendation_id !== undefined &&
+    p.hosting_and_monitoring.monitoring.recommended.id !==
+      expected.monitoring_recommendation_id
+  ) {
+    fail(
+      `monitoring_recommendation_id expected "${expected.monitoring_recommendation_id}", ` +
+        `observed "${p.hosting_and_monitoring.monitoring.recommended.id}"`,
+    );
+  }
+  const buildSurface = p.question_flow.rounds.find(
+    (round) => round.id === "build_surface",
+  );
+  if (
+    expected.build_surface_recommendation_id !== undefined &&
+    buildSurface?.recommended_option_id !==
+      expected.build_surface_recommendation_id
+  ) {
+    fail(
+      `build_surface_recommendation_id expected "${expected.build_surface_recommendation_id}", ` +
+        `observed ${JSON.stringify(buildSurface?.recommended_option_id)}`,
+    );
+  }
+  for (const optionExpectation of expected.question_flow_options ?? []) {
+    const round = p.question_flow.rounds.find(
+      (candidate) => candidate.id === optionExpectation.round_id,
+    );
+    const option = round?.options.find(
+      (candidate) => candidate.id === optionExpectation.option_id,
+    );
+    if (!option) {
+      fail(
+        `missing question-flow option ` +
+          `"${optionExpectation.round_id}/${optionExpectation.option_id}"`,
+      );
+      continue;
+    }
+    for (const fragment of optionExpectation.label_includes) {
+      if (!option.label.toLocaleLowerCase().includes(fragment.toLocaleLowerCase())) {
+        fail(
+          `${optionExpectation.round_id}/${optionExpectation.option_id} label ` +
+            `does not include ${JSON.stringify(fragment)}`,
+        );
+      }
+    }
+    for (const fragment of optionExpectation.description_includes) {
+      if (
+        !(option.description ?? "")
+          .toLocaleLowerCase()
+          .includes(fragment.toLocaleLowerCase())
+      ) {
+        fail(
+          `${optionExpectation.round_id}/${optionExpectation.option_id} description ` +
+            `does not include ${JSON.stringify(fragment)}`,
+        );
+      }
+    }
+  }
+  for (const absent of expected.question_flow_absent_options ?? []) {
+    const round = p.question_flow.rounds.find(
+      (candidate) => candidate.id === absent.round_id,
+    );
+    if (round?.options.some((candidate) => candidate.id === absent.option_id)) {
+      fail(
+        `question-flow option "${absent.round_id}/${absent.option_id}" ` +
+          "was expected to be absent",
+      );
+    }
+  }
 
   const route = p.recommended_route.map((step) => step.component_id);
   for (const componentId of expected.route_includes ?? []) {
@@ -545,6 +681,11 @@ export function followBuildBrief(p: PlanWorkflowOutput, fixture: string): BuildB
     worker_pipeline: p.worker_pipeline,
     loop_guidance: p.loop_guidance,
     approval_gate_advisory: p.approval_gate_advisory,
+    runtime_requirements: p.goal_to_product_wizard.runtime_requirements,
+    runtime_recommendation: p.goal_to_product_wizard.runtime_recommendation,
+    control_surface: p.goal_to_product_wizard.control_surface,
+    interaction_surface: p.goal_to_product_wizard.interaction_surface,
+    trigger_explanation: p.goal_to_product_wizard.trigger_explanation,
     handoff_targets: ["prompt"],
     delivery_mode: "compact",
     llm_provider: MECHANICAL_LLM_PROVIDER,
@@ -623,12 +764,53 @@ export function followPrepareRuntime(p: PlanWorkflowOutput, fixture: string): Pr
   if (!w.runtime_recommendation?.runtime_class) {
     throw new Error(`[golden-journey:${fixture}] prepare_runtime has no runtime recommendation`);
   }
+  const brief = exportBuildBrief({
+    goal: p.goal,
+    plan_source: p.plan_source,
+    route_status: p.route_status,
+    recommended_route: p.recommended_route,
+    safety_review: p.safety_review,
+    automation_clearance: p.automation_clearance,
+    enforced_approval_gates: p.enforced_approval_gates,
+    untested_edges: p.untested_edges,
+    avoid_when_violations: p.avoid_when_violations,
+    evals_to_add: p.evals_to_add,
+    design_notes: p.design_notes,
+    worker_pipeline: p.worker_pipeline,
+    loop_guidance: p.loop_guidance,
+    approval_gate_advisory: p.approval_gate_advisory,
+    runtime_requirements: w.runtime_requirements,
+    runtime_recommendation: w.runtime_recommendation,
+    control_surface: w.control_surface,
+    interaction_surface: w.interaction_surface,
+    trigger_explanation: w.trigger_explanation,
+    handoff_targets: ["prompt"],
+    delivery_mode: "compact",
+    build_target: "code",
+    llm_provider: MECHANICAL_LLM_PROVIDER,
+    generated_at: FIXED_GENERATED_AT,
+  });
+  if ("status" in brief && (brief as { status?: string }).status === "needs_input") {
+    throw new Error(
+      `[golden-journey:${fixture}] runtime export returned needs_input despite a fixed provider`,
+    );
+  }
+  const manifest = brief.agent_manifest;
   return {
     kind: "terminal:prepare_runtime",
     recommended_setup_label: setup.label,
     recommended_setup_availability: setup.availability,
     next_achievable_step: setup.next_achievable_step,
     runtime_class: w.runtime_recommendation.runtime_class,
+    manifest_version: manifest.manifest_version,
+    manifest_runtime_class: manifest.agent_dom.runtime.class,
+    manifest_runtime_label: manifest.agent_dom.runtime.label,
+    manifest_control_surface_ids: manifest.agent_dom.locations.control.map(
+      (location) => location.id,
+    ),
+    manifest_interaction_surface_ids: manifest.agent_dom.locations.interaction.map(
+      (location) => location.id,
+    ),
   };
 }
 
@@ -653,6 +835,11 @@ export function followLinearIssues(p: PlanWorkflowOutput, fixture: string): Line
     worker_pipeline: p.worker_pipeline,
     loop_guidance: p.loop_guidance,
     approval_gate_advisory: p.approval_gate_advisory,
+    runtime_requirements: p.goal_to_product_wizard.runtime_requirements,
+    runtime_recommendation: p.goal_to_product_wizard.runtime_recommendation,
+    control_surface: p.goal_to_product_wizard.control_surface,
+    interaction_surface: p.goal_to_product_wizard.interaction_surface,
+    trigger_explanation: p.goal_to_product_wizard.trigger_explanation,
     handoff_targets: ["linear"],
     delivery_mode: "full",
     llm_provider: MECHANICAL_LLM_PROVIDER,
