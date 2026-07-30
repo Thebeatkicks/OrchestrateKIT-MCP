@@ -9,8 +9,7 @@
  * Free, always-on, globally distributed — this is the intended public endpoint.
  * Deploy with `pnpm deploy:worker` (wrangler).
  */
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { McpServer, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server";
 import { SERVER_NAME, SERVER_VERSION, SERVER_INSTRUCTIONS } from "./config.js";
 import { registerTools } from "./tools/index.js";
 import { registerResources } from "./resources/index.js";
