@@ -1,21 +1,25 @@
 /**
- * MAR-111: OrchestrateMCP — HTTP (Streamable HTTP) transport server.
+ * MAR-111 / MAR-448: OrchestrateMCP — HTTP (Streamable HTTP) transport server.
  *
- * Exposes the same 18 tools as the stdio server over the MCP Streamable HTTP
- * protocol so remote clients (ChatGPT Actions, Claude Cowork, Cursor remote,
- * etc.) can connect without a local process spawn.
+ * Exposes the same 19 tools as the stdio server over MCP Streamable HTTP so
+ * remote clients (ChatGPT Actions, Claude Cowork, Cursor remote, etc.) can
+ * connect without a local process spawn.
  *
  * Usage:
  *   pnpm start:http             # listens on http://127.0.0.1:3001/mcp
  *   PORT=4000 pnpm start:http   # custom port
  *   HOST=0.0.0.0 pnpm start:http   # bind all interfaces (behind ngrok/tunnel)
  *
- * ChatGPT / OpenAI GPT Actions: point to https://<tunnel>/mcp
- * Claude Projects (Cowork):     same URL — uses POST + optional SSE GET
+ * DUAL-ERA. One endpoint serves both protocol eras:
+ *  - 2026-07-28 requests (per-request `_meta` envelope) are served statelessly
+ *    per this revision, including the mandatory `server/discover`.
+ *  - 2025-era requests (`initialize` handshake) are served by
+ *    `legacy: 'stateless'` — a fresh instance from the same factory per
+ *    request, which is exactly the pattern this file used to hand-roll.
  *
- * Transport mode: STATELESS (sessionIdGenerator: undefined).
- * Each request is handled independently — no persistent server-side session.
- * This is the correct mode for hosted / remote clients.
+ * Because legacy serving is stateless, GET and DELETE on /mcp (2025 session
+ * operations) are answered 405 by the handler — sessions were removed from the
+ * protocol in 2026-07-28 and this server never used them.
  *
  * Security note: this server has no auth built in. When exposing via a tunnel
  * (ngrok / Cloudflare Tunnel / etc.), add an API-key header check or OAuth
@@ -24,12 +28,12 @@
  */
 
 import { createServer } from "node:http";
-import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
-import { McpServer } from "@modelcontextprotocol/server";
-import { SERVER_NAME, SERVER_VERSION, SERVER_INSTRUCTIONS } from "./config.js";
-import { registerTools } from "./tools/index.js";
-import { registerResources } from "./resources/index.js";
+import { createMcpHandler } from "@modelcontextprotocol/server";
+import { toNodeHandler } from "@modelcontextprotocol/node";
+import { SERVER_NAME, SERVER_VERSION } from "./config.js";
+import { createOrchestrateMcpServer } from "./mcpServer.js";
 import { bootstrapNodeRegistry } from "./registry/nodeRegistryBootstrap.js";
+import { CORS_HEADERS } from "./lib/cors.js";
 import { logger } from "./lib/logger.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -43,14 +47,21 @@ const HOST =
 async function main(): Promise<void> {
   bootstrapNodeRegistry();
 
+  // One handler for the process: it is stateless per request internally, so
+  // unlike the 2025-era wiring there is no per-request construction here.
+  const mcpHandler = createMcpHandler(createOrchestrateMcpServer, {
+    legacy: "stateless",
+    onerror: (err) => logger.error("MCP handler error", err),
+  });
+  const handleMcp = toNodeHandler(mcpHandler, {
+    onerror: (err) => logger.error("Node adapter error", err),
+  });
+
   const httpServer = createServer(async (req, res) => {
     // CORS — allow all origins (OrchestrateMCP is read-only advisory; no secrets)
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-    res.setHeader(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, Mcp-Session-Id",
-    );
+    for (const [key, value] of Object.entries(CORS_HEADERS)) {
+      res.setHeader(key, value);
+    }
 
     if (req.method === "OPTIONS") {
       res.writeHead(204).end();
@@ -73,31 +84,8 @@ async function main(): Promise<void> {
       return;
     }
 
-    // MCP endpoint — all Streamable HTTP MCP methods (POST, GET/SSE, DELETE)
     if (url === "/mcp") {
-      // The SDK requires a fresh McpServer + transport per request in stateless mode.
-      // Reusing a stateless transport throws on the second request (message ID collision guard).
-      const server = new McpServer(
-        { name: SERVER_NAME, version: SERVER_VERSION },
-        { instructions: SERVER_INSTRUCTIONS },
-      );
-      registerTools(server);
-      registerResources(server);
-      const transport = new NodeStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-      });
-      await server.connect(transport);
-
-      try {
-        await transport.handleRequest(req, res);
-      } catch (err) {
-        logger.error("HTTP transport error", err);
-        if (!res.headersSent) {
-          res.writeHead(500, { "Content-Type": "application/json" }).end(
-            JSON.stringify({ error: "Internal server error" }),
-          );
-        }
-      }
+      await handleMcp(req, res);
       return;
     }
 
@@ -111,22 +99,18 @@ async function main(): Promise<void> {
 
   httpServer.listen(PORT, HOST, () => {
     process.stderr.write(
-      `${SERVER_NAME} v${SERVER_VERSION} HTTP MCP server\n` +
+      `${SERVER_NAME} v${SERVER_VERSION} HTTP MCP server (2026-07-28 + legacy)\n` +
         `  MCP endpoint: http://${HOST}:${PORT}/mcp\n` +
         `  Health check: http://${HOST}:${PORT}/health\n`,
     );
   });
 
-  // Graceful shutdown. Transports are created per-request (stateless mode),
-  // so there is no long-lived transport to close here — just the HTTP server.
-  process.on("SIGTERM", () => {
+  const shutdown = (): void => {
     httpServer.close();
-    process.exit(0);
-  });
-  process.on("SIGINT", () => {
-    httpServer.close();
-    process.exit(0);
-  });
+    void mcpHandler.close().finally(() => process.exit(0));
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
 
 main().catch((err: unknown) => {

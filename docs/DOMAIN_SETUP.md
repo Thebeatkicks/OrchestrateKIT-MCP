@@ -59,12 +59,23 @@ a manual record for this.
 3. Cloudflare auto-creates the proxied record + edge certificate and binds it to
    the Worker. **Do not also add a manual CNAME for `mcp.`** — let the
    custom-domain feature own it (a duplicate record will conflict).
-4. Verify:
+4. Verify. The endpoint is dual-era — check both, because a regression in
+   either one is invisible from the other:
    ```bash
    curl https://mcp.orchestratemcp.dev/health        # → ok
+
+   # Modern (protocol revision 2026-07-28): no handshake, per-request envelope
    curl -X POST https://mcp.orchestratemcp.dev/mcp \
      -H 'content-type: application/json' \
-     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+     -H 'MCP-Protocol-Version: 2026-07-28' \
+     -H 'Mcp-Method: server/discover' -H 'Mcp-Name: curl' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
+   # → supportedVersions: ["2026-07-28"] + capabilities + instructions
+
+   # Legacy (2025-11-25 and earlier): the initialize handshake, still served
+   curl -X POST https://mcp.orchestratemcp.dev/mcp \
+     -H 'content-type: application/json' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
    # → initialize result with serverInfo + top-level instructions
    ```
 
