@@ -438,7 +438,10 @@ export const PlanWorkflowOutputShape = z
       .object({
         model: z.literal("registry-deterministic"),
         all_fields_are_registry_derived: z.literal(true),
-        field_tags: z.record(z.enum(["grounded", "computed", "advisory"])),
+        field_tags: z.record(
+          z.string(),
+          z.enum(["grounded", "computed", "advisory"]),
+        ),
         grounding_note: z.string(),
       })
       .passthrough()

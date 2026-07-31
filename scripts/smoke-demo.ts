@@ -15,9 +15,8 @@
  * This is a DEMO, not a gate. The gates are `pnpm verify` + `pnpm probe`.
  * Run:  pnpm demo
  */
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client } from "@modelcontextprotocol/client";
+import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";
 import { bootstrapNodeRegistry } from "../src/registry/nodeRegistryBootstrap.js";
 import { registerTools } from "../src/tools/index.js";
 

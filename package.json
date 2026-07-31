@@ -43,9 +43,11 @@
     "verify": "pnpm gen:registry && pnpm typecheck && pnpm registry:lint && pnpm benchmark:check && pnpm test && pnpm release:check"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "js-yaml": "^4.2.0",
-    "zod": "^3.25.0"
+    "zod": "^4.2.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

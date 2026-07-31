@@ -12,7 +12,7 @@
  */
 import { z } from "zod";
 import { load as parseYaml } from "js-yaml";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { loadRegistry } from "../registry/registryProvider.js";
 import { PlaybookSchema, type Playbook } from "../registry/playbookSchema.js";
 import { lintLoopPlaybooks } from "../registry/registryLint.js";

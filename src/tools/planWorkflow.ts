@@ -17,7 +17,7 @@
  *  - inlines the stack recommendation and the MAR-116 model-tier profile.
  */
 import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { Component } from "../registry/componentSchema.js";
 import type { LoopContract } from "../registry/playbookSchema.js";
 import { loadRegistry } from "../registry/registryProvider.js";

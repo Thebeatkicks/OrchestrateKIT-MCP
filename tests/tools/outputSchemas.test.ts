@@ -13,9 +13,8 @@
  * fields do not churn the snapshot.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client } from "@modelcontextprotocol/client";
+import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";
 import { registerTools } from "../../src/tools/index.js";
 import { ExportBuildBriefOutputShape } from "../../src/tools/outputSchemas.js";
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { toErrorResult } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import {

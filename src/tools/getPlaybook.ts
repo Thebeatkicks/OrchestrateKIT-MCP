@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { loadRegistry } from "../registry/registryProvider.js";
 import type { Playbook } from "../registry/playbookSchema.js";
 import type { Route } from "../registry/routeSchema.js";
