@@ -1,18 +1,24 @@
 /**
  * OrchestrateMCP — Cloudflare Worker entry (Streamable HTTP, stateless).
  *
- * Same 18 tools as the Node servers, served from a filesystem-free runtime.
+ * Same 19 tools as the Node servers, served from a filesystem-free runtime.
  * The registry and docs index are baked into the bundle at build time
  * (see scripts/gen-registry-bundle.ts) and injected into the providers below,
  * so no module in this import graph touches node:fs.
  *
  * Free, always-on, globally distributed — this is the intended public endpoint.
  * Deploy with `pnpm deploy:worker` (wrangler).
+ *
+ * DUAL-ERA (MAR-448): `createMcpHandler` serves protocol revision 2026-07-28
+ * and, via `legacy: 'stateless'`, every 2025-era client that connects today.
+ * It returns a `{ fetch, close, notify, bus }` object — exactly the shape
+ * Workers expect from `export default` — so the hand-rolled per-request
+ * server+transport construction this file used to do is gone.
  */
-import { McpServer, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server";
-import { SERVER_NAME, SERVER_VERSION, SERVER_INSTRUCTIONS } from "./config.js";
-import { registerTools } from "./tools/index.js";
-import { registerResources } from "./resources/index.js";
+import { createMcpHandler } from "@modelcontextprotocol/server";
+import { createOrchestrateMcpServer } from "./mcpServer.js";
+import { SERVER_NAME, SERVER_VERSION } from "./config.js";
+import { CORS_HEADERS } from "./lib/cors.js";
 import {
   setRegistryLoader,
   setBuildInfoProvider,
@@ -29,18 +35,20 @@ setRegistryLoader(loadRegistryBundled);
 setBuildInfoProvider(bundledBuildInfo);
 setDocsIndexLoader(loadDocsIndexBundled);
 
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version",
-};
-
 function withCors(headers: HeadersInit = {}): Headers {
   const h = new Headers(headers);
   for (const [k, v] of Object.entries(CORS_HEADERS)) h.set(k, v);
   return h;
 }
+
+// Built once per isolate, not per request — the handler is internally
+// stateless and calls the factory itself for each serving unit.
+// The SDK selects a runtime-appropriate JSON Schema validator on its own via
+// the package's `workerd` export condition (@cfworker/json-schema rather than
+// ajv), so nothing here has to pull a Node-only dependency into the bundle.
+const mcpHandler = createMcpHandler(createOrchestrateMcpServer, {
+  legacy: "stateless",
+});
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -64,21 +72,7 @@ export default {
     }
 
     if (url.pathname === "/mcp") {
-      // Stateless: a fresh server + transport per request (the SDK forbids
-      // reusing a stateless transport across requests).
-      const server = new McpServer(
-        { name: SERVER_NAME, version: SERVER_VERSION },
-        { instructions: SERVER_INSTRUCTIONS },
-      );
-      registerTools(server);
-      registerResources(server);
-
-      const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-      });
-      await server.connect(transport);
-
-      const response = await transport.handleRequest(request);
+      const response = await mcpHandler.fetch(request);
       // Re-emit with CORS headers (preserves SSE streaming body + status).
       return new Response(response.body, {
         status: response.status,
