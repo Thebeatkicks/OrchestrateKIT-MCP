@@ -1,0 +1,54 @@
+id: public_feed_fetch
+name: Public Feed Fetch
+status: published
+category: input
+summary: >-
+  Reads anonymous public RSS, Atom, and ordinary HTTP/JSON feed endpoints with
+  a direct GET, parses entries into a stable source-item shape, and never
+  requires a crawler account, API key, OAuth grant, or billing relationship.
+  Use page_monitor instead when the source is a JavaScript-rendered webpage or
+  has no usable feed/API endpoint.
+capabilities:
+  - anonymous_http_get
+  - parse_rss_atom
+  - parse_public_json_feed
+  - normalize_feed_entries
+  - filter_feed_entries
+inputs:
+  - public RSS, Atom, JSON feed, or ordinary HTTP endpoint URLs
+  - optional topic filters and published-at window
+outputs:
+  - normalized feed entries with source URL, title, published_at, summary, and item URL
+risk_level: low
+side_effects:
+  - anonymous outbound HTTP GET requests to user-selected public endpoints
+permissions:
+  read:
+    - "network: read - anonymous public RSS/Atom/HTTP endpoints only"
+  write: []
+  approval_required_for: []
+requires: []
+recommended_with:
+  - retry_policy
+  - deduplication
+  - source_freshness_check
+avoid_with:
+  - page_monitor
+  - data_scraper
+failure_modes:
+  - malformed XML or JSON returns a structured parse failure instead of partial entries
+  - HTTP 429 or transient network failure yields a bounded retryable error
+  - a source stops exposing a feed and must be reclassified as a webpage source
+  - missing published_at metadata prevents reliable daily-window filtering
+evals:
+  - parse seeded RSS, Atom, and JSON fixtures into the same normalized entry shape
+  - prove no credential or connection requirement is emitted for anonymous public endpoints
+  - reject authenticated, private, and feed-absent source fixtures from this capability path
+tested_in_playbooks: []
+tested_in_routes: []
+sources: []
+
+model_tier: none
+fallback_tier: none
+context_need: minimal
+compression_strategy: none

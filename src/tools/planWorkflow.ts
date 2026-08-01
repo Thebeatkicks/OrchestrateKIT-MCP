@@ -3291,6 +3291,8 @@ function buildPlacementContract(input: {
 > {
   const ids = new Set(input.steps.map((step) => step.component_id));
   const g = input.goal.toLowerCase();
+  const hasModelBackedStep = input.steps.some((step) => step.model_tier !== "none");
+  const requiresConnectionSetup = input.whatYouNeed.length > 0 || hasModelBackedStep;
   const interactive = anySignal(g, [
     "when i ask in chat",
     "when asked in chat",
@@ -3381,7 +3383,9 @@ function buildPlacementContract(input: {
     "managed_scheduled_job",
     "A short morning check needs a durable timer, not an always-on worker.",
     "Keeps running on schedule while the user's computer and client are closed.",
-    "Requires a selected scheduled-job runtime, secrets, state, retries, and cost controls.",
+    requiresConnectionSetup
+      ? "Requires a selected scheduled-job runtime, secrets, state, retries, and cost controls."
+      : "Requires a selected scheduled-job runtime plus retries and overlap handling; the route itself needs no provider account or secret.",
     "requires setup",
     true,
   );
@@ -3494,7 +3498,9 @@ function buildPlacementContract(input: {
   const providerControl = placementOption(
     "runtime_provider_control",
     "Selected runtime's provider UI and logs",
-    "Manage schedule, secrets, status, retries, and history where the runtime actually runs.",
+    requiresConnectionSetup
+      ? "Manage schedule, secrets, status, retries, and history where the runtime actually runs."
+      : "Manage schedule, status, retries, and history where the runtime actually runs; this route has no provider connection to manage.",
     "Requires choosing and configuring a supported runtime; no universal provider is selected.",
     "requires setup",
   );
@@ -3637,13 +3643,18 @@ function buildPlacementContract(input: {
     : baseTriggerExplanation;
 
   const connectionNames = joinWithAnd(recommendedConnectionLabels(input.goal, input.steps, input.whatYouNeed));
+  const noConnectionNextStep = ids.has("public_feed_fetch")
+    ? "Configure the public feed URLs and daily window, then select and prepare the recommended runtime class; the feed read needs no provider account or credential."
+    : "Configure the route inputs, then select and prepare the recommended runtime class; no external product connection is required.";
   const blocker = dashRunnerRecommended
     ? "The MCP is stateless and only emits the design/build handoff; the separately installed DASH Agent Runner executes the registered agent outside the MCP process."
     : interactive
     ? "Document-source selection still needs setup; the MCP worker is stateless and does not run customer agents."
     : "The MCP worker is stateless and has no runtime installer; a separately installed local runner or external runtime must execute the agent.";
   const nextStep = dashRunnerRecommended
-    ? `Connect ${connectionNames}, export the runner-hostable manifest v2 build, and register it with the separately installed DASH Agent Runner.`
+    ? requiresConnectionSetup
+      ? `Connect ${connectionNames}, export the runner-hostable manifest v2 build, and register it with the separately installed DASH Agent Runner.`
+      : `Configure the route inputs, export the runner-hostable manifest v2 build, and register it with the separately installed DASH Agent Runner; no external product connection is required.`
     : emailCalendar
     ? `Connect ${connectionNames}, choose a supported durable runtime, and prepare a provider-neutral approval inbox. Keep sending disabled.`
     : scheduled && slack && priceMonitor
@@ -3652,7 +3663,9 @@ function buildPlacementContract(input: {
     ? `Connect ${connectionNames}, choose whether Slack posts require approval, then prepare a managed scheduled job with durable run history.`
     : interactive
     ? `Connect the selected document source and model provider, then test an attended read-only run in the current client.`
-    : `Connect ${connectionNames}, then select and prepare the recommended runtime class.`;
+    : requiresConnectionSetup
+    ? `Connect ${connectionNames}, then select and prepare the recommended runtime class.`
+    : noConnectionNextStep;
 
   return {
     runtime_requirements: runtimeRequirements,
@@ -3666,7 +3679,9 @@ function buildPlacementContract(input: {
         ? "Prepare DASH Agent Runner handoff"
         : interactive
         ? "Prepare attended client run"
-        : "Prepare runtime and connections",
+        : requiresConnectionSetup
+        ? "Prepare runtime and connections"
+        : "Prepare runtime",
       availability: interactive ? "requires setup" : runtimeRecommendation.availability,
       action: null,
       blocker,

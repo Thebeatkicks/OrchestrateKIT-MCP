@@ -1,0 +1,12 @@
+id: scheduled_trigger__compatible__public_feed_fetch
+from: scheduled_trigger
+to: public_feed_fetch
+relation: compatible_with
+status: published
+reason: A scheduled trigger can start an anonymous feed read at a fixed cadence without adding another scheduler or provider connection.
+severity: low
+notes: Pass the run timestamp and daily window to public_feed_fetch; endpoint access remains a direct anonymous network read.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/publicFeedEdges.test.ts > edge: scheduled_trigger__compatible__public_feed_fetch"

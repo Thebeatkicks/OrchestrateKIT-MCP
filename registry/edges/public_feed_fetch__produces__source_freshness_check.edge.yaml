@@ -1,0 +1,12 @@
+id: public_feed_fetch__produces__source_freshness_check
+from: public_feed_fetch
+to: source_freshness_check
+relation: produces_input_for
+status: published
+reason: Parsed feed entries carry published_at and retrieved_at metadata that a freshness check can evaluate before daily-digest synthesis.
+severity: low
+notes: Treat missing or invalid publication timestamps as unknown freshness, never as fresh by default.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/publicFeedEdges.test.ts > edge: public_feed_fetch__produces__source_freshness_check"

@@ -112,6 +112,10 @@ const COMPONENT_DOMAINS: Record<string, Domain[]> = {
   lead_enrichment: ["crm_sales"],
   deal_stage_update: ["crm_sales"],
   // monitoring
+  // MAR-455: public_feed_fetch is hint-only and safe in research or monitoring
+  // goals. Generic membership lets an explicit RSS/Atom phrase establish the
+  // capability even when the goal does not also say "monitor" or "research".
+  public_feed_fetch: ["monitoring", "research", "generic_orchestration"],
   page_monitor: ["monitoring"],
   metric_threshold_monitor: ["monitoring"],
   log_monitor: ["monitoring"],
@@ -1389,6 +1393,21 @@ const KEYWORD_HINTS: Record<string, string[]> = {
   "update the deal": ["deal_stage_update"],
   scrape: ["data_scraper"],
   crawl: ["data_scraper"],
+  // MAR-455: anonymous public feeds use ordinary GET + feed parsing. Keep
+  // these phrases specific so a generic "news" or "API" goal does not invent
+  // a feed, while natural RSS/Atom wording takes the zero-credential path.
+  "public news feed": ["public_feed_fetch"],
+  "public news feeds": ["public_feed_fetch"],
+  "public feed": ["public_feed_fetch"],
+  "public feeds": ["public_feed_fetch"],
+  "rss feed": ["public_feed_fetch"],
+  "rss feeds": ["public_feed_fetch"],
+  rss: ["public_feed_fetch"],
+  "atom feed": ["public_feed_fetch"],
+  "atom feeds": ["public_feed_fetch"],
+  "json feed": ["public_feed_fetch"],
+  "anonymous http": ["public_feed_fetch"],
+  "public http endpoint": ["public_feed_fetch"],
   monitor: ["page_monitor"],
   poll: ["page_monitor"],
   watch: ["page_monitor"],
@@ -1821,6 +1840,9 @@ const HINT_ONLY_COMPONENTS = new Set([
   // engineering contexts. Restrict to explicit monitoring hints (monitor / poll /
   // watch) so it only fires when the user is actually asking to watch a web page.
   "page_monitor",
+  // MAR-455: this is a precise access path, not a generic retrieval synonym.
+  // Only explicit public-feed/RSS/Atom hints above may select it.
+  "public_feed_fetch",
   // MAR-215: data_scraper's id contains the segment "data", which appears in
   // virtually every data-pipeline / API-read goal ("pull Stripe payment data",
   // "fetch sensor data"). The id-segment pass (+2) fires even after removing
@@ -1925,6 +1947,54 @@ const SPECIFIC_MONITOR_COMPONENTS = [
 
 /** Web-page signals that legitimately justify page_monitor. */
 const PAGE_MONITOR_SIGNALS = ["page", "webpage", "website", "url"];
+
+/** Sources that are not eligible for the anonymous public-feed capability. */
+const PUBLIC_FEED_DISQUALIFIERS = [
+  "private feed",
+  "private rss",
+  "private atom",
+  "authenticated feed",
+  "authenticated rss",
+  "authenticated atom",
+  "protected feed",
+  "paid feed",
+  "subscription-only",
+  "requires authentication",
+  "require authentication",
+  "requires login",
+  "require login",
+  "behind a login",
+  "oauth",
+  "api key",
+  "credential",
+  "no rss",
+  "without rss",
+  "no usable feed",
+  "without a feed",
+  "has no feed",
+];
+
+/** A mixed feed + rendered-page goal legitimately needs both source paths. */
+const DISTINCT_RENDERED_PAGE_SIGNALS = [
+  "javascript-heavy",
+  "javascript rendered",
+  "javascript-rendered",
+  "js-heavy",
+  "dynamic webpage",
+  "dynamic website",
+  "no usable feed",
+  "without a feed",
+  "has no feed",
+];
+
+/** Explicit demand outside the named feeds keeps the broader retrieval step. */
+const BROADER_RETRIEVAL_SIGNALS = [
+  "search the web",
+  "web search",
+  "beyond the feeds",
+  "outside the feeds",
+  "other web sources",
+];
 
 /**
  * MAR-254: extraction-direction signals that legitimately justify
@@ -2149,6 +2219,31 @@ export function matchCapabilities(
   // specific monitoring observer scored AND the goal carries no web-page signal —
   // page_monitor stays whenever the goal really names a page/site/URL, and stays
   // as the sole fallback monitor when no specific observer matched.
+  // MAR-455: a public RSS/Atom/HTTP feed is its own anonymous source path.
+  // Generic watch/crawl/search vocabulary must not silently upgrade it to a
+  // credentialed Firecrawl or paid-search connection. Private/authenticated or
+  // explicitly feed-absent sources fail closed out of this capability. A mixed
+  // goal that also names a rendered webpage retains the page/scraper path.
+  if (scoreMap.has("public_feed_fetch")) {
+    const disqualified = PUBLIC_FEED_DISQUALIFIERS.some((signal) =>
+      goalLower.includes(signal),
+    );
+    if (disqualified) {
+      scoreMap.delete("public_feed_fetch");
+    } else {
+      const hasRenderedPageNeed =
+        ["page", "webpage", "website"].some((signal) => goalLower.includes(signal)) &&
+        DISTINCT_RENDERED_PAGE_SIGNALS.some((signal) => goalLower.includes(signal));
+      if (!hasRenderedPageNeed) {
+        scoreMap.delete("page_monitor");
+        scoreMap.delete("data_scraper");
+      }
+      if (!BROADER_RETRIEVAL_SIGNALS.some((signal) => goalLower.includes(signal))) {
+        scoreMap.delete("source_retrieval");
+      }
+    }
+  }
+
   if (scoreMap.has("page_monitor")) {
     const hasPageSignal = PAGE_MONITOR_SIGNALS.some((t) => goalLower.includes(t));
     const hasSpecificMonitor = SPECIFIC_MONITOR_COMPONENTS.some((id) =>

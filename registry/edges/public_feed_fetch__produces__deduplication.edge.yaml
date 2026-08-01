@@ -1,0 +1,12 @@
+id: public_feed_fetch__produces__deduplication
+from: public_feed_fetch
+to: deduplication
+relation: produces_input_for
+status: published
+reason: Feed sources often repeat or syndicate the same story, so normalized entries can be deduplicated before ranking or digest generation.
+severity: low
+notes: Prefer the canonical item URL, then source id or title plus published_at, as the stable identity key.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/publicFeedEdges.test.ts > edge: public_feed_fetch__produces__deduplication"
