@@ -11,7 +11,7 @@
     "index": ".orchestrate/state.json"
   },
   "git": {
-    "evidence_base_commit": "fb93a92"
+    "evidence_base_commit": "8af183d"
   },
   "issues": [
     {
@@ -54,9 +54,20 @@
     },
     {
       "id": "MAR-456",
+      "lifecycle": "proven",
+      "linear_status": "Done",
+      "commit": "8af183d",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/tools/publicFeedRouting.test.ts tests/journey/goldenJourney.test.ts"
+      },
+      "note": "deriveHostingBase's scheduled branch always picked hosted_cron regardless of must_run_while_computer_off (the guard it used was self-referentially always true for any scheduled_trigger route). Fixed to recommend a new local_scheduled_runtime/local_cron pairing when computer-off is not required and the goal's output stays on the user's computer; hosting_and_monitoring and the build_surface question round now agree. Locked by the news_scout_local_public_feed golden-journey fixture. DASH manifest scheduled_trigger/cadence drift question resolved via docs/ADR-MAR-456-scheduled-trigger-manifest-export.md; implementation tracked separately as MAR-463."
+    },
+    {
+      "id": "MAR-463",
       "lifecycle": "planned",
       "linear_status": "Backlog",
-      "note": "Computer-on goals currently recommend paid self-hosting ahead of the proven local DASH runner; this blocks the honest News Scout build brief."
+      "note": "Gate scheduled_trigger out of the exported manifest v2 planned_route until a build's cadence is enabled, per the MAR-456 ADR. New interview/export surface, not implemented yet."
     },
     {
       "id": "MAR-459",
