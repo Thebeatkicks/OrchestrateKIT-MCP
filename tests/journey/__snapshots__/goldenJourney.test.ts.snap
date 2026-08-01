@@ -614,6 +614,68 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > mult
 }
 `;
 
+exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > news_scout_local_public_feed > matches the golden transcript snapshot 1`] = `
+{
+  "final_goal": "[text]",
+  "fixture": "news_scout_local_public_feed",
+  "initial_goal": "[text]",
+  "steps": [
+    {
+      "automation_clearance_level": "L1",
+      "clarifying_question_ids": [],
+      "coverage_label": "partial",
+      "enforced_approval_gates": [],
+      "kind": "plan",
+      "plan_source": "composed",
+      "playbook_id": null,
+      "recommended_next_click": {
+        "action": "assistant:attended_dry_run_in_chat",
+        "id": "dry_run_in_chat",
+        "label": "Dry run it attended in this chat now — nothing persists, then build",
+      },
+      "round": 0,
+      "route": [
+        "public_feed_fetch",
+        "scheduled_trigger",
+        "audit_log",
+      ],
+      "route_status": "candidate",
+    },
+    {
+      "durable_build_goal": false,
+      "honest_disclosure": true,
+      "kind": "attended_dry_run_option",
+      "present": true,
+      "walking_skeleton_disclosed": false,
+    },
+    {
+      "attended": true,
+      "kind": "dry_run",
+      "nothing_persists": true,
+      "scope_size": "medium",
+    },
+    {
+      "kind": "terminal:prepare_runtime",
+      "manifest_control_surface_ids": [
+        "runtime_provider_control",
+      ],
+      "manifest_interaction_surface_ids": [
+        "approval_inbox_interaction",
+      ],
+      "manifest_runtime_class": "local_process",
+      "manifest_runtime_label": "Local scheduled task on this computer",
+      "manifest_version": 2,
+      "next_achievable_step": "[text]",
+      "recommended_setup_availability": "requires setup",
+      "recommended_setup_label": "Prepare runtime",
+      "runtime_class": "local_cron",
+    },
+  ],
+  "terminal": "prepare_runtime",
+  "transcript_version": "orchestratekit.golden_journey.v1",
+}
+`;
+
 exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > one_shot_inbox_summary > matches the golden transcript snapshot 1`] = `
 {
   "final_goal": "summarize my inbox for me now",

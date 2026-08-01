@@ -73,15 +73,21 @@ describe("MAR-455 exact public-feed planner and export proof", () => {
     expect(plan.summary_markdown).not.toContain("500 pages / month");
   });
 
-  it("keeps runtime choice in MAR-456 scope while removing invented feed credentials", () => {
-    const wizard = planExactGoal().goal_to_product_wizard;
+  it("MAR-456: recommends the local runtime, not paid hosting, for a computer-on local-output goal", () => {
+    const plan = planExactGoal();
+    const wizard = plan.goal_to_product_wizard;
 
     expect(wizard.runtime_requirements).toMatchObject({
       trigger_mode: "scheduled",
       operation_mode: "scheduled",
       must_run_while_computer_off: false,
     });
-    expect(wizard.runtime_recommendation.id).toBe("managed_scheduled_job");
+    // Before MAR-456 this was "managed_scheduled_job" — a bare scheduled
+    // route always recommended a paid managed timer regardless of whether the
+    // computer needed to stay off. The goal writes its output to this
+    // computer and never asks for computer-off execution, so the floor is the
+    // local scheduled task, not a bill.
+    expect(wizard.runtime_recommendation.id).toBe("local_scheduled_runtime");
     expect(wizard.runtime_recommendation.limitation).toContain(
       "needs no provider account or secret",
     );
@@ -91,6 +97,15 @@ describe("MAR-455 exact public-feed planner and export proof", () => {
     expect(wizard.recommended_setup.next_achievable_step).not.toMatch(
       /Firecrawl|OAuth|API key/,
     );
+
+    // The legacy hosting field and the build_surface question round must
+    // agree with the runtime recommendation above, not contradict it.
+    expect(plan.hosting_and_monitoring.hosting.recommended.id).toBe("local_cron");
+    const buildSurface = plan.question_flow.rounds.find(
+      (round) => round.id === "build_surface",
+    )!;
+    expect(buildSurface.recommended_option_id).toBe("self_host_local");
+    expect(buildSurface.recommended_option_id).not.toBe("self_host_hosted");
   });
 
   it("exports a deterministic DASH manifest v2 with no credential connection", () => {

@@ -171,6 +171,32 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
       "execution, so the local DASH Agent Runner is neither recommended nor offered as the runtime.",
   },
   {
+    name: "news_scout_local_public_feed",
+    // The MAR-455/456 live-session goal, verbatim. MAR-455 fixed the route
+    // (public_feed_fetch, zero credentials); MAR-456 fixes the recommendation
+    // that follows it: `must_run_while_computer_off` is false and the output
+    // is a file on this computer, so the build_surface ⭐ must land on the
+    // local runtime, never the paid always-on host.
+    goal: "Watch public news feeds for stories about AI agents and write me a daily digest file on my computer.",
+    canned_answers: {},
+    coverage_tags: [],
+    expectations: {
+      initial: {
+        route_includes: ["public_feed_fetch", "scheduled_trigger"],
+        route_excludes: ["page_monitor"],
+      },
+      resolved: {
+        runtime_recommendation_id: "local_scheduled_runtime",
+        runtime_class: "local_cron",
+        build_surface_recommendation_id: "self_host_local",
+        question_flow_absent_options: [],
+      },
+    },
+    notes:
+      "MAR-456 regression lock: a computer-on scheduled goal whose output is a local file must " +
+      "recommend the local runtime over paid self-hosting, and the legacy hosting field must agree.",
+  },
+  {
     name: "one_shot_inbox_summary",
     goal: "summarize my inbox for me now",
     canned_answers: {},

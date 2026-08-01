@@ -123,6 +123,11 @@ function isSelfHostedBuildTarget(target: ManifestBuildTarget): boolean {
 function agentDomRuntimeClass(runtimeClass: string | undefined): AgentDomRuntimeClass {
   switch (runtimeClass) {
     case "local_process":
+    // MAR-456: a local scheduled task is still a local process — it just runs
+    // on a timer instead of continuously. Reuses the existing bucket rather
+    // than adding a new AgentDomRuntimeClass value, which is a manifest v2
+    // field DASH also reads.
+    case "local_cron":
       return "local_process";
     case "managed_durable_background":
     case "self_hosted":

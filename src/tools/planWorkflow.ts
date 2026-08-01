@@ -2642,6 +2642,29 @@ function goalRequiresComputerOff(goal: string): boolean {
   ]);
 }
 
+/**
+ * MAR-456: the goal explicitly asks for a deliverable written to the user's
+ * own computer (a text signal, matching the style of the sibling predicates
+ * above — not a semantic classifier). Used only to decide between a local
+ * scheduled task and a hosted one when `must_run_while_computer_off` is
+ * already false: the computer-off requirement is the load-bearing signal for
+ * "must this be hosted", and this phrase narrows the scheduled case further
+ * to "and the output already lives here, so a hosted box would just have to
+ * ship it back." It intentionally does not gate anything on its own.
+ */
+function goalOutputsToLocalFile(goal: string): boolean {
+  return anySignal(goal.toLowerCase(), [
+    "on my computer",
+    "on my own computer",
+    "on this computer",
+    "to my computer",
+    "on my machine",
+    "on my own machine",
+    "on my laptop",
+    "local file on my computer",
+  ]);
+}
+
 function dashAgentRunnerDeclaredAvailable(goal: string): boolean {
   return anySignal(goal.toLowerCase(), [
     "dash agent runner is installed",
@@ -2699,7 +2722,17 @@ function deriveHostingBase(goal: string, routeComponentIds: string[]): HostingOp
   const hasChat = routeComponentIds.includes("chat_trigger");
   if (interactive) return "in_client";
   if (hasWebhookish) return "hosted_endpoint";
-  if (hasScheduled) return goalNeedsBackgroundRunner(goal, routeComponentIds) ? "hosted_cron" : "local_cron";
+  if (hasScheduled) {
+    // MAR-456: a bare schedule alone can never fall through to "local_cron"
+    // below — `goalNeedsBackgroundRunner` already returns true whenever the
+    // route carries `scheduled_trigger`, so this branch always picked
+    // "hosted_cron" regardless of whether anything actually required the
+    // computer to stay off. Carve out the one case the ticket asks for: no
+    // computer-off requirement AND the goal says its output already lives on
+    // this computer, so a hosted box would only have to ship the result back.
+    if (!goalRequiresComputerOff(goal) && goalOutputsToLocalFile(goal)) return "local_cron";
+    return goalNeedsBackgroundRunner(goal, routeComponentIds) ? "hosted_cron" : "local_cron";
+  }
   if (goalNeedsBackgroundRunner(goal, routeComponentIds)) return "hosted_endpoint";
   if (hasChat) return "in_client";
   return "manual_local";
@@ -3431,6 +3464,26 @@ function buildPlacementContract(input: {
     dashRunnerAvailable ? "available now" : "requires setup",
     true,
   );
+  /**
+   * MAR-456: the un-installed-runner floor for a scheduled goal that neither
+   * needs the computer off nor declares a DASH Agent Runner available — see
+   * `goalOutputsToLocalFile`. Distinct from `localRuntime` (whose "development
+   * and manual testing" framing fits an interactive/attended fallback, not a
+   * recommended recurring job) and from `managedScheduled` (which costs money
+   * this requirement never asked for).
+   */
+  const localScheduledRuntime = runtimeOption(
+    "local_scheduled_runtime",
+    "Local scheduled task on this computer",
+    "local_cron",
+    "The route's own output stays on this computer and nothing in this goal needs it to run while the computer is off — a local scheduled task is enough, with no deploy, secrets, or bill.",
+    "Keeps running on schedule while this computer is on; stops if it sleeps, turns off, or the process is killed.",
+    requiresConnectionSetup
+      ? "Requires a local task scheduler, state, and retry handling."
+      : "Requires a local task scheduler plus retry handling; the route itself needs no provider account or secret.",
+    "requires setup",
+    true,
+  );
   const workflowAdapter = runtimeOption(
     "workflow_automation_adapter",
     "Supported workflow-automation adapter",
@@ -3452,8 +3505,16 @@ function buildPlacementContract(input: {
     true,
   );
 
+  // MAR-456: a scheduled goal with no computer-off requirement whose output
+  // already lives on this computer gets the local floor, not the paid managed
+  // timer — see `goalOutputsToLocalFile` and `deriveHostingBase`'s matching
+  // carve-out, which keeps the legacy `hosting_and_monitoring` block agreeing
+  // with this recommendation instead of contradicting it.
+  const localScheduledFits = scheduled && !computerOff && goalOutputsToLocalFile(input.goal);
   const baseRuntimeRecommendation = interactive
     ? clientRuntime
+    : localScheduledFits
+    ? localScheduledRuntime
     : scheduled
     ? managedScheduled
     : emailCalendar || webhook || offline
@@ -3461,6 +3522,8 @@ function buildPlacementContract(input: {
     : clientRuntime;
   const baseRuntimeAlternatives = interactive
     ? [generatedUiRuntime, localRuntime]
+    : localScheduledFits
+    ? [managedScheduled, selfHosted]
     : scheduled
     ? [workflowAdapter, selfHosted]
     : [selfHosted, managedScheduled];
