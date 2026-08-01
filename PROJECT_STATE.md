@@ -10,10 +10,10 @@ The MCP is now a credible deterministic planner and DASH build-brief exporter. M
 
 ## Current wave
 
-1. Add protocol conformance fixtures to CI (MAR-459).
-2. Make public runner eligibility explicit and fail closed (MAR-460).
-3. Keep manifest-v2 export compatible with the now-proven DASH handoff.
-4. Evaluate MCP Apps for rich plan/build cards, then MCP Tasks for DASH-as-server orchestration.
+1. MAR-455: route anonymous public feeds to RSS/GET rather than paid Firecrawl.
+2. MAR-456: prefer the proven local DASH runner for a computer-on goal rather than paid self-hosting.
+3. Keep manifest-v2 export compatible with the now-proven DASH handoff and MAR-457 News Scout.
+4. After the useful loop is proven, run MAR-459 conformance and MAR-460 public-runner policy, then evaluate MCP Apps and MCP Tasks.
 
 `MAR-426`, `MAR-427`, and `MAR-448` are implemented and reconciled in Linear. MAR-455 and MAR-456 are the immediate MCP prerequisites for News Scout; MAR-459 and MAR-460 own the post-demo standards/policy work. Exact lifecycle evidence is indexed in `.orchestrate/state.json`.
 

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "project": "OrchestrateKit MCP",
   "updated_at": "2026-08-01",
-  "current_wave": "MCP standards conformance",
+  "current_wave": "News Scout routing prerequisites",
   "authority": {
     "implementation": "Git",
     "intent": "Linear",
