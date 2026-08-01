@@ -2,7 +2,13 @@
 
 Prepared: 2026-08-01
 
-Status: Ready to apply when a Linear writer is connected
+Status: Applied 2026-08-01
+
+All 15 agreed issues received commit/proof comments before their status changed
+to Done: MAR-383, MAR-384, MAR-423, MAR-426, MAR-427, MAR-428, MAR-429,
+MAR-432, MAR-433, MAR-448, MAR-450, MAR-451, MAR-452, MAR-453, and MAR-454.
+The state checkers now carry those Done statuses; this document remains the
+audit packet for why each issue was closed.
 
 This is a mutation packet, not an alternate source of truth. Before applying,
 re-read each issue and confirm the commit remains reachable from the repository

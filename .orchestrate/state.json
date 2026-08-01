@@ -17,7 +17,7 @@
     {
       "id": "MAR-426",
       "lifecycle": "proven",
-      "linear_status": "Todo",
+      "linear_status": "Done",
       "commit": "5f23903",
       "proof": {
         "command": "pnpm verify"
@@ -27,14 +27,14 @@
     {
       "id": "MAR-427",
       "lifecycle": "merged",
-      "linear_status": "Todo",
+      "linear_status": "Done",
       "commit": "fabd88d",
       "note": "Runner handoff path is reachable; MAR-456 still owns fail-closed public eligibility."
     },
     {
       "id": "MAR-448",
       "lifecycle": "proven",
-      "linear_status": "Backlog",
+      "linear_status": "Done",
       "commit": "14aa04b",
       "proof": {
         "command": "pnpm verify"

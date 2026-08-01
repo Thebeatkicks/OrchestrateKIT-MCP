@@ -64,10 +64,8 @@ open because its own control sheet still lacks the final recording. MAR-380 and
 MAR-421 should be re-scoped against this roadmap instead of being allowed to
 block already-merged foundations.
 
-Linear mutation is a separate operational gate: the local evidence packets now
-name the stale statuses, but the connected Linear writer must apply the status
-and comment batch. Until then the drift checker should continue to warn.
-The exact batch is in
+Linear reconciliation was applied on 2026-08-01: 15 issues received evidence
+comments before moving to Done. The exact audit batch is in
 [`LINEAR_RECONCILIATION_2026-08-01.md`](LINEAR_RECONCILIATION_2026-08-01.md).
 
 ## Wave 1 - the shortest real agent loop (2-4 engineering days)
@@ -173,7 +171,7 @@ ship first.
 
 ## Next decision gate
 
-Wave 0 is frozen. Reconcile Linear when its connector is authenticated, and run
-News Scout as the first build brief. Keep provider OAuth behind the permission-
+Wave 0 is frozen and Linear is reconciled. Run News Scout as the first build
+brief. Keep provider OAuth behind the permission-
 broker boundary. Do not resume Trading Bot before LAB can show a complete
 evidence chain.
