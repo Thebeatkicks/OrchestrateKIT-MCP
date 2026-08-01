@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "project": "OrchestrateKit MCP",
+  "updated_at": "2026-08-01",
+  "current_wave": "MCP standards conformance and DASH agent handoff",
+  "authority": {
+    "implementation": "Git",
+    "intent": "Linear",
+    "decisions": "ADRs",
+    "evidence": "tests and installed runtime proofs",
+    "index": ".orchestrate/state.json"
+  },
+  "git": {
+    "evidence_base_commit": "14aa04b"
+  },
+  "issues": [
+    {
+      "id": "MAR-426",
+      "lifecycle": "merged",
+      "linear_status": "Todo",
+      "commit": "5f23903",
+      "note": "Deterministic DASH manifest-v2 export is implemented and schema-tested."
+    },
+    {
+      "id": "MAR-427",
+      "lifecycle": "merged",
+      "linear_status": "Todo",
+      "commit": "fabd88d",
+      "note": "Runner handoff path is reachable; MAR-456 still owns fail-closed public eligibility."
+    },
+    {
+      "id": "MAR-448",
+      "lifecycle": "proven",
+      "linear_status": "Backlog",
+      "commit": "14aa04b",
+      "proof": {
+        "command": "pnpm verify"
+      },
+      "note": "The 2026-07-28 protocol revision is served alongside the older revision."
+    },
+    {
+      "id": "MAR-455",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "note": "Add protocol conformance fixtures to CI after the installed DASH gate is green."
+    },
+    {
+      "id": "MAR-456",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "note": "Make public runner eligibility explicit and fail closed."
+    }
+  ]
+}

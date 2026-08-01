@@ -40,7 +40,8 @@
     "demo": "tsx scripts/smoke-demo.ts",
     "smoke": "vitest run tests/smoke",
     "release:check": "tsx scripts/check-release-trust.ts",
-    "verify": "pnpm gen:registry && pnpm typecheck && pnpm registry:lint && pnpm benchmark:check && pnpm test && pnpm release:check"
+    "state:check": "node scripts/check-project-state.mjs",
+    "verify": "pnpm state:check && pnpm gen:registry && pnpm typecheck && pnpm registry:lint && pnpm benchmark:check && pnpm test && pnpm release:check"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",

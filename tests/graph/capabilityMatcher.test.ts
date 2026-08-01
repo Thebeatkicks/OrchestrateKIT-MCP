@@ -124,6 +124,18 @@ describe("matchCapabilities — MAR-132 human_approval_gate is not fuzzy-matched
     const ids = matches.map((m) => m.component.id);
     expect(ids).toContain("human_approval_gate");
   });
+
+  it("selects a gate for an explicit invoice-payment instruction", () => {
+    expect(matchedIds("Watch my inbox for incoming invoices and pay them for me.")).toContain(
+      "human_approval_gate",
+    );
+  });
+
+  it("does not treat the ordinary phrase pay attention as money movement", () => {
+    expect(matchedIds("Read the report and pay attention to formatting.")).not.toContain(
+      "human_approval_gate",
+    );
+  });
 });
 
 describe("matchCapabilities — domain guards (MAR-80)", () => {

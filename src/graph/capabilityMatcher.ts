@@ -1612,6 +1612,17 @@ const KEYWORD_HINTS: Record<string, string[]> = {
   approval: ["human_approval_gate"],
   approve: ["human_approval_gate"],
   "human review": ["human_approval_gate"],
+  // LAB evidence contract: the runtime does not yet model money movement as an
+  // executable component, but an explicit instruction to pay invoices is
+  // already a high-stakes action. Keep a narrow phrase-level path to the gate
+  // so the planner cannot present unattended payment as an acceptable design.
+  // Do not add bare `pay`, which would collide with phrases such as "pay
+  // attention" and non-action payment-data analysis.
+  "pay invoice": ["human_approval_gate"],
+  "pay invoices": ["human_approval_gate"],
+  "pay them": ["human_approval_gate"],
+  "make payment": ["human_approval_gate"],
+  "send payment": ["human_approval_gate"],
   audit: ["audit_log"],
   log: ["audit_log"],
   intent: ["intent_classifier"],
