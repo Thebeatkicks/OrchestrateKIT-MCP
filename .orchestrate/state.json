@@ -2,7 +2,7 @@
   "schema_version": 1,
   "project": "OrchestrateKit MCP",
   "updated_at": "2026-08-01",
-  "current_wave": "MCP standards conformance and DASH agent handoff",
+  "current_wave": "MCP standards conformance",
   "authority": {
     "implementation": "Git",
     "intent": "Linear",
@@ -11,14 +11,17 @@
     "index": ".orchestrate/state.json"
   },
   "git": {
-    "evidence_base_commit": "14aa04b"
+    "evidence_base_commit": "8dce5f1"
   },
   "issues": [
     {
       "id": "MAR-426",
-      "lifecycle": "merged",
+      "lifecycle": "proven",
       "linear_status": "Todo",
       "commit": "5f23903",
+      "proof": {
+        "command": "pnpm verify"
+      },
       "note": "Deterministic DASH manifest-v2 export is implemented and schema-tested."
     },
     {
@@ -42,13 +45,23 @@
       "id": "MAR-455",
       "lifecycle": "planned",
       "linear_status": "Backlog",
-      "note": "Add protocol conformance fixtures to CI after the installed DASH gate is green."
+      "note": "The installed DASH gate is green; protocol conformance fixtures in CI are the next MCP implementation slice."
     },
     {
       "id": "MAR-456",
       "lifecycle": "planned",
       "linear_status": "Backlog",
       "note": "Make public runner eligibility explicit and fail closed."
+    },
+    {
+      "id": "MCP-INVOICE-SAFETY-CORPUS",
+      "lifecycle": "proven",
+      "linear_status": "Local evidence",
+      "commit": "8dce5f1",
+      "proof": {
+        "command": "pnpm verify"
+      },
+      "note": "Explicit invoice-payment instructions now deterministically require human approval without fuzzy-matching ordinary phrases such as pay attention."
     }
   ]
 }
