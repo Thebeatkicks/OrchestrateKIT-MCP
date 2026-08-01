@@ -22,12 +22,12 @@ evidence branch. Add the evidence comment before changing status.
 | MAR-384 | DASH `e30921c` | Done | None beyond normal regression coverage. |
 | MAR-423 | DASH `ad56874` | Done | AI News Scout extends this shipped sample journey in a new Wave 1 issue. |
 | MAR-426 | MCP `5f23903` | Done | Deterministic manifest-v2 export is covered by the pinned schema tests. |
-| MAR-427 | MCP `fabd88d` | Done | Public eligibility/fail-closed policy remains MAR-456. |
+| MAR-427 | MCP `fabd88d` | Done | Public eligibility/fail-closed policy remains MAR-460. |
 | MAR-428 | DASH `c54ce60` | Done | Installed first-run proof remains MAR-454. |
 | MAR-429 | DASH `32d3af9` | Done | Lifecycle evidence remains in `docs/msix-lifecycle-evidence.md`. |
 | MAR-432 | DASH `d965f03` | Done | Packaged renderer startup is re-exercised by MAR-454. |
 | MAR-433 | DASH `a527585`, installed proof `05201e7` | Done | Satisfied: a fresh runner-hosted run rendered in Runs with verdict and digest artifact under `pnpm verify`. |
-| MAR-448 | MCP `14aa04b` | Done | Keep both supported revisions in conformance CI under MAR-455. |
+| MAR-448 | MCP `14aa04b` | Done | Keep both supported revisions in conformance CI under MAR-459. |
 | MAR-450 | DASH `71b28e5` | Done | Residual self-healing and protocol ownership are tested by MAR-454. |
 
 Suggested comment shape:
@@ -65,7 +65,7 @@ not make the issue Done.
 
 ### Initiative: DASH - Useful agent loop
 
-**AI News Scout: prove and extend the shipped sample journey**
+**MAR-457 — AI News Scout: prove and extend the shipped sample journey**
 
 - Build on MAR-423; no parallel demo path.
 - Public RSS/HTTP sources, editable source set, and cadence.
@@ -75,7 +75,7 @@ not make the issue Done.
 
 ### Initiative: DASH - Connections as capabilities
 
-**Permission broker: narrow connector operations, never raw provider tokens**
+**MAR-458 — Permission broker: narrow connector operations, never raw provider tokens**
 
 - Implement DASH ADR 0002.
 - Separate DASH identity from connector authorization.
@@ -85,7 +85,7 @@ not make the issue Done.
 - Native OAuth and authenticated MCP connectors share permission receipts while
   naming the actual token custodian.
 
-**BYO Google client onboarding and Testing-mode expiry UX**
+**MAR-446 — BYO Google client onboarding and Testing-mode expiry UX**
 
 - The current Google client ID is compiled into DASH; BYO is not shipped.
 - Guided Cloud Console setup, client validation, named test-user instructions,
@@ -94,22 +94,22 @@ not make the issue Done.
 
 ### Initiative: MCP - Standards conformance
 
-- MAR-455 — protocol conformance fixtures in CI.
-- MAR-456 — explicit public-runner eligibility, fail closed.
+- MAR-459 — protocol conformance fixtures in CI.
+- MAR-460 — explicit public-runner eligibility, fail closed.
 - Follow-ups: MCP Apps card rendering, then MCP Tasks for long-running
   DASH-as-server work.
 
 ### Initiative: LAB - Evidence flywheel
 
 - Evidence reconciliation: Chief verifies Git ancestry before ranking Linear.
-- Invoice-payment corpus contract requires human approval.
+- MAR-461 — prove the invoice-payment corpus contract with a fresh scored evaluation.
 - Flywheel health: last real session, accepted finding, promoted issue, merged
   fix, and later outcome delta.
 - Trading Bot remains paused until one complete causal chain is visible.
 
 ### Initiative: Site - Public trust surface
 
-- Evidence-backed copy and canonical dark-editorial direction.
+- MAR-462 — deploy and prove the evidence-backed, canonical dark-editorial direction.
 - Responsive/browser proof at 375, 768, and 1280.
 - Primary CTA is the live planning path; secondary CTA inspects the artifact.
 

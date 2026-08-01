@@ -70,7 +70,7 @@ comments before moving to Done. The exact audit batch is in
 
 ## Wave 1 - the shortest real agent loop (2-4 engineering days)
 
-Harden and extend MAR-423 into **AI News Scout**. This is not a new demo branch.
+Deliver MAR-457 by hardening and extending MAR-423 into **AI News Scout**. This is not a new demo branch.
 It is the existing no-terminal sample path with a useful public-RSS agent:
 
 - choose/edit sources and cadence;
@@ -82,10 +82,14 @@ It is the existing no-terminal sample path with a useful public-RSS agent:
 
 News Scout intentionally requires no OAuth. It isolates agent communication,
 telemetry, artifacts, and verdict UX before connector complexity is introduced.
+MAR-455 must first route public feeds to anonymous RSS/GET instead of paid
+Firecrawl, and MAR-456 must prefer the proven local DASH runner for a
+computer-on goal.
 
 ## Wave 2 - connections as capabilities (5-8 engineering days for internal MVP)
 
-DASH implements ADR 0002's permission broker:
+DASH implements ADR 0002's permission broker under MAR-458, with MAR-446
+retained for BYO Google client onboarding:
 
 - separate DASH identity from connector grants;
 - keep provider tokens on DASH's trusted side;
@@ -107,8 +111,8 @@ in Testing mode.
 
 ## Wave 3 - MCP standards and portable agent UI (2-4 engineering days)
 
-- MAR-455: pin a protocol conformance matrix in CI for both supported revisions.
-- MAR-456: make public-runner eligibility explicit and fail closed.
+- MAR-459: pin a protocol conformance matrix in CI for both supported revisions.
+- MAR-460: make public-runner eligibility explicit and fail closed.
 - Evaluate MCP Apps for rendering the same plan/build/evidence cards in clients.
 - Evaluate MCP Tasks for long-running DASH-as-server work after the runner proof
   and cancellation semantics are stable.
@@ -124,7 +128,7 @@ P0 is evidence reconciliation, not more dashboards:
 
 - verify Git implementation before Chief promotes stale Linear findings;
 - keep Trading Bot paused;
-- repair the adversarial invoice-payment corpus contract;
+- prove the adversarial invoice-payment corpus contract with a fresh scored evaluation (MAR-461);
 - expose health for last real session, accepted findings, promoted issues, and
   later proven fixes;
 - resume one narrow project only when input -> finding -> issue -> merged fix ->
@@ -143,6 +147,7 @@ finding and either promotes it or records a reason not to.
   exported build brief/evidence.
 - Verify 375 px, 768 px, and 1280 px layouts and publish only after Text Mirror,
   build, and visual checks are green.
+- Deploy and record the live proof under MAR-462.
 
 The product/design briefs, safer homepage copy, dark default, and evidence-led
 social card are implemented locally on the existing web branch and are not yet

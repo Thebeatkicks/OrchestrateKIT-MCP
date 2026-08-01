@@ -45,13 +45,25 @@
       "id": "MAR-455",
       "lifecycle": "planned",
       "linear_status": "Backlog",
-      "note": "The installed DASH gate is green; protocol conformance fixtures in CI are the next MCP implementation slice."
+      "note": "Public-feed goals currently route to paid Firecrawl when anonymous RSS/GET is sufficient; this blocks the honest News Scout path."
     },
     {
       "id": "MAR-456",
       "lifecycle": "planned",
       "linear_status": "Backlog",
-      "note": "Make public runner eligibility explicit and fail closed."
+      "note": "Computer-on goals currently recommend paid self-hosting ahead of the proven local DASH runner; this blocks the honest News Scout build brief."
+    },
+    {
+      "id": "MAR-459",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "note": "Pin supported MCP protocol revision fixtures in CI and publish a named conformance matrix."
+    },
+    {
+      "id": "MAR-460",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "note": "Define explicit public-runner eligibility and fail closed when capability evidence is absent."
     },
     {
       "id": "MCP-INVOICE-SAFETY-CORPUS",
