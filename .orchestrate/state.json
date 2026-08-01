@@ -11,7 +11,7 @@
     "index": ".orchestrate/state.json"
   },
   "git": {
-    "evidence_base_commit": "8dce5f1"
+    "evidence_base_commit": "fb93a92"
   },
   "issues": [
     {
@@ -43,9 +43,14 @@
     },
     {
       "id": "MAR-455",
-      "lifecycle": "planned",
-      "linear_status": "Backlog",
-      "note": "Public-feed goals currently route to paid Firecrawl when anonymous RSS/GET is sufficient; this blocks the honest News Scout path."
+      "lifecycle": "proven",
+      "linear_status": "Done",
+      "commit": "fb93a92",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/tools/publicFeedRouting.test.ts"
+      },
+      "note": "Anonymous public RSS/Atom/HTTP goals now route through public_feed_fetch with explicit network: read, zero credential-bearing connections, deterministic DASH manifest-v2 export, and exact-goal proof. MAR-456 still owns local-runner preference; MAR-457 owns the installed News Scout loop."
     },
     {
       "id": "MAR-456",
