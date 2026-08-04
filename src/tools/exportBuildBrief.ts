@@ -46,6 +46,14 @@ import {
 } from "../lib/observabilityContract.js";
 import { buildConnectArtifacts, s11Connect, type ConnectArtifacts } from "../lib/connectContract.js";
 import {
+  assessRunnerEligibility,
+  RUNNER_CAPABILITY_DIMENSIONS,
+  summarizeRunnerEligibility,
+  type RunnerCapabilityProfile,
+  type RunnerEligibilityAssessment,
+  type RunnerPosture,
+} from "../lib/runnerEligibility.js";
+import {
   connectionContractForComponents,
   type PlacementAxis,
   type RuntimeOption,
@@ -303,6 +311,45 @@ export const InputShape = {
       "export scheduled_trigger and a schedule-typed trigger declaration. See " +
       "docs/ADR-MAR-456-scheduled-trigger-manifest-export.md.",
     ),
+  // ── MAR-460: public-runner eligibility (fail closed) ──
+  runner_posture: z
+    .enum(["attended", "unattended", "public"])
+    .optional()
+    .describe(
+      "MAR-460: how exposed the agent this runner would host is meant to be. Defaults to " +
+      "'public' — the strictest requirement set — because an undeclared posture is not " +
+      "evidence of a narrow one. Declare 'attended' when a human starts and watches every " +
+      "run, or 'unattended' when nobody is watching but only the owner can reach it.",
+    ),
+  runner_reachable: z
+    .boolean()
+    .optional()
+    .describe(
+      "MAR-460: whether a DASH Agent Runner was found reachable. Recorded in the brief for " +
+      "contrast and DELIBERATELY not an input to the eligibility decision — a runner that " +
+      "answers has proven only that it answers.",
+    ),
+  runner_capability_profile: z
+    .record(
+      z.enum(RUNNER_CAPABILITY_DIMENSIONS),
+      z.object({
+        supported: z.boolean().describe("Whether the runner is attested to HAVE the capability."),
+        evidence: z
+          .string()
+          .describe(
+            "Where this attestation came from. An attestation with no source does not count " +
+            "in either direction — it is scored as absent, not as a pass or a failure.",
+          ),
+      }),
+    )
+    .optional()
+    .describe(
+      "MAR-460: per-dimension capability attestations for the runner that would host this " +
+      "build. Omitting a dimension means 'nobody said' and is NOT the same as attesting " +
+      "{supported:false} — the first yields 'needs_evidence', the second 'ineligible'. " +
+      "Omitting the whole profile fails closed to 'needs_evidence'; there is no input that " +
+      "yields 'eligible' without a positive, sourced record for every required dimension.",
+    ),
   agent_name: z
     .string()
     .optional()
@@ -385,6 +432,14 @@ export type BuildBriefOutput = {
    * machine, never here.
    */
   connect: ConnectArtifacts;
+  /**
+   * MAR-460: whether the runner that would host this build is eligible for the
+   * declared posture, with the per-dimension evidence behind the decision.
+   * Fails closed — absent capability records yield `needs_evidence`, never
+   * `eligible`, and never collapse into the `ineligible` a negative record
+   * earns. See `src/lib/runnerEligibility.ts`.
+   */
+  runner_eligibility: RunnerEligibilityAssessment;
   provenance_tag: "registry-grounded";
   grounding_note: string;
 };
@@ -1261,7 +1316,10 @@ function s8DefinitionOfDone(
  * manifest itself is the structured `agent_manifest` output field; this section
  * is the human/agent-readable wiring recipe. No PII, non-fatal, env-var config.
  */
-function s9Observability(manifest: AgentManifest): string {
+function s9Observability(
+  manifest: AgentManifest,
+  runnerEligibility: RunnerEligibilityAssessment,
+): string {
   const irreversible = manifest.safety_contract.irreversible_components;
   const selfHosted =
     manifest.agent.build_target === "code" || manifest.agent.build_target === "cursor";
@@ -1279,10 +1337,14 @@ function s9Observability(manifest: AgentManifest): string {
   ];
   if (selfHosted) {
     lines.push(
+      // MAR-460: registration names WHERE to run the build; it is not evidence that
+      // the runner is fit to. The eligibility block below carries that judgment,
+      // so this bullet no longer reads as an unconditional "can host".
       `- **Runner handoff:** write the manifest beside the built agent. A separately ` +
         `installed DASH Agent Runner can validate and host it after a registration names ` +
-        `the command, working directory, and manifest path. This export does not register ` +
-        `or execute anything.`,
+        `the command, working directory, and manifest path — and after it clears the ` +
+        `eligibility check below. This export does not register or execute anything.`,
+      ...summarizeRunnerEligibility(runnerEligibility),
       `- **Lifecycle boundary:** start and stop belong to the runner lifecycle API; trigger ` +
         `describes what wakes the workflow. Neither is an Agent DOM command.`,
       runtime.continues_when_dash_closed
@@ -2262,6 +2324,13 @@ export type ExportBuildBriefInput = {
   /** MAR-463: gates scheduled_trigger out of agent_manifest.planned_route until the build's cadence is enabled; see docs/ADR-MAR-456-scheduled-trigger-manifest-export.md. */
   cadence_enabled?: boolean;
   agent_name?: string;
+  // ── MAR-460: public-runner eligibility; see src/lib/runnerEligibility.ts ──
+  /** Defaults to the strictest posture ('public') — an undeclared posture is not evidence of a narrow one. */
+  runner_posture?: RunnerPosture;
+  /** Recorded for contrast only; never an input to the eligibility decision. */
+  runner_reachable?: boolean;
+  /** Omitting a dimension means "nobody said" and is NOT `{supported:false}`. */
+  runner_capability_profile?: RunnerCapabilityProfile;
   llm_provider?: "anthropic" | "openrouter" | "deterministic_first";
   /** Registry fingerprint for manifest provenance; defaults to the bundle's. */
   registry_fingerprint?: string;
@@ -2446,6 +2515,16 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     trigger_explanation: input.trigger_explanation,
   });
 
+  // MAR-460: assessed for every export, including the ones that supply nothing —
+  // an export that says nothing about eligibility is exactly the silent "yes"
+  // this issue removes. Default posture is the strictest ('public'), because an
+  // undeclared posture is not evidence of a narrow one.
+  const runner_eligibility = assessRunnerEligibility({
+    posture: input.runner_posture ?? "public",
+    profile: input.runner_capability_profile,
+    runner_reachable: input.runner_reachable,
+  });
+
   const sections: BuildBriefOutput["sections"] = {
     s0_constraints: s0Constraints(input.goal, input.approval_gate_advisory),
     s1_summary: s1Summary(
@@ -2472,7 +2551,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
       input.untested_edges,
       input.enforced_approval_gates,
     ),
-    s9_observability: s9Observability(agent_manifest),
+    s9_observability: s9Observability(agent_manifest, runner_eligibility),
     // MAR-383: §11 now LEADS with the connection contract (how you obtain each
     // connection, and who holds the token) and keeps the MAR-364 credential
     // manifest + connect.mjs below it as the self-hosted escape hatch.
@@ -2618,6 +2697,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
       artifact_index,
       agent_manifest,
       connect,
+      runner_eligibility,
       plan_passport: passport.plan_passport,
       provenance_tag: "registry-grounded",
       grounding_note:
@@ -2636,6 +2716,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
       artifact_index,
       agent_manifest,
       connect,
+      runner_eligibility,
       provenance_tag: "registry-grounded",
       grounding_note:
         "OrchestrateMCP makes no LLM calls. Every component ID, edge relation, safety " +
@@ -2653,6 +2734,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     artifact_package,
     agent_manifest,
     connect,
+    runner_eligibility,
     provenance_tag: "registry-grounded",
     grounding_note:
       "OrchestrateMCP makes no LLM calls. Every component ID, edge relation, safety " +
