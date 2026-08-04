@@ -4,6 +4,7 @@ import {
   ARTIFACT_ISSUE_FIELD_ORDER,
   exportBuildBrief,
   InputShape,
+  type ExportBuildBriefInput,
 } from "../../src/tools/exportBuildBrief.js";
 import { ExportBuildBriefOutputShape } from "../../src/tools/outputSchemas.js";
 import { loadRegistry } from "../../src/registry/registryLoader.js";
@@ -16,12 +17,23 @@ function cloneForSchemaMutation<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-/** Run plan_workflow and pipe result straight into export_build_brief. */
-function planAndBrief(
+/**
+ * MAR-460 runner-eligibility inputs. Deliberately excludes `delivery_mode` so
+ * `planAndBrief` keeps resolving to the full-output overload of
+ * `exportBuildBrief` — the compact path has its own helper below.
+ */
+type RunnerExtras = Pick<
+  ExportBuildBriefInput,
+  "runner_posture" | "runner_reachable" | "runner_capability_profile"
+>;
+
+/** The plan → brief input, shared by the full and compact helpers. */
+function briefInput(
   goal: string,
   handoff_targets: ("prompt" | "linear" | "obsidian")[] = ["prompt"],
   build_target?: "cowork" | "cursor" | "chatgpt_gpt" | "code",
-) {
+  extra: RunnerExtras = {},
+): Omit<ExportBuildBriefInput, "delivery_mode"> {
   const plan = planWorkflow(
     {
       goal,
@@ -32,7 +44,7 @@ function planAndBrief(
     registry,
   );
   const wizard = plan.goal_to_product_wizard;
-  return exportBuildBrief({
+  return {
     goal: plan.goal,
     plan_source: plan.plan_source,
     route_status: plan.route_status,
@@ -55,7 +67,18 @@ function planAndBrief(
     handoff_targets,
     build_target,
     llm_provider: "anthropic",
-  });
+    ...extra,
+  };
+}
+
+/** Run plan_workflow and pipe result straight into export_build_brief. */
+function planAndBrief(
+  goal: string,
+  handoff_targets: ("prompt" | "linear" | "obsidian")[] = ["prompt"],
+  build_target?: "cowork" | "cursor" | "chatgpt_gpt" | "code",
+  extra: RunnerExtras = {},
+) {
+  return exportBuildBrief(briefInput(goal, handoff_targets, build_target, extra));
 }
 
 const P0_02_DOGFOOD_GOAL =
@@ -249,6 +272,107 @@ describe("export_build_brief — input schema accepts plan_workflow's literal ou
         false,
       );
     }
+  });
+});
+
+describe("MAR-460 — the exported brief shows the runner-eligibility decision and its evidence", () => {
+  const RUNNER_GOAL =
+    "Build a local agent that watches my Gmail for meeting requests continuously. " +
+    "The separately installed DASH Agent Runner is available. Keep running after the " +
+    "DASH window closes while this computer remains on.";
+
+  const FULL_PROFILE = {
+    runtime_location: { supported: true, evidence: "runner registration: local process" },
+    credential_custody: { supported: true, evidence: "runner registration: OS keychain" },
+    network_exposure: { supported: true, evidence: "runner registration: loopback only" },
+    lifecycle_control: { supported: true, evidence: "runner lifecycle API" },
+    cancellation: { supported: true, evidence: "runner lifecycle API: cancel" },
+    audit_trail: { supported: true, evidence: "telemetry-v1 run events" },
+    approval_enforcement: { supported: true, evidence: "gate_requested/gate_resolved events" },
+  } as const;
+
+  it("fails closed when the export declares no capability evidence at all", () => {
+    const brief = planAndBrief(RUNNER_GOAL, ["prompt"], "code");
+    expect(brief.runner_eligibility.decision).toBe("needs_evidence");
+    expect(brief.runner_eligibility.posture).toBe("public");
+    expect(brief.sections.s9_observability).toContain("Public-runner eligibility");
+    expect(brief.sections.s9_observability).toContain("needs_evidence");
+    // The old unconditional "can validate and host" claim is now conditioned.
+    expect(brief.sections.s9_observability).toContain("eligibility check below");
+  });
+
+  it("reaches eligible only with a complete, sourced profile — and shows the sources", () => {
+    const brief = planAndBrief(RUNNER_GOAL, ["prompt"], "code", {
+      runner_capability_profile: { ...FULL_PROFILE },
+    });
+    expect(brief.runner_eligibility.decision).toBe("eligible");
+    expect(brief.sections.s9_observability).toContain("eligible");
+    expect(brief.sections.s9_observability).toContain("telemetry-v1 run events");
+  });
+
+  it("separates a refused capability from an unstated one in the exported brief", () => {
+    const refused = planAndBrief(RUNNER_GOAL, ["prompt"], "code", {
+      runner_capability_profile: {
+        ...FULL_PROFILE,
+        cancellation: { supported: false, evidence: "runner has no cancel endpoint" },
+      },
+    });
+    expect(refused.runner_eligibility.decision).toBe("ineligible");
+    expect(refused.runner_eligibility.refuted_dimensions).toEqual(["cancellation"]);
+
+    const { cancellation: _omitted, ...withoutCancellation } = FULL_PROFILE;
+    const unstated = planAndBrief(RUNNER_GOAL, ["prompt"], "code", {
+      runner_capability_profile: withoutCancellation,
+    });
+    expect(unstated.runner_eligibility.decision).toBe("needs_evidence");
+    expect(unstated.runner_eligibility.missing_evidence).toEqual(["cancellation"]);
+    expect(unstated.runner_eligibility.refuted_dimensions).toEqual([]);
+
+    expect(refused.sections.s9_observability).not.toBe(unstated.sections.s9_observability);
+  });
+
+  it("does not let a reachable runner buy eligibility in the export", () => {
+    const brief = planAndBrief(RUNNER_GOAL, ["prompt"], "code", { runner_reachable: true });
+    expect(brief.runner_eligibility.decision).toBe("needs_evidence");
+    expect(brief.sections.s9_observability).toContain("Reachability is not eligibility");
+  });
+
+  it("honours a narrower declared posture without inventing public requirements", () => {
+    const { network_exposure: _omitted, ...withoutExposure } = FULL_PROFILE;
+    const attended = planAndBrief(RUNNER_GOAL, ["prompt"], "code", {
+      runner_posture: "unattended",
+      runner_capability_profile: withoutExposure,
+    });
+    expect(attended.runner_eligibility.decision).toBe("eligible");
+
+    // Absence sibling: the same profile under the default posture still fails.
+    const asPublic = planAndBrief(RUNNER_GOAL, ["prompt"], "code", {
+      runner_capability_profile: withoutExposure,
+    });
+    expect(asPublic.runner_eligibility.decision).toBe("needs_evidence");
+  });
+
+  it("carries the decision through the compact delivery, not just the full one", () => {
+    // A fail-closed gate that only the full response carries would be absent
+    // from the response the wizard actually asks for.
+    const compact = exportBuildBrief({
+      ...briefInput(RUNNER_GOAL, ["prompt"], "code"),
+      delivery_mode: "compact",
+    });
+    expect(compact.runner_eligibility.decision).toBe("needs_evidence");
+    expect(compact.delivery.omitted_fields).not.toContain("runner_eligibility");
+  });
+
+  it("keeps the eligibility block out of a non-runner-hostable build target", () => {
+    // Absence fixture: a Cowork assistant has no runner to judge, so asserting
+    // eligibility there would be a claim about a thing that does not exist.
+    const brief = planAndBrief(
+      "When I ask in chat, summarize my unread inbox in Cowork. Never run in the background.",
+      ["prompt"],
+      "cowork",
+    );
+    expect(brief.sections.s9_observability).toContain("Not runner-hostable");
+    expect(brief.sections.s9_observability).not.toContain("Public-runner eligibility");
   });
 });
 
@@ -615,11 +739,25 @@ describe("export_build_brief delivery contract (PKG-W0-BRIEF-SIZE)", () => {
     expect(compact.agent_manifest).toBeTruthy();
   });
 
-  it("keeps the canonical compact response below 90 KB and at least 4x smaller", () => {
+  /**
+   * MAR-460 raised this ceiling from 90 KB to 96 KB. The canonical compact
+   * response was already at 90,621 bytes — 98.3% of the old budget — so the
+   * public-runner eligibility decision (~4.7 KB: the `runner_eligibility`
+   * findings plus the §9 block, which compact carries in both `sections` and
+   * `brief_markdown`) could not fit without dropping the per-dimension evidence
+   * MAR-460 exists to publish.
+   *
+   * The trade was made deliberately in that direction: this budget protects
+   * client context, and 96 KB serves that as well as 90 KB did, whereas a
+   * fail-closed gate whose evidence is hidden to save bytes is not worth
+   * shipping. The 4x compact/full ratio below is the assertion that still does
+   * the real structural work.
+   */
+  it("keeps the canonical compact response below 96 KB and at least 4x smaller", () => {
     const { compact, full } = deliveryPair();
     const compactBytes = new TextEncoder().encode(JSON.stringify(compact)).byteLength;
     const fullBytes = new TextEncoder().encode(JSON.stringify(full)).byteLength;
-    expect(compactBytes).toBeLessThan(90 * 1024);
+    expect(compactBytes).toBeLessThan(96 * 1024);
     expect(fullBytes / compactBytes).toBeGreaterThan(4);
   });
 });

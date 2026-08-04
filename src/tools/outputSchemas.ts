@@ -726,6 +726,38 @@ export const ExportBuildBriefOutputShape = z
       .passthrough()
       .optional(),
     agent_manifest: z.object({}).passthrough().optional(),
+    /**
+     * MAR-460: public-runner eligibility. `decision` is a three-way gate, not a
+     * boolean — `ineligible` (a record says the runner lacks a required
+     * capability) and `needs_evidence` (no record was supplied) are distinct
+     * outcomes with distinct remedies, and neither may be read as a pass.
+     */
+    runner_eligibility: z
+      .object({
+        contract: z.literal("orchestratekit.runner_eligibility.v1"),
+        posture: z.enum(["attended", "unattended", "public"]),
+        decision: z.enum(["eligible", "ineligible", "needs_evidence"]),
+        runner_reachable: z.boolean().nullable(),
+        findings: z.array(
+          z
+            .object({
+              dimension: z.string(),
+              status: z.enum(["satisfied", "refuted", "unproven"]),
+              required: z.boolean(),
+              requirement: z.string(),
+              evidence: z.string().nullable(),
+              detail: z.string(),
+            })
+            .passthrough(),
+        ),
+        required_dimensions: z.array(z.string()),
+        refuted_dimensions: z.array(z.string()),
+        missing_evidence: z.array(z.string()),
+        advisories: z.array(z.string()),
+        rationale: z.string(),
+      })
+      .passthrough()
+      .optional(),
     // MAR-364: fast-connect credential manifest + generated scripts/connect.mjs.
     connect: z
       .object({

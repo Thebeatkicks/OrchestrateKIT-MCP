@@ -82,9 +82,14 @@
     },
     {
       "id": "MAR-460",
-      "lifecycle": "planned",
-      "linear_status": "Backlog",
-      "note": "Define explicit public-runner eligibility and fail closed when capability evidence is absent."
+      "lifecycle": "proven",
+      "linear_status": "In Progress",
+      "commit": "5c1956d",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/lib/runnerEligibility.test.ts tests/tools/exportBuildBrief.test.ts"
+      },
+      "note": "src/lib/runnerEligibility.ts judges seven capability dimensions (runtime location, credential custody, network exposure, lifecycle control, cancellation, audit trail, approval enforcement) against a declared posture, as a strict attended < unattended < public ratchet. Absent evidence and negative evidence never share a code path: no record scores unproven -> needs_evidence, a negative record scores refuted -> ineligible. An attestation without a source counts in neither direction; a malformed record is absence, never a refusal. Fails closed — no/empty/malformed profile returns needs_evidence, and no input yields eligible without a positive sourced record for every required dimension. Reachability is recorded but is deliberately not an input to the decision. export_build_brief takes runner_posture (default 'public'), runner_reachable, and runner_capability_profile, and exports the decision plus per-dimension evidence as the runner_eligibility field and in §9 for runner-hostable targets only. Presence/absence fixture pairs cover every required dimension at every posture. Compact-response size ceiling raised 90 KB -> 96 KB deliberately: the canonical compact response was already at 98.3% of the old budget, so the evidence could not fit under it. Implementation is on claude/public-runner-eligibility-wy71c7 pending merge to master."
     },
     {
       "id": "MCP-INVOICE-SAFETY-CORPUS",
