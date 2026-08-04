@@ -28,4 +28,20 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # The conformance fixtures reach the registry through the generated
+      # bundle, so it has to exist before the gate runs. `pnpm verify`
+      # regenerates it anyway; doing it here lets the conformance gate report
+      # first, under its own name, instead of hiding inside verify's output.
+      - run: pnpm gen:registry
+
+      # MAR-459: the named protocol conformance gate. Runs one fixture per
+      # (revision × behavior) cell against the real MCP handler, binds each
+      # result back to its cell, and fails when a supported revision drifts,
+      # when a pinned cell has no executing fixture, when a pinned fixture
+      # fails, or when docs/PROTOCOL_CONFORMANCE.md no longer matches its
+      # source. A cell with no fixture publishes as "not pinned" — never as
+      # conformant and never as failing.
+      - name: Protocol conformance matrix (MAR-459)
+        run: pnpm exec tsx scripts/conformance-matrix.ts --check
+
       - run: pnpm verify
