@@ -14,10 +14,11 @@ The MCP is now a credible deterministic planner and DASH build-brief exporter. M
 2. MAR-456: proven — a computer-on goal whose output is a local file recommends the local scheduled runtime, not paid self-hosting; `hosting_and_monitoring` and the `build_surface` question round agree.
 3. MAR-463: proven — `export_build_brief` accepts an explicit `cadence_enabled` signal; absent/false excludes `scheduled_trigger` from `agent_manifest.planned_route` and falls `agent_dom.trigger` back to manual, per `docs/ADR-MAR-456-scheduled-trigger-manifest-export.md`. `plan_workflow`'s `recommended_route` is unaffected — it stays the full-agent description. DASH-side consumption of the field remains a separate, not-yet-filed companion ticket.
 4. MAR-460: proven — public-runner eligibility is explicit and fails closed. `src/lib/runnerEligibility.ts` judges seven capability dimensions against a declared posture (`attended` < `unattended` < `public`), and absent evidence never collapses into negative evidence: nothing said scores `unproven` → `needs_evidence`, while a negative record scores `refuted` → `ineligible`. No profile, an empty one, or a malformed one all fail closed, and reachability is recorded without ever feeding the decision. `export_build_brief` exports the decision plus per-dimension evidence.
-5. Keep manifest-v2 export compatible with the now-proven DASH handoff and MAR-457 News Scout.
-6. After the useful loop is proven, run MAR-459 conformance, then evaluate MCP Apps and MCP Tasks.
+5. MAR-459: proven — the six protocol revisions OrchestrateMCP serves are pinned as named CI evidence. [`docs/PROTOCOL_CONFORMANCE.md`](docs/PROTOCOL_CONFORMANCE.md) publishes one explicit cell per revision × behavior, and `scripts/conformance-matrix.ts` fails CI when a supported revision drifts, when a pinned cell has no executing fixture, when a pinned fixture fails, or when the document falls out of sync with its source. A behavior with no fixture is a third state — never rendered as conformant and never as failing — which is how MCP Apps and MCP Tasks are declared rather than omitted.
+6. Keep manifest-v2 export compatible with the now-proven DASH handoff and MAR-457 News Scout.
+7. With the core matrix green, MCP Apps card rendering and MCP Tasks for long-running DASH-as-server work are the next standards questions; both are declared not-pinned in the matrix today.
 
-`MAR-426`, `MAR-427`, `MAR-448`, `MAR-455`, `MAR-456`, `MAR-460`, and `MAR-463` are implemented, merged, and reconciled in Linear. MAR-459 owns the remaining post-demo standards work. Exact lifecycle evidence is indexed in `.orchestrate/state.json`.
+`MAR-426`, `MAR-427`, `MAR-448`, `MAR-455`, `MAR-456`, `MAR-460`, and `MAR-463` are implemented, merged, and reconciled in Linear. MAR-459 is implemented and proven on `claude/mar-459-protocol-conformance-vsbtlu`, awaiting merge. Exact lifecycle evidence is indexed in `.orchestrate/state.json`.
 
 ## Product direction
 

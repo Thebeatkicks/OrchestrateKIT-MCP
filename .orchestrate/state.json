@@ -76,9 +76,14 @@
     },
     {
       "id": "MAR-459",
-      "lifecycle": "planned",
-      "linear_status": "Backlog",
-      "note": "Pin supported MCP protocol revision fixtures in CI and publish a named conformance matrix."
+      "lifecycle": "proven",
+      "linear_status": "In Progress",
+      "commit": "7d3b756",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm gen:registry && pnpm exec tsx scripts/conformance-matrix.ts --check"
+      },
+      "note": "Six protocol revisions are pinned: the SDK's five negotiable legacy revisions (2024-10-07, 2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25) reached via the initialize handshake, and 2026-07-28 reached via server/discover plus the per-request _meta envelope. tests/protocol/conformanceMatrix.ts declares one explicit cell per revision x behavior; tests/protocol/conformance.test.ts drives the real createMcpHandler once per pinned cell across ten behaviors (revision negotiation, capability negotiation, undeclared capabilities staying unserved, tool surface, tool schemas, error vocabulary, era-specific result fields, cancellation, JSON-RPC batching, Streamable HTTP transport) = 60 conformant cells. Not-pinned is a third state, never collapsed into either result: resolveCell reaches 'conformant' only from a pinned declaration whose fixture ran AND passed, a pinned cell with no executing fixture resolves to 'unproven' and fails the gate, and MCP Tasks / MCP Apps are declared not_pinned with reasons rather than omitted. scripts/conformance-matrix.ts is the gate — it binds vitest results back to cells via the [conformance <revision> <behavior>] token and fails on an unproven cell, a failing cell, an orphan fixture, a failed check bound to no cell (how revision drift surfaces), or a stale docs/PROTOCOL_CONFORMANCE.md. All four failure modes were exercised live before landing. CI runs the gate as a named step in .github/workflows/ci.yml. The published matrix names revisions and behaviors and quotes no coverage percentage, and keeps supported / merged / conformance-proven apart. Implementation is on claude/mar-459-protocol-conformance-vsbtlu pending merge to master; the recorded Linear drift clears when it merges and MAR-459 moves to Done."
     },
     {
       "id": "MAR-460",
