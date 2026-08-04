@@ -17,7 +17,7 @@ The MCP is now a credible deterministic planner and DASH build-brief exporter. M
 5. Keep manifest-v2 export compatible with the now-proven DASH handoff and MAR-457 News Scout.
 6. After the useful loop is proven, run MAR-459 conformance, then evaluate MCP Apps and MCP Tasks.
 
-`MAR-426`, `MAR-427`, `MAR-448`, `MAR-455`, `MAR-456`, and `MAR-463` are implemented and reconciled in Linear. MAR-460 is implemented and awaiting merge; MAR-459 owns the remaining post-demo standards work. Exact lifecycle evidence is indexed in `.orchestrate/state.json`.
+`MAR-426`, `MAR-427`, `MAR-448`, `MAR-455`, `MAR-456`, `MAR-460`, and `MAR-463` are implemented, merged, and reconciled in Linear. MAR-459 owns the remaining post-demo standards work. Exact lifecycle evidence is indexed in `.orchestrate/state.json`.
 
 ## Product direction
 
