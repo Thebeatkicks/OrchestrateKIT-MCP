@@ -199,12 +199,17 @@ function surfaceLocationKind(id: string): AgentDomLocationKind {
 function triggerType(
   trigger: TriggerExplanation | undefined,
   routeSteps: ManifestRouteStep[],
+  cadenceEnabled: boolean,
 ): AgentDomTriggerType {
   switch (trigger?.mode) {
     case "interactive":
       return "client_session";
     case "scheduled":
-      return "schedule";
+      // MAR-463: stay consistent with the gated planned_route below — a build
+      // whose cadence isn't enabled yet hasn't wired the schedule, even though
+      // the plan's route is scheduled. See
+      // docs/ADR-MAR-456-scheduled-trigger-manifest-export.md.
+      return cadenceEnabled ? "schedule" : "manual";
     case "polling":
       return "poll";
     case "manual":
@@ -219,6 +224,29 @@ function triggerType(
     default:
       return "other";
   }
+}
+
+/**
+ * MAR-463: when a route is scheduled but cadence isn't enabled for this build
+ * yet, the manifest's trigger declaration falls back to a manual/on-demand
+ * description instead of the plan's honest "scheduled" explanation — the plan
+ * still describes the full agent the user asked for; the manifest describes
+ * what this build currently runs. See
+ * docs/ADR-MAR-456-scheduled-trigger-manifest-export.md.
+ */
+function gatedTriggerExplanation(
+  trigger: TriggerExplanation | undefined,
+  cadenceEnabled: boolean,
+): TriggerExplanation | undefined {
+  if (!trigger || trigger.mode !== "scheduled" || cadenceEnabled) return trigger;
+  return {
+    mode: "manual",
+    label: "Manual run (cadence not enabled for this build)",
+    what_wakes_it_up:
+      "The user starts a run. This build's cadence is not wired in yet, even though the plan is scheduled.",
+    offline_behavior: "Does not run after the client or runner closes.",
+    limitation: `${trigger.limitation} Enable cadence in export_build_brief to wire the schedule into this build.`,
+  };
 }
 
 function commandsForManifest(input: {
@@ -484,6 +512,17 @@ export type AgentManifest = {
     route_id: string;
     build_target: ManifestBuildTarget;
   };
+  /**
+   * MAR-463: "what this build currently runs" — NOT guaranteed to equal
+   * plan_workflow's `recommended_route`. When the route contains
+   * `scheduled_trigger` and the build's cadence isn't enabled yet (see the
+   * `cadence_enabled` input to `buildAgentManifest`/`export_build_brief`),
+   * `scheduled_trigger` is excluded here and `agent_dom.trigger` falls back to
+   * a manual/on-demand declaration, even though the plan itself stays
+   * scheduled. Consumers (DASH's `lib/analyze.ts` included) must not diff this
+   * 1:1 against the plan's route — see
+   * docs/ADR-MAR-456-scheduled-trigger-manifest-export.md.
+   */
   planned_route: {
     step: number;
     component_id: string;
@@ -599,9 +638,24 @@ export function buildAgentManifest(input: {
   control_surface?: PlacementAxis;
   interaction_surface?: PlacementAxis;
   trigger_explanation?: TriggerExplanation;
+  /**
+   * MAR-463: whether this build's schedule is wired and enabled yet. Absent
+   * or false excludes `scheduled_trigger` from `planned_route` and declares a
+   * manual/on-demand `agent_dom.trigger`, even when the route/trigger are
+   * scheduled — DASH's News Scout (MAR-457) is deliberately manual-run-first,
+   * with cadence an opt-in second step. Set true once cadence is actually
+   * enabled to export `scheduled_trigger` and a schedule-typed trigger. See
+   * docs/ADR-MAR-456-scheduled-trigger-manifest-export.md.
+   */
+  cadence_enabled?: boolean;
 }): AgentManifest {
   const agentName =
     input.agent_name?.trim() || agentSlug(input.playbook_id, input.goal);
+  const cadenceEnabled = input.cadence_enabled === true;
+  const effectiveTrigger = gatedTriggerExplanation(input.trigger_explanation, cadenceEnabled);
+  const plannedRouteSteps = input.route_steps.filter(
+    (s) => cadenceEnabled || s.component_id !== "scheduled_trigger",
+  );
   const runtimeClass = agentDomRuntimeClass(input.runtime_recommendation?.runtime_class);
   const runtimeKind = runtimeLocationKind(runtimeClass);
   const commands = commandsForManifest({
@@ -638,8 +692,8 @@ export function buildAgentManifest(input: {
       route_id: input.route_id,
       build_target: input.build_target,
     },
-    planned_route: input.route_steps.map((s) => ({
-      step: s.step,
+    planned_route: plannedRouteSteps.map((s, index) => ({
+      step: index + 1,
       component_id: s.component_id,
       risk_level: coerceRisk(s.risk_level),
       model_tier: coerceTier(s.model_tier),
@@ -671,14 +725,14 @@ export function buildAgentManifest(input: {
           input.runtime_recommendation?.continues_when_dash_closed ?? false,
       },
       trigger: {
-        type: triggerType(input.trigger_explanation, input.route_steps),
-        label: input.trigger_explanation?.label || "Trigger not declared in this export",
-        ...(input.trigger_explanation
+        type: triggerType(effectiveTrigger, input.route_steps, cadenceEnabled),
+        label: effectiveTrigger?.label || "Trigger not declared in this export",
+        ...(effectiveTrigger
           ? {
               technical: {
-                what_wakes_it_up: input.trigger_explanation.what_wakes_it_up,
-                offline_behavior: input.trigger_explanation.offline_behavior,
-                limitation: input.trigger_explanation.limitation,
+                what_wakes_it_up: effectiveTrigger.what_wakes_it_up,
+                offline_behavior: effectiveTrigger.offline_behavior,
+                limitation: effectiveTrigger.limitation,
               },
             }
           : {}),

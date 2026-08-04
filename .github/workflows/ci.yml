@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # state:check asserts recorded commits are ancestors of HEAD via
+          # `git merge-base --is-ancestor`. The default depth-1 clone has no
+          # history, so every ancestry assertion fails. Needs full history.
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
         with:

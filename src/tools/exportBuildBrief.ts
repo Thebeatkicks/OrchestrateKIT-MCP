@@ -291,6 +291,18 @@ export const InputShape = {
       "Where this agent's output lands (from the plan-time monitoring question), " +
       "echoed into the DASH manifest. Free text, e.g. 'HubSpot notes + Gmail drafts'.",
     ),
+  cadence_enabled: z
+    .boolean()
+    .optional()
+    .describe(
+      "MAR-463: whether this build's schedule is wired and enabled yet. Absent/false " +
+      "excludes 'scheduled_trigger' from the exported agent_manifest.planned_route and " +
+      "declares a manual/on-demand agent_dom.trigger, even when the plan's route is " +
+      "scheduled — recommended_route itself is unaffected and stays the full agent the " +
+      "user asked for. Set true once cadence is actually enabled for this build to " +
+      "export scheduled_trigger and a schedule-typed trigger declaration. See " +
+      "docs/ADR-MAR-456-scheduled-trigger-manifest-export.md.",
+    ),
   agent_name: z
     .string()
     .optional()
@@ -2247,6 +2259,8 @@ export type ExportBuildBriefInput = {
   route_id?: string;
   build_target?: ManifestBuildTarget;
   output_location?: string;
+  /** MAR-463: gates scheduled_trigger out of agent_manifest.planned_route until the build's cadence is enabled; see docs/ADR-MAR-456-scheduled-trigger-manifest-export.md. */
+  cadence_enabled?: boolean;
   agent_name?: string;
   llm_provider?: "anthropic" | "openrouter" | "deterministic_first";
   /** Registry fingerprint for manifest provenance; defaults to the bundle's. */
@@ -2419,6 +2433,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     automation_clearance: automationClearance.level,
     enforced_approval_gates: input.enforced_approval_gates,
     output_location: input.output_location ?? "",
+    cadence_enabled: input.cadence_enabled,
     registry_fingerprint: registryFingerprint,
     agent_name: manifestAgentName,
     generated_at: input.generated_at,
@@ -2695,6 +2710,7 @@ export function registerExportBuildBrief(server: McpServer): void {
           route_id: input.route_id,
           build_target: input.build_target,
           output_location: input.output_location,
+          cadence_enabled: input.cadence_enabled,
           agent_name: input.agent_name,
           llm_provider: input.llm_provider,
         });

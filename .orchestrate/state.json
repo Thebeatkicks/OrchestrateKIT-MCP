@@ -11,7 +11,7 @@
     "index": ".orchestrate/state.json"
   },
   "git": {
-    "evidence_base_commit": "8af183d"
+    "evidence_base_commit": "8c1120a"
   },
   "issues": [
     {
@@ -65,9 +65,14 @@
     },
     {
       "id": "MAR-463",
-      "lifecycle": "planned",
-      "linear_status": "Backlog",
-      "note": "Gate scheduled_trigger out of the exported manifest v2 planned_route until a build's cadence is enabled, per the MAR-456 ADR. New interview/export surface, not implemented yet."
+      "lifecycle": "proven",
+      "linear_status": "Done",
+      "commit": "8c1120a",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/tools/observabilityManifest.test.ts"
+      },
+      "note": "export_build_brief carries an explicit cadence_enabled signal (MAR-463). Absent/false excludes scheduled_trigger from agent_manifest.planned_route and falls back agent_dom.trigger to manual, gating only the export while plan_workflow's recommended_route stays the full-agent description, per docs/ADR-MAR-456-scheduled-trigger-manifest-export.md. Presence/absence fixture pair added to tests/tools/observabilityManifest.test.ts (MAR-463 describe block). DASH-side consumption of the field is a separate, not-yet-filed companion ticket."
     },
     {
       "id": "MAR-459",

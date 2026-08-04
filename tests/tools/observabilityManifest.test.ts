@@ -57,6 +57,7 @@ function planAndBrief(
     control_surface?: PlacementAxis;
     interaction_surface?: PlacementAxis;
     trigger_explanation?: TriggerExplanation;
+    cadence_enabled?: boolean;
   } = {},
 ) {
   const plan = planWorkflow({ goal, must_have_capabilities: [], must_avoid: [] }, registry);
@@ -86,6 +87,7 @@ function planAndBrief(
     route_id: plan.playbook?.route_id ?? "",
     build_target: opts.build_target ?? "code",
     output_location: opts.output_location ?? "",
+    cadence_enabled: opts.cadence_enabled,
     generated_at: "2026-07-05T00:00:00Z", // deterministic for assertions
     llm_provider: "anthropic",
   });
@@ -93,6 +95,9 @@ function planAndBrief(
 
 const LEAD_GOAL =
   "read emails, detect sales leads and write a note to the CRM for each lead";
+
+const SCHEDULED_GOAL =
+  "Every Monday, pull last week's signups from our analytics API and post a summary to Slack.";
 
 const LOCAL_RUNNER_REQUIREMENTS: RuntimeRequirements = {
   trigger_mode: "manual",
@@ -387,6 +392,38 @@ describe("MAR-296 — manifest content is deterministic + registry-grounded", ()
   it("echoes output_location into monitoring", () => {
     const b = planAndBrief(LEAD_GOAL, { output_location: "HubSpot notes + Gmail drafts" });
     expect(b.agent_manifest.monitoring.output_location).toBe("HubSpot notes + Gmail drafts");
+  });
+});
+
+describe("MAR-463 — scheduled_trigger gated on cadence_enabled (ADR-MAR-456)", () => {
+  it("cadence-off (absence): excludes scheduled_trigger and declares a manual trigger", () => {
+    const plan = planWorkflow({ goal: SCHEDULED_GOAL, must_have_capabilities: [], must_avoid: [] }, registry);
+    // The plan itself stays the honest full-agent description — unaffected by
+    // the export-side gate. This is the ADR's explicit non-goal boundary.
+    expect(plan.recommended_route.map((s) => s.component_id)).toContain("scheduled_trigger");
+    expect(plan.goal_to_product_wizard.trigger_explanation.mode).toBe("scheduled");
+
+    const b = planAndBrief(SCHEDULED_GOAL);
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    const routeIds = b.agent_manifest.planned_route.map((s) => s.component_id);
+    expect(routeIds).not.toContain("scheduled_trigger");
+    // Remaining steps stay ordered and renumbered from 1.
+    expect(b.agent_manifest.planned_route.map((s) => s.step)).toEqual(
+      routeIds.map((_, index) => index + 1),
+    );
+    expect(b.agent_manifest.agent_dom.trigger.type).toBe("manual");
+    expect(b.agent_manifest.agent_dom.trigger.label).toContain("cadence not enabled");
+  });
+
+  it("cadence-on (presence): includes scheduled_trigger and declares a schedule trigger", () => {
+    const b = planAndBrief(SCHEDULED_GOAL, { cadence_enabled: true });
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    const routeIds = b.agent_manifest.planned_route.map((s) => s.component_id);
+    expect(routeIds).toContain("scheduled_trigger");
+    expect(routeIds[0]).toBe("scheduled_trigger");
+    expect(b.agent_manifest.planned_route[0]?.step).toBe(1);
+    expect(b.agent_manifest.agent_dom.trigger.type).toBe("schedule");
+    expect(b.agent_manifest.agent_dom.trigger.label).toBe("Configured morning schedule");
   });
 });
 
