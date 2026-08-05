@@ -427,6 +427,111 @@ describe("MAR-463 — scheduled_trigger gated on cadence_enabled (ADR-MAR-456)",
   });
 });
 
+describe("MAR-486 — deploy section for the self-hosted/remote path (ADR 0006)", () => {
+  it("presence: a remote runtime gets the deploy section with the credential honesty sentence", () => {
+    const b = planAndBrief(
+      "When an inbound webhook arrives, validate its JSON and record a local audit entry.",
+      {
+        runtime_requirements: {
+          ...LOCAL_RUNNER_REQUIREMENTS,
+          trigger_mode: "event",
+          operation_mode: "event-driven",
+          must_run_while_user_offline: true,
+        },
+        runtime_recommendation: REMOTE_AGENT_RUNTIME,
+        output_location: "A local audit log on the remote host",
+        trigger_explanation: {
+          mode: "event",
+          label: "Provider event",
+          what_wakes_it_up: "The configured provider sends an event to the remote worker.",
+          offline_behavior: "Runs while the user's computer and DASH window are closed.",
+          limitation: "Requires provider-side event setup.",
+        },
+      },
+    );
+    expect(b.agent_manifest.agent_dom.locations.runtime.kind).toBe("remote");
+    expect(b.sections.s9_observability).toContain("Deploy section — self-hosted/remote runtime");
+    expect(b.sections.s9_observability).toContain("Start command");
+    expect(b.sections.s9_observability).toContain("Env expectations");
+    expect(b.sections.s9_observability).toContain("Where run evidence lands");
+    expect(b.sections.s9_observability).toContain("A local audit log on the remote host");
+    expect(b.sections.s9_observability).toContain(
+      "this agent holds its own credentials, wherever it runs",
+    );
+    expect(b.sections.s9_observability).toContain("cannot revoke them");
+    expect(b.brief_markdown).toContain("Deploy section — self-hosted/remote runtime");
+  });
+
+  it("absence: a local runtime never gets the deploy section", () => {
+    const b = planAndBrief(LEAD_GOAL, {
+      runtime_requirements: LOCAL_RUNNER_REQUIREMENTS,
+      runtime_recommendation: LOCAL_RUNNER_RUNTIME,
+      control_surface: DASH_CONTROL_SURFACE,
+      interaction_surface: DASH_INTERACTION_SURFACE,
+      trigger_explanation: MANUAL_RUNNER_TRIGGER,
+    });
+    expect(b.agent_manifest.agent_dom.locations.runtime.kind).toBe("local");
+    expect(b.sections.s9_observability).not.toContain("Deploy section");
+    expect(b.sections.s9_observability).not.toContain("this agent holds its own credentials");
+  });
+
+  it("absence: a client-session runtime never gets the deploy section", () => {
+    const b = planAndBrief(
+      "summarize the text I paste in this chat when I ask, with no tools or external accounts",
+      { build_target: "cowork" },
+    );
+    expect(b.agent_manifest.agent_dom.locations.runtime.kind).toBe("client");
+    expect(b.sections.s9_observability).not.toContain("Deploy section");
+  });
+
+  it("guard: a remote runtime never emits a dash_managed connection, even if the connection contract asks for one", () => {
+    // Constructed directly against buildAgentManifest — buildConnectionContract's
+    // broker path is always "planned" today, so this shape cannot yet arise
+    // through export_build_brief's public input. The guard is defense-in-depth
+    // for when MAR-383's broker path ships (ADR 0006: the emitter must not
+    // produce what DASH's importer refuses).
+    const brokerBackedConnection = {
+      connection_id: "gmail",
+      label: "Gmail",
+      serves_components: ["email_read"],
+      grants: "Read your inbox",
+      acquisition_paths: [
+        {
+          kind: "broker_connection_mcp" as const,
+          rank: 1,
+          label: "Gmail connection server (broker-backed)",
+          ownership_location: "dash" as const,
+          availability: "requires setup" as const,
+          how: "Authorize once against the connection server.",
+          reuse: "Every client reuses this one connection.",
+        },
+      ],
+      actionable_path_kind: "broker_connection_mcp" as const,
+      verification_requirement: null,
+      scopes: [],
+    };
+    const manifest = buildAgentManifest({
+      goal: "Read email and record leads while the user is offline",
+      plan_source: "composed",
+      playbook_id: "",
+      route_id: "",
+      build_target: "code",
+      route_steps: [{ step: 1, component_id: "email_read", connection_access: "read" }],
+      automation_clearance: "L1",
+      enforced_approval_gates: [],
+      output_location: "A remote worker's own log",
+      registry_fingerprint: "guard-fixture",
+      generated_at: "2026-08-05T00:00:00Z",
+      runtime_recommendation: REMOTE_AGENT_RUNTIME,
+      connections: [brokerBackedConnection],
+    });
+    expect(manifest.agent_dom.locations.runtime.kind).toBe("remote");
+    expect(manifest.agent_dom.connections).toHaveLength(1);
+    expect(manifest.agent_dom.connections[0]?.ownership).not.toBe("dash_managed");
+    expect(manifest.agent_dom.connections[0]?.ownership).toBe("agent_managed");
+  });
+});
+
 describe("MAR-296 — plan_workflow observability block", () => {
   it("is present, advisory-tagged, and lists irreversible gate targets", () => {
     const plan = planWorkflow(

@@ -389,14 +389,31 @@ function connectionFields(
     });
 }
 
+/**
+ * ADR 0006 (orchestratedash): a manifest asking for both a `remote` runtime
+ * and a `dash_managed` connection is a contradiction DASH refuses at import,
+ * not at runtime — the broker cannot reach a process it did not spawn. The
+ * emitter must not produce what the importer refuses, so a remote runtime
+ * downgrades any would-be `dash_managed` ownership to `agent_managed`: the
+ * same "holds its own credentials" reading ADR 0006 option 1 gives every
+ * connection on an unbrokered runtime. See MAR-486.
+ */
+function ownershipForRuntime(
+  ownership: AgentDomConnectionOwnership,
+  runtimeKind: AgentDomLocationKind,
+): AgentDomConnectionOwnership {
+  return runtimeKind === "remote" && ownership === "dash_managed" ? "agent_managed" : ownership;
+}
+
 function agentDomConnections(input: {
   connections: ConnectionRequirement[];
   credentials: CredentialRequirement[];
   routeSteps: ManifestRouteStep[];
+  runtimeKind: AgentDomLocationKind;
 }): AgentDomConnection[] {
   const routeById = new Map(input.routeSteps.map((step) => [step.component_id, step]));
   return input.connections.map((connection) => {
-    const ownership = connectionOwnership(connection);
+    const ownership = ownershipForRuntime(connectionOwnership(connection), input.runtimeKind);
     const capabilities = connection.serves_components.map((componentId) => {
       const step = routeById.get(componentId);
       return {
@@ -753,6 +770,7 @@ export function buildAgentManifest(input: {
         connections,
         credentials: input.credential_requirements ?? [],
         routeSteps: input.route_steps,
+        runtimeKind,
       }),
       control: {
         supported,

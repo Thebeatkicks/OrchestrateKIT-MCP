@@ -1395,6 +1395,30 @@ function s9Observability(
         `resolved gate as a red badge.`,
     );
   }
+  if (manifest.agent_dom.locations.runtime.kind === "remote") {
+    lines.push(
+      "",
+      "**Deploy section — self-hosted/remote runtime** _(ADR 0006, MAR-486)_",
+      "",
+      "- **Start command:** the operator starts, restarts, and stops this process " +
+        "themselves — DASH's runner did not spawn it and has no lifecycle control over it. " +
+        "Document the exact start command (e.g. `node dist/agent.js`, or the host " +
+        "platform's own run command) beside the manifest.",
+      `- **Env expectations:** the same \`${DASH_ENDPOINT_ENV}\`/\`${DASH_TOKEN_ENV}\` pair ` +
+        "above for the telemetry-v1 push — an outbound call this process makes to DASH, " +
+        "which works from off this machine — plus every credential env var this build's " +
+        "connections need. Every connection on this runtime is agent-managed: its " +
+        "credential lives in this process's own secret store, never DASH's.",
+      "- **Where run evidence lands:** " +
+        (manifest.monitoring.output_location || "the location recorded as this build's output") +
+        ". There is no DASH pull mechanism for a remote runtime yet — until one ships, " +
+        "retrieving evidence from this deploy is a manual, attended step, never a " +
+        "blocking gate (nothing about a remote deploy can be, per ADR 0004).",
+      "- **Credential honesty:** this agent holds its own credentials, wherever it runs. " +
+        "DASH cannot narrow what it does with them, cannot observe what it did, and cannot " +
+        "revoke them — revocation happens at the provider, not in DASH.",
+    );
+  }
   return lines.join("\n");
 }
 
