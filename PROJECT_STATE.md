@@ -18,7 +18,7 @@ The MCP is now a credible deterministic planner and DASH build-brief exporter. M
 6. Keep manifest-v2 export compatible with the now-proven DASH handoff and MAR-457 News Scout.
 7. With the core matrix green, MCP Apps card rendering and MCP Tasks for long-running DASH-as-server work are the next standards questions; both are declared not-pinned in the matrix today.
 
-`MAR-426`, `MAR-427`, `MAR-448`, `MAR-455`, `MAR-456`, `MAR-460`, and `MAR-463` are implemented, merged, and reconciled in Linear. MAR-459 is implemented and proven on `claude/mar-459-protocol-conformance-vsbtlu`, awaiting merge. Exact lifecycle evidence is indexed in `.orchestrate/state.json`.
+`MAR-426`, `MAR-427`, `MAR-448`, `MAR-455`, `MAR-456`, `MAR-459`, `MAR-460`, and `MAR-463` are implemented, merged, and reconciled in Linear. The post-demo standards wave is closed; the next standards questions are MCP Apps and MCP Tasks, both declared not-pinned in the conformance matrix. Exact lifecycle evidence is indexed in `.orchestrate/state.json`.
 
 ## Product direction
 
