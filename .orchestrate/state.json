@@ -97,6 +97,12 @@
       "note": "src/lib/runnerEligibility.ts judges seven capability dimensions (runtime location, credential custody, network exposure, lifecycle control, cancellation, audit trail, approval enforcement) against a declared posture, as a strict attended < unattended < public ratchet. Absent evidence and negative evidence never share a code path: no record scores unproven -> needs_evidence, a negative record scores refuted -> ineligible. An attestation without a source counts in neither direction; a malformed record is absence, never a refusal. Fails closed — no/empty/malformed profile returns needs_evidence, and no input yields eligible without a positive sourced record for every required dimension. Reachability is recorded but is deliberately not an input to the decision. export_build_brief takes runner_posture (default 'public'), runner_reachable, and runner_capability_profile, and exports the decision plus per-dimension evidence as the runner_eligibility field and in §9 for runner-hostable targets only. Presence/absence fixture pairs cover every required dimension at every posture. Compact-response size ceiling raised 90 KB -> 96 KB deliberately: the canonical compact response was already at 98.3% of the old budget, so the evidence could not fit under it."
     },
     {
+      "id": "MAR-486",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "note": "PR open, not yet merged (merge:human-gated). export_build_brief's deploy section for the self-hosted/remote path: gated on agent_dom.locations.runtime.kind === 'remote', renders process contract (start command, env expectations, output_location as where run evidence lands) plus the ADR 0006 option-1 credential honesty sentence. buildAgentManifest also downgrades any dash_managed connection ownership to agent_managed on a remote runtime (ADR 0006: the emitter must not produce what DASH's importer refuses). No new manifest field. Presence/absence fixtures in tests/tools/observabilityManifest.test.ts. Update this entry to merged/proven once Henrik merges the PR."
+    },
+    {
       "id": "MCP-INVOICE-SAFETY-CORPUS",
       "lifecycle": "proven",
       "linear_status": "Local evidence",
