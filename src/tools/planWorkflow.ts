@@ -91,6 +91,7 @@ import {
   buildConnectionContract,
   compactConnectionContract,
   connectionSpecFor,
+  type ConnectionContractOptions,
   type ConnectionRequirement,
 } from "../lib/connectionContract.js";
 
@@ -1734,6 +1735,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
  */
 export function connectionContractForComponents(
   componentIds: readonly string[],
+  options: ConnectionContractOptions = {},
 ): ConnectionRequirement[] {
   const needs = componentIds
     .filter((id) => INTEGRATION_CATALOG[id] !== undefined)
@@ -1748,7 +1750,7 @@ export function connectionContractForComponents(
         required_scopes: entry.required_scopes,
       };
     });
-  return buildConnectionContract(needs);
+  return buildConnectionContract(needs, options);
 }
 
 /**

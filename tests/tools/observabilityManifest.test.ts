@@ -58,6 +58,7 @@ function planAndBrief(
     interaction_surface?: PlacementAxis;
     trigger_explanation?: TriggerExplanation;
     cadence_enabled?: boolean;
+    dash_broker_available?: boolean;
   } = {},
 ) {
   const plan = planWorkflow({ goal, must_have_capabilities: [], must_avoid: [] }, registry);
@@ -88,6 +89,7 @@ function planAndBrief(
     build_target: opts.build_target ?? "code",
     output_location: opts.output_location ?? "",
     cadence_enabled: opts.cadence_enabled,
+    dash_broker_available: opts.dash_broker_available,
     generated_at: "2026-07-05T00:00:00Z", // deterministic for assertions
     llm_provider: "anthropic",
   });
@@ -485,11 +487,14 @@ describe("MAR-486 — deploy section for the self-hosted/remote path (ADR 0006)"
   });
 
   it("guard: a remote runtime never emits a dash_managed connection, even if the connection contract asks for one", () => {
-    // Constructed directly against buildAgentManifest — buildConnectionContract's
-    // broker path is always "planned" today, so this shape cannot yet arise
-    // through export_build_brief's public input. The guard is defense-in-depth
-    // for when MAR-383's broker path ships (ADR 0006: the emitter must not
-    // produce what DASH's importer refuses).
+    // Constructed directly against buildAgentManifest, keeping the guard
+    // independent of how the connection contract happens to be built.
+    //
+    // MAR-494 note: this shape IS now reachable through export_build_brief's
+    // public input (`dash_broker_available: true`), and the round-trip case
+    // below exercises that route. Both are kept — one asserts the emitter never
+    // produces what DASH's importer refuses (ADR 0006), the other asserts the
+    // public input reaches it.
     const brokerBackedConnection = {
       connection_id: "gmail",
       label: "Gmail",
@@ -529,6 +534,118 @@ describe("MAR-486 — deploy section for the self-hosted/remote path (ADR 0006)"
     expect(manifest.agent_dom.connections).toHaveLength(1);
     expect(manifest.agent_dom.connections[0]?.ownership).not.toBe("dash_managed");
     expect(manifest.agent_dom.connections[0]?.ownership).toBe("agent_managed");
+  });
+});
+
+/**
+ * MAR-493 / MAR-494 — the two field VALUES that blocked the MAR-477 round trip.
+ *
+ * Every assertion below would have passed a type check and a schema check while
+ * the seam was broken, which is why they are written as values. `provider` and
+ * `ownership` are both plain strings on both sides of the contract, and their
+ * disagreement was invisible to everything except running DASH's broker against
+ * real emitter output.
+ */
+describe("MAR-493/494 — the manifest reaches DASH's broker", () => {
+  const LOCAL_BROKER_OPTS = {
+    runtime_recommendation: LOCAL_RUNNER_RUNTIME,
+    control_surface: DASH_CONTROL_SURFACE,
+    interaction_surface: DASH_INTERACTION_SURFACE,
+    trigger_explanation: MANUAL_RUNNER_TRIGGER,
+  };
+
+  function gmailOf<T extends { id: string }>(manifest: { agent_dom: { connections: T[] } }) {
+    return manifest.agent_dom.connections.find((connection) => connection.id === "gmail");
+  }
+
+  it("MAR-493: emits DASH's provider spelling, unconditionally", () => {
+    // Not gated on the broker signal. Naming a service correctly is right even
+    // when nothing is brokered — DASH renders the row either way.
+    const b = planAndBrief(LEAD_GOAL, { output_location: "HubSpot notes" });
+    expect(gmailOf(b.agent_manifest)?.provider).toBe("google-gmail");
+  });
+
+  it("MAR-493: `id` does not move — DASH keys the vault on it", () => {
+    // dash.connection.{agent}.{connection}.{field}. Renaming the id would orphan
+    // every credential a user had already stored.
+    const b = planAndBrief(LEAD_GOAL, { output_location: "HubSpot notes" });
+    expect(gmailOf(b.agent_manifest)?.id).toBe("gmail");
+  });
+
+  it("MAR-493: a service DASH does not name keeps its own id", () => {
+    const b = planAndBrief(LEAD_GOAL, { output_location: "HubSpot notes" });
+    const hubspot = b.agent_manifest.agent_dom.connections.find((c) => c.id === "hubspot");
+    expect(hubspot?.provider).toBe("hubspot");
+  });
+
+  it("MAR-494: without the signal, nothing is dash_managed", () => {
+    // The fail-closed default, and the control for the case below. An MCP that
+    // brokers by default would be claiming DASH is installed on a machine it has
+    // never seen.
+    const b = planAndBrief(LEAD_GOAL, { ...LOCAL_BROKER_OPTS, output_location: "HubSpot notes" });
+    for (const connection of b.agent_manifest.agent_dom.connections) {
+      expect(connection.ownership, `${connection.id} without the signal`).not.toBe("dash_managed");
+    }
+  });
+
+  it("MAR-494: with the signal and a local runtime, Gmail is dash_managed", () => {
+    const b = planAndBrief(LEAD_GOAL, {
+      ...LOCAL_BROKER_OPTS,
+      output_location: "HubSpot notes",
+      dash_broker_available: true,
+    });
+    const gmail = gmailOf(b.agent_manifest);
+    expect(gmail?.ownership).toBe("dash_managed");
+    expect(gmail?.provider).toBe("google-gmail");
+    // DASH's `oauthField` refuses a connection with anything other than exactly
+    // one OAuth field: which one a grant belonged to would be DASH's guess, and a
+    // credential filed against the wrong field is one a disconnect would not
+    // delete.
+    const oauthFields = (gmail?.fields ?? []).filter((f) => f.kind === "oauth_reauthorization");
+    expect(oauthFields).toHaveLength(1);
+    expect(oauthFields[0]?.technical?.provider_scopes).toContain(
+      "https://www.googleapis.com/auth/gmail.readonly",
+    );
+    // A dash_managed row offers reconnect/test/switch; an agent-held one only
+    // offers test. DASH renders straight from this field.
+    expect(gmail?.validation_action.behavior).toBe("reconnect_test_switch");
+  });
+
+  it("MAR-494: the signal does not widen to services DASH cannot broker", () => {
+    // The over-claim guard. A HubSpot row marked dash_managed would render as
+    // "DASH holds this credential" and then refuse every call with
+    // `no_broker_profile` — connected-looking and entirely dead.
+    const b = planAndBrief(LEAD_GOAL, {
+      ...LOCAL_BROKER_OPTS,
+      output_location: "HubSpot notes",
+      dash_broker_available: true,
+    });
+    const hubspot = b.agent_manifest.agent_dom.connections.find((c) => c.id === "hubspot");
+    expect(hubspot?.ownership).not.toBe("dash_managed");
+  });
+
+  it("MAR-494 + ADR 0006: the signal never survives a remote runtime", () => {
+    // Now reachable through the public input, so the MAR-486 guard above is
+    // exercised end to end rather than only from a constructed fixture.
+    const b = planAndBrief(LEAD_GOAL, {
+      runtime_recommendation: REMOTE_AGENT_RUNTIME,
+      output_location: "A remote worker's own log",
+      dash_broker_available: true,
+    });
+    expect(b.agent_manifest.agent_dom.locations.runtime.kind).toBe("remote");
+    for (const connection of b.agent_manifest.agent_dom.connections) {
+      expect(connection.ownership, `${connection.id} on a remote runtime`).not.toBe("dash_managed");
+    }
+  });
+
+  it("every brokered manifest still validates against the pinned DASH schema", () => {
+    const b = planAndBrief(LEAD_GOAL, {
+      ...LOCAL_BROKER_OPTS,
+      output_location: "HubSpot notes",
+      dash_broker_available: true,
+    });
+    validateManifest(b.agent_manifest);
+    expect(validateManifest.errors ?? null, JSON.stringify(validateManifest.errors)).toBeNull();
   });
 });
 

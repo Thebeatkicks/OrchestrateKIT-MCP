@@ -18,6 +18,7 @@
 
 import type { CredentialRequirement } from "./connectContract.js";
 import type { ConnectionRequirement } from "./connectionContract.js";
+import { dashManifestProvider } from "./dashBrokerCatalog.js";
 import type {
   PlacementAxis,
   RuntimeOption,
@@ -431,7 +432,12 @@ function agentDomConnections(input: {
     }
     return {
       id: connection.connection_id,
-      provider: connection.connection_id,
+      // MAR-493: `id` is the MCP's own row identity and DASH keys the vault on it
+      // (`dash.connection.{agent}.{connection}.{field}`), so it must not move.
+      // `provider` is the service name DASH looks a broker profile up by, and
+      // that vocabulary is DASH's — emitting "gmail" where DASH says
+      // "google-gmail" resolved no profile and refused every brokered call.
+      provider: dashManifestProvider(connection.connection_id),
       label: connection.label,
       purpose: connection.grants,
       ownership,

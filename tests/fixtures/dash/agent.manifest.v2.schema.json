@@ -87,7 +87,12 @@
             "type": { "enum": ["manual", "schedule", "webhook", "event", "poll", "client_session", "other"] },
             "label": { "type": "string", "minLength": 1 },
             "schedule": { "type": "string" },
-            "technical": { "type": "object" }
+            "technical": { "type": "object" },
+            "expected_interval_seconds": {
+              "description": "The longest gap DASH should expect between this agent's activity before treating it as stalled rather than quietly idle. Optional and meaningful only alongside type \"schedule\": schedule is free text (\"weekdays at 08:00 local time\") and DASH does not parse it, so an absent value means no expectation can be derived and this agent is never marked stalled.",
+              "type": "number",
+              "minimum": 1
+            }
           }
         },
         "locations": {
@@ -102,6 +107,9 @@
         "connections": {
           "type": "array",
           "items": { "$ref": "#/$defs/connectionRequirement" }
+        },
+        "permissions": {
+          "$ref": "#/$defs/permissions"
         },
         "control": {
           "type": "object",
@@ -141,6 +149,38 @@
     }
   },
   "$defs": {
+    "permissions": {
+      "type": "object",
+      "description": "What the agent declares it may do that needs no credential — the case `connections` cannot express, because every connection requirement carries an owner, fields and a validation action. Additive and optional: a manifest without this block declares nothing, which is different from declaring nothing is needed.\n\nThe shape deliberately mirrors the OrchestrateKit registry's component `permissions` block (read / write / approval_required_for) so a scaffolded manifest and an exported build brief describe a permission the same way. A second vocabulary here would mean the two documents could disagree about the same grant.\n\n**This is a declaration, not a boundary.** The runner strips the environment (`runner/supervisor.ts`) but spawns an ordinary child process with unrestricted network access. DASH renders what the agent claims and who to ask about it; it does not enforce it, and no copy built on this block may say that it does. The same honesty ADR 0002 requires of the draft-only Gmail boundary applies here.",
+      "properties": {
+        "read": { "type": "array", "items": { "$ref": "#/$defs/permissionGrant" } },
+        "write": { "type": "array", "items": { "$ref": "#/$defs/permissionGrant" } },
+        "approval_required_for": { "type": "array", "items": { "$ref": "#/$defs/permissionGrant" } }
+      }
+    },
+    "permissionGrant": {
+      "type": "object",
+      "required": ["id", "label", "detail"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The registry's own name for the capability, e.g. `network`. Technical vocabulary: a guided surface renders `label`, never this."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "What it may do, in the words a person reads. Held to lib/copy/identifiers.ts."
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "The scope of the grant in plain language — what is included and what is not."
+        }
+      }
+    },
     "location": {
       "type": "object",
       "required": ["id", "label", "kind"],

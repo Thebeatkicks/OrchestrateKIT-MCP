@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "OrchestrateKit MCP",
-  "updated_at": "2026-08-01",
+  "updated_at": "2026-08-06",
   "current_wave": "News Scout routing prerequisites",
   "authority": {
     "implementation": "Git",
@@ -101,6 +101,30 @@
       "lifecycle": "planned",
       "linear_status": "Backlog",
       "note": "PR open, not yet merged (merge:human-gated). export_build_brief's deploy section for the self-hosted/remote path: gated on agent_dom.locations.runtime.kind === 'remote', renders process contract (start command, env expectations, output_location as where run evidence lands) plus the ADR 0006 option-1 credential honesty sentence. buildAgentManifest also downgrades any dash_managed connection ownership to agent_managed on a remote runtime (ADR 0006: the emitter must not produce what DASH's importer refuses). No new manifest field. Presence/absence fixtures in tests/tools/observabilityManifest.test.ts. Update this entry to merged/proven once Henrik merges the PR."
+    },
+    {
+      "id": "MAR-493",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "note": "PR open, not yet merged (merge:human-gated). agent_dom.connections[].provider now carries DASH's manifest vocabulary via src/lib/dashBrokerCatalog.ts (gmail -> google-gmail, google_calendar -> google-calendar); everything else passes through unchanged so DASH's honest 'no sign-in for this' refusal is preserved rather than replaced by a guess. `id` is deliberately unchanged — DASH keys the vault on it. Found by the MAR-477 round-trip proof: brokerProfileFor('gmail') returned null, so every brokered call was refused with no_broker_profile while both repos' types and the shared schema agreed. Update this entry to merged/proven once Henrik merges the PR."
+    },
+    {
+      "id": "MAR-494",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "note": "PR open, not yet merged (merge:human-gated). export_build_brief takes an explicit dash_broker_available signal; absent/false changes nothing, true makes the broker acquisition path actionable only for connections DASH actually brokers, which is how agent_dom ownership can reach dash_managed at all. Before this, connectionOwnership could never return it: the only ownership_location 'dash' path was availability 'planned' and the actionable path is the first non-planned one, so a 32-connection sweep across 7 goals x 2 runtimes produced zero. ADR 0006 still bounds it — a remote runtime downgrades to agent_managed (MAR-486's rule, now reachable through public input and asserted end to end). See docs/ADR-MAR-494-dash-broker-availability-signal.md. Update this entry to merged/proven once Henrik merges the PR."
+    },
+    {
+      "id": "MAR-495",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "note": "PR open, not yet merged (merge:human-gated). tests/fixtures/dash/agent.manifest.v2.schema.json re-synced from orchestratedash master 095a6da (it was four optional additions behind: $defs/permissionGrant, $defs/permissions, agent_dom.permissions, trigger.expected_interval_seconds), contract.lock.json fingerprint and canonical_commit updated with it. scripts/check-dash-schema-drift.mjs added to pnpm verify: fails on any structural divergence in either direction, and prints a loud SKIPPED when orchestratedash is not checked out beside this repo rather than passing silently. Both outcomes exercised live before landing. Whether the emitter should populate the newly-added blocks is deliberately a separate question. Update this entry to merged/proven once Henrik merges the PR."
+    },
+    {
+      "id": "MAR-477",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "note": "The MCP half of the MCP -> DASH round trip is implemented on the MAR-493/494/495 branch and all six steps run green against orchestratedash's own modules at master 095a6da (export_build_brief -> dash:// handoff -> canonical schema validation -> Connection Center dash-section row -> resolveGrant -> an allowed and audited gmail.search). Deliberately NOT proven: the harnesses live in exports/ (gitignored) and import orchestratedash by relative path, so they are not a repeatable gate in this repo, and step 6 stubs mintAccessToken/fetchImpl at DASH's own BrokerDeps seams — a real Google account at a real consent screen is MAR-468's attended job. Promote only when a committed cross-repo test replaces the harness."
     },
     {
       "id": "MCP-INVOICE-SAFETY-CORPUS",

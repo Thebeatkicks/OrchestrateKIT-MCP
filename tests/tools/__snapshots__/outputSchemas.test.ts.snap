@@ -3350,7 +3350,7 @@ exports[`MAR-249 — export_build_brief output schema > compact structuredConten
           "id": "gmail",
           "label": "Gmail",
           "ownership": "external",
-          "provider": "gmail",
+          "provider": "google-gmail",
           "purpose": "Read your inbox; Write drafts (never send)",
           "validation_action": {
             "behavior": "test",
@@ -4131,7 +4131,7 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
           "id": "gmail",
           "label": "Gmail",
           "ownership": "external",
-          "provider": "gmail",
+          "provider": "google-gmail",
           "purpose": "Read your inbox; Write drafts (never send)",
           "validation_action": {
             "behavior": "test",
@@ -5202,7 +5202,7 @@ exports[`MAR-249 — export_build_brief output schema > runtime structuredConten
           "id": "gmail",
           "label": "Gmail",
           "ownership": "external",
-          "provider": "gmail",
+          "provider": "google-gmail",
           "purpose": "Read your inbox; Write drafts (never send)",
           "validation_action": {
             "behavior": "test",
