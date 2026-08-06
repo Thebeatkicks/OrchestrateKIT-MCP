@@ -184,6 +184,58 @@ describe("MAR-383 — honesty rules", () => {
     }
   });
 
+  it("RULE 2, the other direction (MAR-494): a path that EXISTS is never described as planned", () => {
+    // The amendment MAR-477 forced. The rule used to be enforced one way only —
+    // don't promise what isn't built — and the MCP went on saying the broker
+    // "does not exist yet" for weeks after DASH shipped it, which made
+    // dash_managed unreachable and the round trip impossible. Describing a real
+    // path as planned is the same lie told backwards.
+    const brokered = connectionContractForComponents(["email_read"], {
+      dash_broker_available: true,
+    });
+    const gmail = byId(brokered, "gmail");
+    const path = gmail.acquisition_paths.find((p) => p.kind === "broker_connection_mcp");
+
+    expect(path?.availability).toBe("requires setup");
+    expect(gmail.actionable_path_kind).toBe("broker_connection_mcp");
+    for (const s of [path?.label ?? "", path?.how ?? "", path?.reuse ?? "", path?.caveat ?? ""]) {
+      expect(s, `stale "not available yet" on a real path: "${s}"`).not.toMatch(
+        /not available yet/i,
+      );
+      expect(s, `stale "planned:" on a real path: "${s}"`).not.toMatch(/^planned:/i);
+      // Still setup, never a promise of one click — the original rule holds.
+      expect(s, `"one click" on a real path: "${s}"`).not.toMatch(/one[- ]click/i);
+    }
+    // And it must state the boundary it inherits: ADR 0006, the broker's reach
+    // ends at this machine. A row that offers DASH custody without saying it
+    // stops when DASH closes is a promise the runtime cannot keep.
+    expect(path?.caveat ?? "").toMatch(/DASH is (open|closed)|when DASH is closed/i);
+  });
+
+  it("RULE 2 (MAR-494): the signal is opt-in — absent means the path stays planned", () => {
+    // The absence fixture. Every default caller, and every caller written before
+    // the field existed, must get the pessimistic answer.
+    for (const options of [undefined, {}, { dash_broker_available: false }]) {
+      const built = connectionContractForComponents(["email_read"], options);
+      const path = byId(built, "gmail").acquisition_paths.find(
+        (p) => p.kind === "broker_connection_mcp",
+      );
+      expect(path?.availability, `options=${JSON.stringify(options)}`).toBe("planned");
+      expect(path?.how).toMatch(/not available yet/i);
+    }
+  });
+
+  it("RULE 2 (MAR-494): the signal does not make an unbrokered service actionable", () => {
+    // Asserting DASH is present says nothing about whether DASH brokers HubSpot.
+    const brokered = connectionContractForComponents(["crm_note_write"], {
+      dash_broker_available: true,
+    });
+    const hubspot = byId(brokered, "hubspot");
+    const path = hubspot.acquisition_paths.find((p) => p.kind === "broker_connection_mcp");
+    expect(path?.availability).toBe("planned");
+    expect(hubspot.actionable_path_kind).not.toBe("broker_connection_mcp");
+  });
+
   it("RULE 3: restricted-scope providers disclose the verification requirement", () => {
     // Gmail's scopes are restricted by Google → verification + possibly CASA.
     const gmail = byId(contract, "gmail");

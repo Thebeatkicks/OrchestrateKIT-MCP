@@ -311,6 +311,19 @@ export const InputShape = {
       "export scheduled_trigger and a schedule-typed trigger declaration. See " +
       "docs/ADR-MAR-456-scheduled-trigger-manifest-export.md.",
     ),
+  dash_broker_available: z
+    .boolean()
+    .optional()
+    .describe(
+      "MAR-494: whether DASH is installed and its connection broker is available on the " +
+      "machine that will run this agent. The MCP is stateless and cannot observe this, so " +
+      "absent/false is the honest default and nothing changes. Set true only when DASH is " +
+      "actually present: the broker-backed acquisition path then becomes actionable for the " +
+      "services DASH brokers, and those connections export as agent_dom ownership " +
+      "'dash_managed' — the value DASH's broker requires before it will resolve a grant. " +
+      "A remote runtime still downgrades it to 'agent_managed' per ADR 0006. See " +
+      "docs/ADR-MAR-494-dash-broker-availability-signal.md.",
+    ),
   // ── MAR-460: public-runner eligibility (fail closed) ──
   runner_posture: z
     .enum(["attended", "unattended", "public"])
@@ -2347,6 +2360,8 @@ export type ExportBuildBriefInput = {
   output_location?: string;
   /** MAR-463: gates scheduled_trigger out of agent_manifest.planned_route until the build's cadence is enabled; see docs/ADR-MAR-456-scheduled-trigger-manifest-export.md. */
   cadence_enabled?: boolean;
+  /** MAR-494: the caller asserts DASH's broker is present; absent/false is the honest default. See docs/ADR-MAR-494-dash-broker-availability-signal.md. */
+  dash_broker_available?: boolean;
   agent_name?: string;
   // ── MAR-460: public-runner eligibility; see src/lib/runnerEligibility.ts ──
   /** Defaults to the strictest posture ('public') — an undeclared posture is not evidence of a narrow one. */
@@ -2477,6 +2492,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
   // the brief, the manifest and plan_workflow can never disagree.
   const connectionContract = connectionContractForComponents(
     recommendedRoute.map((s) => s.component_id),
+    { dash_broker_available: input.dash_broker_available },
   );
 
   // MAR-364: credential manifest + connect.mjs source, derived from the route.
@@ -2684,7 +2700,9 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
       goal: input.goal,
       buildTarget: assistantSurface,
       route: input.recommended_route,
-      connections: connectionContractForComponents(routeComponents),
+      connections: connectionContractForComponents(routeComponents, {
+        dash_broker_available: input.dash_broker_available,
+      }),
       clearance: input.automation_clearance,
       enforcedGates: input.enforced_approval_gates,
       approvalAdvisory: input.approval_gate_advisory,
@@ -2817,6 +2835,7 @@ export function registerExportBuildBrief(server: McpServer): void {
           build_target: input.build_target,
           output_location: input.output_location,
           cadence_enabled: input.cadence_enabled,
+          dash_broker_available: input.dash_broker_available,
           agent_name: input.agent_name,
           llm_provider: input.llm_provider,
         });

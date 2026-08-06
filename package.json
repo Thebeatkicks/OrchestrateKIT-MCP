@@ -41,7 +41,8 @@
     "smoke": "vitest run tests/smoke",
     "release:check": "tsx scripts/check-release-trust.ts",
     "state:check": "node scripts/check-project-state.mjs",
-    "verify": "pnpm state:check && pnpm gen:registry && pnpm typecheck && pnpm registry:lint && pnpm benchmark:check && pnpm test && pnpm release:check"
+    "dash:schema:check": "node scripts/check-dash-schema-drift.mjs",
+    "verify": "pnpm state:check && pnpm dash:schema:check && pnpm gen:registry && pnpm typecheck && pnpm registry:lint && pnpm benchmark:check && pnpm test && pnpm release:check"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",

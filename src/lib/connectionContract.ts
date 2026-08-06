@@ -26,9 +26,18 @@
  *    login_hint prefill. Any copy implying transfer is a lie, so no string in
  *    this module may promise it.
  * 2. A path whose availability is "planned" must never be rendered as "one
- *    click" or as something the user can do today. The broker-backed path is
- *    the architectural TARGET; it does not exist yet, and saying otherwise is
- *    the "fake completeness" anti-pattern from the UX spine.
+ *    click" or as something the user can do today. Saying otherwise is the
+ *    "fake completeness" anti-pattern from the UX spine.
+ *
+ *    AMENDED by MAR-494. This rule used to end "the broker-backed path is the
+ *    architectural TARGET; it does not exist yet". Half of that has stopped
+ *    being true: DASH shipped a real connection broker, and MAR-477 found the
+ *    MCP still describing it as unbuilt, which made `dash_managed` unreachable
+ *    and the whole MCP -> DASH round trip impossible. The rule itself is
+ *    unchanged and now cuts both ways — a path that DOES exist must not be
+ *    described as planned either. Which one is true is not something the MCP can
+ *    observe, so it is the caller's explicit assertion (`dash_broker_available`),
+ *    defaulting to the pessimistic answer.
  * 3. Providers whose scopes are restricted by the provider (Gmail) must
  *    disclose the verification cost rather than hiding it behind "one click".
  *    That cost is the single biggest hidden expense of a connection product.
@@ -36,6 +45,7 @@
 
 import type { McpServerInfo, PlacementAvailability } from "../tools/planWorkflow.js";
 import { restrictedScopeDisclosure } from "./credentialScopeCatalog.js";
+import { dashBrokersConnection } from "./dashBrokerCatalog.js";
 
 // ──────────────────────────────── types ────────────────────────────────
 
@@ -115,6 +125,31 @@ export type ConnectionRequirement = {
   verification_requirement: string | null;
   /** Least-privilege scopes — technical/deep depth only, never Layer 1. */
   scopes: string[];
+};
+
+/**
+ * Facts about the world the MCP cannot observe, supplied by the caller
+ * (MAR-494).
+ *
+ * Separate from `ConnectionNeedInput` because it is not a property of the route:
+ * the same goal planned on a machine with DASH installed and on one without
+ * should produce the same route and a different acquisition path.
+ */
+export type ConnectionContractOptions = {
+  /**
+   * The caller asserts DASH is installed and its connection broker is available
+   * on the machine that will run this agent.
+   *
+   * Absent or false is the honest negative and the default: the broker path
+   * stays `planned`, ownership stays wherever it is today, and nothing about the
+   * exported manifest changes. Only an explicit true opts in — the same shape,
+   * and the same fail-closed default, as MAR-463's `cadence_enabled`.
+   *
+   * True is a claim about the machine, not a wish. It does not by itself make a
+   * connection brokered: DASH also has to actually broker that service, which is
+   * `dashBrokersConnection`'s question.
+   */
+  dash_broker_available?: boolean;
 };
 
 /** Structural input: the subset of IntegrationNeed this module reads. */
@@ -216,13 +251,50 @@ function fallbackConnection(need: ConnectionNeedInput): ConnectionSpec {
 
 // ─────────────────────────── acquisition paths ───────────────────────────
 
-function brokerPath(label: string): AcquisitionPath {
+/**
+ * The broker-backed path — planned by default, real only when the caller says so
+ * (MAR-494).
+ *
+ * `brokered` is not something the MCP can observe. The MCP is stateless and has
+ * no idea whether DASH is installed on the machine that will run this agent, so
+ * the fact travels in from `export_build_brief`'s `dash_broker_available` input,
+ * exactly as MAR-463's `cadence_enabled` does. Absent means no, so a caller who
+ * does not know and a caller who predates the field both get the honest negative.
+ *
+ * When it IS true, every user-facing word changes with it. A path that claims
+ * `ownership_location: "dash"` while still saying "Not available yet" would be a
+ * row telling the user DASH holds a credential and, one line down, that no such
+ * thing exists — which is the MAR-383 honesty rule broken from the other side.
+ */
+function brokerPath(label: string, brokered: boolean): AcquisitionPath {
+  if (brokered) {
+    return {
+      kind: "broker_connection_mcp",
+      rank: 1,
+      label: `${label} connection held by DASH`,
+      ownership_location: "dash",
+      // Real, but still setup: the user signs in at a consent screen. Never
+      // "available now" — nothing is connected until they do.
+      availability: "requires setup",
+      how:
+        `Connect ${label} in DASH's Connection Center. DASH holds the sign-in in this ` +
+        "computer's vault and the agent never receives it — it asks DASH to act, one " +
+        "named operation at a time.",
+      reuse:
+        "Every agent DASH runs on this computer can be granted this one connection, " +
+        "and you can withdraw it in one place.",
+      caveat:
+        "Works while DASH is open on this computer: when DASH is closed the broker is " +
+        "closed (ADR 0006). An agent that must run unattended on a remote host needs a " +
+        "path below instead.",
+    };
+  }
   return {
     kind: "broker_connection_mcp",
     rank: 1,
     label: `${label} connection server (broker-backed)`,
     ownership_location: "dash",
-    // NOT built. Rule 2: never renders as an action, never says "one click".
+    // NOT built here. Rule 2: never renders as an action, never says "one click".
     availability: "planned",
     how: "Not available yet — no connection server exists to authorize against.",
     reuse: BROKER_REUSE,
@@ -283,6 +355,7 @@ function rawOauthPath(label: string, authModel: string): AcquisitionPath {
  */
 export function buildConnectionContract(
   needs: readonly ConnectionNeedInput[],
+  options: ConnectionContractOptions = {},
 ): ConnectionRequirement[] {
   const byConnection = new Map<string, ConnectionRequirement>();
 
@@ -302,7 +375,15 @@ export function buildConnectionContract(
       continue;
     }
 
-    const paths: AcquisitionPath[] = [brokerPath(spec.label)];
+    // Two independent conditions, and both must hold. `dash_broker_available` is
+    // the caller's assertion that DASH is present at all; `dashBrokersConnection`
+    // is whether DASH could broker THIS service if it were. Claiming the path for
+    // a service DASH cannot broker would render as "DASH holds this credential"
+    // and then refuse every call with `no_broker_profile` — connected-looking and
+    // entirely dead, which is worse than the honest planned path.
+    const brokered =
+      options.dash_broker_available === true && dashBrokersConnection(spec.connection_id);
+    const paths: AcquisitionPath[] = [brokerPath(spec.label, brokered)];
     const mcp = mcpServerPath(spec.label, need.mcp_server);
     if (mcp) paths.push(mcp);
     paths.push(rawOauthPath(spec.label, need.auth_model));
