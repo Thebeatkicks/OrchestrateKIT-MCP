@@ -1,3 +1,9 @@
+# MAR-504: pin all text files to LF, both stored and on checkout. Without
+# eol=lf, core.autocrlf=true on Windows checks files out as CRLF, and any
+# byte-for-byte comparison against LF-generated content (e.g. the protocol
+# conformance matrix) fails even though the content is identical.
+* text=auto eol=lf
+
 .claude/ export-ignore
 .claude/** export-ignore
 .claude/settings.local.json export-ignore
