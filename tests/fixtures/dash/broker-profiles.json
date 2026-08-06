@@ -1,0 +1,35 @@
+{
+  "source_repository": "https://github.com/orchestratemcp/orchestratedash",
+  "source_commit": "9d42447f95023d5d07cb1323a25ef73e6b64fffd",
+  "source_files": ["lib/broker/providers.ts", "lib/broker/operations.ts"],
+  "note": "Semantic copy of the REAL broker profiles and operations DASH's lib/broker/providers.ts and lib/broker/operations.ts define. Excludes the loopback proof profile (env-gated, test-only, cannot exist on a hosted agent per lib/broker/providers.ts's own guard). Dual-update discipline (README.md): when DASH's broker facts change, copy the new values here, update source_commit, and re-run pnpm test.",
+  "profiles": [
+    {
+      "connection_provider": "google-gmail",
+      "oauth_provider_id": "google",
+      "label": "Gmail",
+      "token_custodian": "dash_vault",
+      "client_owner": "dash_project"
+    }
+  ],
+  "operations": [
+    {
+      "id": "gmail.search",
+      "connection_provider": "google-gmail",
+      "access": "read",
+      "required_scopes": ["https://www.googleapis.com/auth/gmail.readonly"]
+    },
+    {
+      "id": "gmail.message.read",
+      "connection_provider": "google-gmail",
+      "access": "read",
+      "required_scopes": ["https://www.googleapis.com/auth/gmail.readonly"]
+    },
+    {
+      "id": "gmail.draft.create",
+      "connection_provider": "google-gmail",
+      "access": "write",
+      "required_scopes": ["https://www.googleapis.com/auth/gmail.compose"]
+    }
+  ]
+}
