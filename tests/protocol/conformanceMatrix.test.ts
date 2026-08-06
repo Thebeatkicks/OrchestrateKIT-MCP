@@ -271,7 +271,12 @@ describe("computeUnboundFailures", () => {
 });
 
 describe("the published document", () => {
-  const committed = readFileSync(join(ROOT, MATRIX_DOC_PATH), "utf8");
+  // Normalized the same way `scripts/conformance-matrix.ts` normalizes it: a
+  // Windows checkout with `core.autocrlf=true` rewrites this LF-generated file
+  // to CRLF on disk, which is a checkout artifact, not a hand edit. The same
+  // pattern already exists in `src/benchmark/publicBenchmark.ts` and
+  // `tests/lib/connectContract.test.ts` (MAR-496).
+  const committed = readFileSync(join(ROOT, MATRIX_DOC_PATH), "utf8").replace(/\r\n/g, "\n");
 
   it("is exactly the rendering of the matrix source at the green baseline", () => {
     // If this fails, the document was hand-edited or the source moved:
