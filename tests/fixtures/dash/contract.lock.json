@@ -6,6 +6,7 @@
   "schema_semantic_sha256": {
     "agent.manifest.schema.json": "a3406def79f04067b06f7c75180df5b7b36cc7a2cbe877782fccf5ad00b747e5",
     "agent.manifest.v2.schema.json": "da37810e13f47209310d9df544296eaf18e042aa28b8a3e2821df32fff2dace6",
-    "run-event.schema.json": "890a64f290a09d5a94d4d8aff51acd28281511c370c48a334763867517e371a3"
+    "run-event.schema.json": "890a64f290a09d5a94d4d8aff51acd28281511c370c48a334763867517e371a3",
+    "broker-profiles.json": "073a9eba90c2ff0e9d19d5eed6645bc36f6f10a2bf2c732e14ff26bae5f1bbb0"
   }
 }
