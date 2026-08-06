@@ -226,7 +226,12 @@ async function main(): Promise<void> {
     return;
   }
 
-  const committed = existsSync(documentPath) ? readFileSync(documentPath, "utf8") : undefined;
+  // Normalize CRLF the same way `pnpm test`'s conformanceMatrix.test.ts does:
+  // a Windows checkout with `core.autocrlf=true` rewrites this LF-generated
+  // file to CRLF on disk, which is a checkout artifact, not drift (MAR-496).
+  const committed = existsSync(documentPath)
+    ? readFileSync(documentPath, "utf8").replace(/\r\n/g, "\n")
+    : undefined;
   if (committed !== document) {
     failures.push(
       `${MATRIX_DOC_PATH} does not match the matrix source. ` +
