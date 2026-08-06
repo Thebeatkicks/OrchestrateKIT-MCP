@@ -111,6 +111,11 @@
         "permissions": {
           "$ref": "#/$defs/permissions"
         },
+        "task_inputs": {
+          "type": "array",
+          "description": "What files this agent accepts as a task, declared per role (MAR-434). Optional, and absent means the agent takes no files — which is every agent shipped before this block existed, so absence must never be read as an unrestricted agent. The declaration is what the runner narrows its own ceilings down to; it can never widen them, so a manifest asking for a 4 GiB input gets the runner's limit and a refusal, not 4 GiB. See runner/workspace.ts effectiveLimits.",
+          "items": { "$ref": "#/$defs/taskInputRole" }
+        },
         "control": {
           "type": "object",
           "required": ["supported", "command_version", "commands"],
@@ -149,6 +154,56 @@
     }
   },
   "$defs": {
+    "taskInputRole": {
+      "type": "object",
+      "description": "One kind of file a task accepts, in the user's vocabulary (MAR-434).\n\nA role rather than a slot number, because the surface says \"Customer brief\" and \"Price list\" and a person selects against those words. `id` is what a command carries and never what a person reads — the split `permissionGrant` already makes, for the same reason.\n\n**Media types are checked against sniffed bytes, not against the extension.** An extension is a claim by whoever named the file; `runner/workspace.ts` reads the first bytes and refuses a mismatch. So declaring `application/pdf` here means the runner will refuse a renamed executable, and declaring nothing means the runner does not narrow — which is honest but is not the same as accepting anything, because the runner's own ceilings still apply.",
+      "required": ["id", "label", "required"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9_]+$",
+          "description": "Technical vocabulary, e.g. `customer_brief`. Carried in commands; never rendered on a guided surface."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "What a person reads, e.g. \"Customer brief\". Held to lib/copy/identifiers.ts."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 400,
+          "description": "Why this agent wants it. Rendered beside the file picker so a person can tell whether they are handing over the right document."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether the task can start without it. Required rather than optional in the schema because a renderer that has to guess would guess `false` and let a task start missing the file it exists to read."
+        },
+        "min_count": { "type": "integer", "minimum": 0 },
+        "max_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The runner lowers this to its own ceiling and never raises it."
+        },
+        "media_types": {
+          "type": "array",
+          "description": "Accepted types as the runner sniffs them, e.g. `application/pdf`. Absent means the runner does not narrow by type. Note that DASH does not open a ZIP container to tell a .docx from a .xlsx, so both are `application/zip` — declaring one and not the other narrows nothing.",
+          "items": { "type": "string", "minLength": 1, "maxLength": 120 }
+        },
+        "max_file_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Per file. Lowered to the runner's ceiling, never raised past it."
+        },
+        "max_total_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Across every file in this role. Lowered to the runner's ceiling, never raised past it."
+        }
+      }
+    },
     "permissions": {
       "type": "object",
       "description": "What the agent declares it may do that needs no credential — the case `connections` cannot express, because every connection requirement carries an owner, fields and a validation action. Additive and optional: a manifest without this block declares nothing, which is different from declaring nothing is needed.\n\nThe shape deliberately mirrors the OrchestrateKit registry's component `permissions` block (read / write / approval_required_for) so a scaffolded manifest and an exported build brief describe a permission the same way. A second vocabulary here would mean the two documents could disagree about the same grant.\n\n**This is a declaration, not a boundary.** The runner strips the environment (`runner/supervisor.ts`) but spawns an ordinary child process with unrestricted network access. DASH renders what the agent claims and who to ask about it; it does not enforce it, and no copy built on this block may say that it does. The same honesty ADR 0002 requires of the draft-only Gmail boundary applies here.",
