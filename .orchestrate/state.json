@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "OrchestrateKit MCP",
-  "updated_at": "2026-08-07 (post MAR-521 promotion)",
+  "updated_at": "2026-08-07 (post MAR-524 merge)",
   "current_wave": "News Scout routing prerequisites",
   "authority": {
     "implementation": "Git",
@@ -193,14 +193,14 @@
     },
     {
       "id": "MAR-524",
-      "lifecycle": "planned",
-      "linear_status": "Backlog",
+      "lifecycle": "merged",
+      "linear_status": "Done",
       "commit": "a173685",
       "proof": {
         "command": "pnpm verify",
         "exact_goal_command": "pnpm exec vitest run tests/journey"
       },
-      "note": "NOT YET MERGED — implemented on branch 000henrik/mar-524-mcp-golden-journey-fixture-for-pr_review_readonly-mar-513 (commit a173685), pushed, PR pending. MAR-513 gap-list item 2 (the other README 'Try This First' starter goal never exercised by the MAR-387 harness, alongside MAR-521's invoice_intake_po_match). Added the pr_review_readonly fixture reusing the exact goal wording already locked by planWorkflow.test.ts's PR_REVIEW_LOCK_GOAL / hostingAndMonitoringEvals.test.ts's PR_REVIEW_WEBHOOK. Webhook-triggered (github_trigger), must_run_while_user_offline true (always-on endpoint needed), so scope lands medium/durable — same family as competitor_price_monitor — and the dry run resolves to prepare_runtime (managed_worker), not build_brief like invoice_intake_po_match's build_in_assistant terminal. route_excludes locks the MAR-267 no-write guarantee (code_editing, test_runner absent). Both MCP-side (playbook status: published, route status: validated) — no LAB-side work needed. pnpm verify: 2282/2282 (2278 baseline + 4 new). Still needed before promotion to merged: PR review and merge."
+      "note": "Merged to master via PR #159 (144def6), CI green. MAR-513 gap-list item 2 (the other README 'Try This First' starter goal never exercised by the MAR-387 harness, alongside MAR-521's invoice_intake_po_match). Added the pr_review_readonly fixture reusing the exact goal wording already locked by planWorkflow.test.ts's PR_REVIEW_LOCK_GOAL / hostingAndMonitoringEvals.test.ts's PR_REVIEW_WEBHOOK. Webhook-triggered (github_trigger), must_run_while_user_offline true (always-on endpoint needed), so scope lands medium/durable — same family as competitor_price_monitor — and the dry run resolves to prepare_runtime (managed_worker), not build_brief like invoice_intake_po_match's build_in_assistant terminal. route_excludes locks the MAR-267 no-write guarantee (code_editing, test_runner absent). Both MCP-side (playbook status: published, route status: validated) — no LAB-side work needed; both MAR-513 gap-list item 1 goals are now closed (MAR-521 + MAR-524). pnpm verify: 2282/2282 (2278 baseline + 4 new). Linear moved to Done in the same session, per the MAR-519/MAR-521 precedent: fixture/test issues promote straight to merged on a durable CI gate."
     },
     {
       "id": "MCP-INVOICE-SAFETY-CORPUS",
