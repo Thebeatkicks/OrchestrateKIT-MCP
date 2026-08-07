@@ -1,0 +1,127 @@
+id: crm_lead_enrichment
+version: 0.1.0
+status: beta
+title: CRM Lead Enrichment with Gated Deal Advance
+summary: >
+  Blueprint for the CRM-native enrichment pipeline: read leads or contacts out
+  of the CRM on a schedule, augment each one with firmographic data from an
+  enrichment provider, write the result back as a CRM note, and advance the
+  deal stage — the one irreversible, revenue-bearing write — only behind a
+  human approval gate. The defining concerns are MATCH CONFIDENCE (an
+  enrichment provider will return a confident answer for the wrong company on a
+  shared domain) and IRREVERSIBILITY (a stage change fires CRM automations that
+  cannot be recalled). Beta blueprint: the component chain is the shape the
+  live matcher composes for this goal (probed 2026-08-07, not hand-authored),
+  and validate_playbook_candidate certifies the full structural Definition of
+  Done — but DoD #4 (2-3 real Lab sessions) and #5 (a benchmark prompt) need
+  evidence a stateless MCP session cannot see, so it stops at beta.
+workflow_type: crm_sales
+risk_level: high
+golden_path_route_id: crm_lead_enrichment_route_v1
+stack_id: default_orchestratekit_stack
+
+components:
+  - scheduled_trigger
+  - crm_record_read
+  - lead_enrichment
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - crm_note_write
+  - deal_stage_update
+  - audit_log
+
+edges:
+  - crm_record_read__produces__lead_enrichment
+  - crm_record_read__safer_with__auth_failure_handler
+  - lead_enrichment__produces__crm_note_write
+  - lead_enrichment__produces__deal_stage_update
+  - deal_stage_update__requires__human_approval_gate
+  - deal_stage_update__safer_with__auth_failure_handler
+  - audit_log__recommended__deal_stage_update
+
+best_for:
+  - a nightly enrichment pass over new CRM leads that appends firmographics and a fit score
+  - a sales-ops agent that proposes deal-stage advances for a human to approve in batch
+  - keeping CRM records current from an enrichment provider without letting the agent move revenue on its own
+
+avoid_when:
+  - the lead source is a mailbox rather than the CRM (use email_lead_to_crm — the read is a mailbox read, not a CRM read)
+  - unattended deal-stage changes are wanted — the stage write is irreversible and always gated
+  - enriching EU contacts without a documented lawful basis for the provider lookup
+
+recommended_architecture:
+  pattern: Schedule → CRM read → enrich → validate → approve → CRM note + deal stage → audit
+  why: >
+    The pipeline has one clean risk boundary: everything up to schema_validation
+    is read-and-augment (crm_record_read and lead_enrichment both declare an
+    empty write permission set), and everything after human_approval_gate writes
+    to a business system. Putting the gate exactly there means a mis-matched
+    enrichment is caught while it is still a proposal. deal_stage_update
+    declares `requires: human_approval_gate` in its own component YAML, so the
+    gate is not a style choice — the registry refuses the route without it. The
+    audit log records which record was read, what the provider returned, and who
+    approved the stage change, which is what makes a wrong advance
+    reconstructable after the fact.
+
+llm_driven_steps:
+  - lead_enrichment
+
+deterministic_steps:
+  - scheduled_trigger
+  - crm_record_read
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - crm_note_write
+  - deal_stage_update
+  - audit_log
+
+guardrails:
+  - Never advance a deal stage without a human approval gate — the write is irreversible and triggers downstream CRM automations that cannot be recalled
+  - Record the enrichment provider's match confidence and refuse to auto-apply below a configured threshold; a confident match on a shared domain (gmail.com, agency domains) is the provider's most common wrong answer
+  - Read with a read-only CRM scope for crm_record_read and a separate write-scoped credential for the note/stage writes — one all-powerful key removes the boundary the gate exists to hold
+  - Never let enrichment data overwrite a fresher CRM field; append or write to a dedicated note rather than clobbering owner-edited values
+  - Strip and gate PII before it leaves the CRM for the enrichment provider, and record the lawful basis for EU contacts
+  - Use an idempotency key on the stage change so a retry after a transient API failure cannot double-advance a deal
+
+failure_modes:
+  - Enrichment provider returns a confident match for the wrong company on a shared or generic domain and the wrong firmographics are written back
+  - Deal advanced on an ambiguous identifier match — the wrong opportunity moves and the forecast is silently wrong
+  - Retry after a transient failure double-advances a deal because no idempotency key was used
+  - Stale provider snapshot overwrites a fresher, human-edited CRM field
+  - The CRM API key carries write scope on the read step, so a bug in the read path can mutate records
+  - Enrichment score is treated as ground truth and the approval gate becomes a rubber stamp
+
+evals:
+  - match precision on a labelled set of known leads (correct company resolved)
+  - shared-domain fixture — leads on gmail.com / agency domains are not confidently matched
+  - approval enforcement — no deal stage changes when approval is absent or denied
+  - idempotency — a duplicated scheduled run does not double-advance a deal
+  - scope isolation — the read credential cannot perform a write (403 fixture)
+  - freshness — a human-edited field newer than the provider snapshot is not overwritten
+
+implementation_steps:
+  - "Step 1: scheduled_trigger fires the pass on the cadence sales-ops actually reviews (nightly is the common answer; an hourly pass mostly re-reads unchanged records)."
+  - "Step 2: crm_record_read pulls the target object set with an explicit filter (owner, stage, last-modified) and a READ-ONLY credential. Paginate; a stale cursor on a large account silently truncates the batch."
+  - "Step 3: lead_enrichment calls the provider per record with email or domain. Keep the provider's match confidence in the payload — it is the input to every downstream decision."
+  - "Step 4: schema_validation rejects records whose enriched shape is incomplete or whose confidence is below the configured threshold, before anything is proposed for approval."
+  - "Step 5: human_approval_gate presents the batch as proposals: record, current stage, proposed stage, enrichment evidence, confidence. Approving is per-record, not per-batch."
+  - "Step 6: crm_note_write appends the enrichment result as a note using a WRITE-scoped credential. Never overwrite an owner-edited field."
+  - "Step 7: deal_stage_update applies the approved stage change with an idempotency key derived from (deal id, target stage, run id)."
+  - "Step 8: auth_failure_handler distinguishes an expired/under-scoped credential from a genuine empty result — a 403 that reads as 'no leads today' is how this pipeline goes quietly dead."
+  - "Step 9: audit_log records record ids, provider response ids, approver, and the before/after stage — never the raw PII payload."
+
+sources:
+  - title: HubSpot CRM API — objects, search, and associations
+    url: https://developers.hubspot.com/docs/api/crm/understanding-the-crm
+    source_type: official_docs
+    last_checked: "2026-08-07"
+  - title: Salesforce REST API Developer Guide
+    url: https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/
+    source_type: official_docs
+    last_checked: "2026-08-07"
+  - title: Pipedrive API reference — deals and persons
+    url: https://developers.pipedrive.com/docs/api/v1
+    source_type: official_docs
+    last_checked: "2026-08-07"

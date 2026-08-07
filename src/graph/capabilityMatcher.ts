@@ -280,6 +280,11 @@ const DOMAIN_KEYWORDS: Record<Exclude<Domain, "generic_orchestration">, string[]
     "outreach",
     "hubspot",
     "salesforce",
+    // MAR-526 slice 1: pipedrive was missing while its two peers were present,
+    // so a Pipedrive goal established no CRM domain at all and every CRM
+    // component stayed ineligible. Both crm_record_read and deal_stage_update
+    // name Pipedrive in their own component YAML.
+    "pipedrive",
     "partnership",
     // MAR-242: CRM-specific terms only. NOT "pipeline"/"enrich" — those already
     // belong to data_etl and would bleed an ETL goal into crm_sales. "lead"/"crm"
@@ -1448,6 +1453,32 @@ const KEYWORD_HINTS: Record<string, string[]> = {
   lookup: ["crm_record_read"],
   "contact record": ["crm_record_read"],
   "deal record": ["crm_record_read"],
+  // MAR-526 slice 1: the natural way a goal states a CRM READ. Before these,
+  // "reads new leads from our CRM" and "reads contacts from HubSpot" selected
+  // crm_note_write — the CRM WRITE — and the HubSpot phrase was even reported
+  // as unmatched demand, while crm_record_read (HINT_ONLY, see below) was
+  // unreachable from any natural phrasing: dead matcher vocabulary, which is
+  // exactly what MAR-513's gap-list item 3 filed.
+  //
+  // Every phrase names the CRM outright ("… from our crm", "… from hubspot").
+  // Deliberately NOT the bare object nouns: "leads from" would fire on
+  // email_lead_to_crm's own goal ("reads new leads from GMAIL"), which is a
+  // mailbox read, not a CRM read.
+  "from our crm": ["crm_record_read"],
+  "from the crm": ["crm_record_read"],
+  "from your crm": ["crm_record_read"],
+  "in our crm": ["crm_record_read"],
+  "in the crm": ["crm_record_read"],
+  "crm records": ["crm_record_read"],
+  "crm contacts": ["crm_record_read"],
+  "crm leads": ["crm_record_read"],
+  "crm deals": ["crm_record_read"],
+  "from hubspot": ["crm_record_read"],
+  "from salesforce": ["crm_record_read"],
+  "from pipedrive": ["crm_record_read"],
+  "in hubspot": ["crm_record_read"],
+  "in salesforce": ["crm_record_read"],
+  "in pipedrive": ["crm_record_read"],
   enrich: ["lead_enrichment"],
   enrichment: ["lead_enrichment"],
   firmographic: ["lead_enrichment"],

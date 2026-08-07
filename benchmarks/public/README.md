@@ -13,8 +13,8 @@ pnpm benchmark:check
 ## Provenance
 
 - Package: `orchestratekit-mcp@0.1.0`
-- Registry fingerprint: `e96153143493d5a1`
-- Report fingerprint: `26325af75cf8b2d0`
+- Registry fingerprint: `17808868cbd9443d`
+- Report fingerprint: `d7033ba58a490294`
 - Public non-beta registry: 66 components / 159 edges / 12 routes / 12 playbooks / 4 workers
 - Prompt source SHA-256: `7a1b47ce10f1db158810205984f7f956aaa95c0d87f9334080032ac7abb6d8f9`
 - False-positive fixture SHA-256: `5a2e8a3e5cabe5febb4eb9d9d5e5371a8e1c5458360a6b9be1e7e75364f51c25`

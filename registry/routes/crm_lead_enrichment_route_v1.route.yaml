@@ -1,0 +1,76 @@
+id: crm_lead_enrichment_route_v1
+name: CRM Lead Enrichment — Gated Deal Advance
+status: beta
+summary: >
+  Golden-path route for the CRM-native enrichment pipeline: a scheduled read of
+  CRM records, per-record enrichment from a provider, validation, then a human
+  approval gate in front of both writes — the CRM note and the irreversible deal
+  stage change. Exactly the shape compose_workflow_route produces for a natural
+  "read new leads from our CRM every morning, enrich each one, update the deal
+  stage after I approve" goal (live-probed 2026-08-07), not a hand-authored
+  ideal.
+goal_patterns:
+  - (read|reads|pull|pulls) .* (leads?|contacts?|records?) (from|in) (our|the|your) crm .* (enrich|enrichment)
+  - enrich .* (leads?|contacts?) .* (deal|pipeline|opportunity) stage .* (approve|approval)
+components:
+  - scheduled_trigger
+  - crm_record_read
+  - lead_enrichment
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - crm_note_write
+  - deal_stage_update
+  - audit_log
+edges:
+  - crm_record_read__produces__lead_enrichment
+  - crm_record_read__safer_with__auth_failure_handler
+  - lead_enrichment__produces__crm_note_write
+  - lead_enrichment__produces__deal_stage_update
+  - deal_stage_update__requires__human_approval_gate
+  - deal_stage_update__safer_with__auth_failure_handler
+  - audit_log__recommended__deal_stage_update
+known_playbooks_reused: []
+untested_edges: []
+risk_level: high
+confidence: 0.59
+required_evals:
+  - approval enforcement — no deal stage change is applied when approval is absent or denied
+  - idempotency — a duplicated scheduled run does not double-advance a deal
+failure_modes:
+  - enrichment provider returns a confident match for the wrong company on a shared or generic domain
+  - wrong opportunity advanced because the deal identifier match was ambiguous
+  - retry after a transient API failure double-advances a deal with no idempotency key
+  - a single write-scoped credential is used for the read step, removing the read/write boundary the gate depends on
+  - an under-scoped key's 403 is read downstream as "no leads today" and the pipeline goes quietly dead
+evals:
+  - match precision on a labelled set of known leads
+  - shared-domain fixture — gmail.com / agency domains are not confidently matched
+  - scope isolation — the read credential cannot perform a write (403 fixture)
+notes: >
+  MAR-526 slice 1 (MAR-513 gap-list item 3): crm_record_read, lead_enrichment
+  and deal_stage_update all carried live capabilityMatcher vocabulary while
+  backing no route or playbook at all. crm_record_read was the worse half — it
+  is HINT_ONLY and none of its hints ("crm record", "read the crm", "look up",
+  "contact record", "deal record") fire on the natural way a goal states a CRM
+  read, so "reads new leads from our CRM" selected crm_note_write (the CRM
+  WRITE) instead, and "reads contacts from HubSpot" was reported as UNMATCHED
+  demand. This route is the shape the matcher composes once the read vocabulary
+  is complete, probed rather than guessed.
+
+  crm_note_write is in the route because the live matcher puts it there: the
+  bare "crm" token selects it as MAR-242's documented default CRM write, and it
+  is where the enrichment result lands. It sits behind the same approval gate as
+  the stage change, so its presence does not widen the unattended surface.
+  confidence 0.59 is the composed route score observed for the probe goal, not a
+  rounded-up guess.
+
+  Status beta, matching the paired playbook: validate_playbook_candidate
+  certifies the full structural DoD (9 components, 6 failure modes, 6 evals,
+  every component and edge resolvable, explicit risk + approval policy), and
+  only DoD #4/#5 — real Lab sessions and a benchmark prompt — hold it below
+  validated. Beta is still outside the default-loaded registry
+  (DEFAULT_ALLOWED = published/validated), so plan_source stays composed for
+  this goal; the paired golden-journey fixture is this pattern's durable
+  regression gate.
+sources: []
