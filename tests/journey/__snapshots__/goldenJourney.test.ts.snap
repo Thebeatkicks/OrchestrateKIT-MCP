@@ -848,6 +848,71 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > outb
 }
 `;
 
+exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > pr_review_readonly > matches the golden transcript snapshot 1`] = `
+{
+  "final_goal": "[text]",
+  "fixture": "pr_review_readonly",
+  "initial_goal": "[text]",
+  "steps": [
+    {
+      "automation_clearance_level": "L2",
+      "clarifying_question_ids": [],
+      "coverage_label": "full",
+      "enforced_approval_gates": [],
+      "kind": "plan",
+      "plan_source": "playbook",
+      "playbook_id": "pr_review_readonly",
+      "recommended_next_click": {
+        "action": "assistant:attended_dry_run_in_chat",
+        "id": "dry_run_in_chat",
+        "label": "Dry run it attended in this chat now — nothing persists, then build",
+      },
+      "round": 0,
+      "route": [
+        "github_trigger",
+        "schema_validation",
+        "codebase_scan",
+        "pr_summary",
+        "reviewer_notification",
+        "audit_log",
+      ],
+      "route_status": "validated",
+    },
+    {
+      "durable_build_goal": false,
+      "honest_disclosure": true,
+      "kind": "attended_dry_run_option",
+      "present": true,
+      "walking_skeleton_disclosed": false,
+    },
+    {
+      "attended": true,
+      "kind": "dry_run",
+      "nothing_persists": true,
+      "scope_size": "medium",
+    },
+    {
+      "kind": "terminal:prepare_runtime",
+      "manifest_control_surface_ids": [
+        "runtime_provider_control",
+      ],
+      "manifest_interaction_surface_ids": [
+        "approval_inbox_interaction",
+      ],
+      "manifest_runtime_class": "managed_worker",
+      "manifest_runtime_label": "Managed background worker / durable workflow",
+      "manifest_version": 2,
+      "next_achievable_step": "Connect a model provider, then select and prepare the recommended runtime class.",
+      "recommended_setup_availability": "requires setup",
+      "recommended_setup_label": "Prepare runtime and connections",
+      "runtime_class": "managed_durable_background",
+    },
+  ],
+  "terminal": "prepare_runtime",
+  "transcript_version": "orchestratekit.golden_journey.v1",
+}
+`;
+
 exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > readonly_attended_inbox_summary > matches the golden transcript snapshot 1`] = `
 {
   "final_goal": "[text]",

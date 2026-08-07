@@ -16,6 +16,9 @@
  *   • gmail_lead_to_crm → dry run → build_brief (medium, attended runtime)
  *   • invoice_intake_po_match → build_in_assistant (MAR-513: high-risk but attended/
  *     on-demand, mandatory-gate, README starter goal, added 2026-08-07)
+ *   • pr_review_readonly → dry run → prepare_runtime (MAR-513 gap-list item 2: the
+ *     other uncovered README starter goal — webhook-triggered, must-run-while-offline,
+ *     hard no-write guarantee, added 2026-08-07)
  *   • multi_agent_coder_loop → generate_linear_project → linear_issues (large — plan it)
  *
  * MAR-395: the two SMALL fixtures used to terminate on `attended_dry_run`. A
@@ -497,6 +500,46 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
       "High-risk (L2), mandatory-every-invoice gate, but attended/on-demand rather than " +
       "scheduled, so the ⭐ is the no-code assistant surface (build_in_assistant), not " +
       "dry_run_in_chat → build_brief like gmail_lead_to_crm's medium/attended shape.",
+  },
+  {
+    name: "pr_review_readonly",
+    // The second of the two README "Try This First" starter goals the MAR-513
+    // gap-list audit (2026-08-06) found never exercised by this harness. Same
+    // exact goal wording already locked by planWorkflow.test.ts's PR_REVIEW_LOCK_GOAL
+    // and hostingAndMonitoringEvals.test.ts's PR_REVIEW_WEBHOOK, reused here
+    // id-for-id rather than paraphrased.
+    goal:
+      "When a pull request is opened on GitHub, review the diff for problems and post a summary " +
+      "comment. Never edit or commit any code — read-only.",
+    canned_answers: {},
+    coverage_tags: ["validated_playbook", "read_only"],
+    expectations: {
+      initial: {
+        plan_source: "playbook",
+        playbook_id: "pr_review_readonly",
+        recommended_next_click_id: "dry_run_in_chat",
+        route_includes: [
+          "github_trigger",
+          "schema_validation",
+          "codebase_scan",
+          "pr_summary",
+          "reviewer_notification",
+          "audit_log",
+        ],
+        // The hard no-write guarantee (MAR-267): code_editing must never enter this
+        // route, and test_runner requires code_editing per its registry contract.
+        route_excludes: ["code_editing", "test_runner"],
+        enforced_approval_gates: [],
+        automation_clearance_level: "L2",
+        clarifying_questions: [],
+      },
+    },
+    notes:
+      "Webhook-triggered (github_trigger), event-driven but must keep running while the " +
+      "user is offline, so scope assessment lands on medium/durable — same family as " +
+      "competitor_price_monitor's fully_unattended fixture — and the ⭐ dry run resolves " +
+      "to the prepare_runtime terminal, not build_brief. Read-only is the whole point: " +
+      "route_excludes locks the no-write guarantee the MAR-140/MAR-267 lineage exists to hold.",
   },
   {
     name: "multi_agent_coder_loop",
