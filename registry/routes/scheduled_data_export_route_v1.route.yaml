@@ -1,0 +1,58 @@
+id: scheduled_data_export_route_v1
+name: Scheduled Data Export to Spreadsheet/CSV (Unattended)
+status: beta
+summary: >
+  Golden-path route for a scheduled, unattended data-export agent: on a
+  cadence, read from a SQL/warehouse source and persist the result to a
+  spreadsheet, CSV file, or another storage destination — the "save it"
+  sibling of scheduled_data_report_route_v1's "notify" shape. Exactly the
+  shape compose_workflow_route/plan_workflow produce for a natural "every
+  morning, unattended, read rows from our database and save them to a Google
+  Sheet" goal (live-probed 2026-08-07), not a hand-authored ideal.
+goal_patterns:
+  - (read|reads|pull|pulls) .* (rows?|records?) .* (database|db|warehouse) .* (save|store|append|export) .* (sheet|spreadsheet|csv)
+  - (database|db) .* every (morning|day) .* (google sheet|spreadsheet|csv)
+components:
+  - scheduled_trigger
+  - db_read
+  - file_storage
+  - auth_failure_handler
+  - audit_log
+edges:
+  - scheduled_trigger__produces__db_read
+  - db_read__produces__file_storage
+  - file_storage__safer_with__auth_failure_handler
+  - audit_log__recommended__file_storage
+known_playbooks_reused: []
+untested_edges: []
+risk_level: medium
+confidence: 0.73
+required_evals:
+  - idempotency — a duplicated scheduled run does not double-append rows to the destination
+  - no notification-class egress occurs — the only externally-visible effect is the stored data itself
+failure_modes:
+  - A retry after a transient DB or storage error double-writes rows because the append is not idempotent
+  - Schema drift between the source row shape and the destination columns silently drops or misaligns fields
+  - An overwrite (rather than append) destroys prior rows when the write mode is misconfigured
+  - The storage credential is scoped to the wrong sheet/table and the write lands in the wrong destination
+  - Scheduled trigger drift or misfire — no export runs and nobody notices without a heartbeat
+evals:
+  - query correctness on a fixture warehouse (row counts + aggregates match expected)
+  - idempotency test — a duplicate scheduled run does not double-write rows to the destination
+  - field-mapping fidelity on a fixture record set (every source field lands in the right column)
+  - overwrite-vs-append correctness on a destination with existing rows
+  - audit completeness — every run has a record
+notes: >
+  MAR-526 slice 3 (MAR-513 gap-list item 3): file_storage carried live
+  capabilityMatcher vocabulary ("spreadsheet", "google sheet", "csv",
+  "save/store/append it to") while backing no route or playbook at all. It
+  was already reachable — the natural fix is to give it a named destination,
+  not a matcher change. Deliberately paired with db_read rather than the new
+  Stripe/Airtable sources from slice 2, since db_read is the existing,
+  already-covered source (scheduled_data_report_route_v1's own read step) and
+  this route is that playbook's "save it" sibling rather than a new source
+  integration. No human_approval_gate: file_storage writes to the user's OWN
+  storage and is not in safetyAugmenter.ts's ALWAYS_REQUIRES_GATE (unlike the
+  Slack/CRM/calendar writes that are) — automation_clearance stays L3 (an
+  external write defaults to non-autonomous) but nothing enforces a gate.
+sources: []

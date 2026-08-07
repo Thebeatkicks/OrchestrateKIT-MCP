@@ -795,6 +795,40 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
       "stripe_data_report above.",
   },
   {
+    name: "scheduled_data_export",
+    // MAR-526 slice 3 (MAR-513 gap-list item 3): file_storage carried live
+    // capabilityMatcher vocabulary ("spreadsheet", "google sheet", "csv",
+    // "save/store/append it to") while backing no route or playbook at all.
+    // Already reachable — pure golden-path naming, the durable regression
+    // gate for scheduled_data_export_route_v1 (status: beta — still outside
+    // the default-loaded registry, so plan_source stays composed). Paired
+    // with db_read (scheduled_data_report's own source) rather than a
+    // slice-2 source — this route is that playbook's "save it" sibling.
+    goal:
+      "every morning, unattended, read rows from our database and save them to a Google " +
+      "Sheet",
+    canned_answers: {},
+    coverage_tags: [],
+    expectations: {
+      initial: {
+        plan_source: "composed",
+        playbook_id: null,
+        route_includes: ["scheduled_trigger", "db_read", "file_storage", "audit_log"],
+        // A "save it" goal must never be planned as a "notify" goal.
+        route_excludes: ["slack_notification", "human_approval_gate"],
+        enforced_approval_gates: [],
+        automation_clearance_level: "L3",
+        clarifying_questions: [],
+        recommended_next_click_id: "dry_run_in_chat",
+      },
+    },
+    notes:
+      "No enforced gate: file_storage writes to storage the user already owns and is not " +
+      "in safetyAugmenter.ts's ALWAYS_REQUIRES_GATE, unlike the Slack/CRM/calendar writes " +
+      "that are. automation_clearance stays L3 (external writes default to non-autonomous) " +
+      "purely on the write-component heuristic, not a gate requirement (probed 2026-08-07).",
+  },
+  {
     name: "multi_agent_coder_loop",
     goal:
       "Run a coder agent and a reviewer agent in a loop until all tests pass, maximum 5 " +
