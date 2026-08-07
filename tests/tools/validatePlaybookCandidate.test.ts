@@ -111,6 +111,75 @@ sources:
   });
 });
 
+describe("validate_playbook_candidate — MAR-530 atomic-pair certification", () => {
+  const ROUTE_YAML = `id: my_candidate_route
+name: My Candidate Route
+status: beta
+summary: test route
+components: [data_scraper, data_normalizer, deduplication, schema_validation, state_store]
+edges: [data_scraper__produces__data_normalizer, data_normalizer__produces__deduplication]
+risk_level: medium
+confidence: 0.6
+failure_modes: [a, b, c]
+evals: [a, b]
+`;
+  const PAIR_CANDIDATE = FULL_CANDIDATE.replace(
+    'golden_path_route_id: ""',
+    "golden_path_route_id: my_candidate_route",
+  );
+
+  it("with no route_yaml, behaves exactly as before and prompts for the pair", () => {
+    const r = validatePlaybookCandidate(PAIR_CANDIDATE, registry);
+    expect(r.route).toBeUndefined();
+    expect(r.pair_qualifies_for).toBeUndefined();
+    expect(r.summary_markdown).toMatch(/Pass `route_yaml`/);
+  });
+
+  it("certifies the pair when both sides qualify and statuses agree", () => {
+    const pbBeta = PAIR_CANDIDATE.replace("status: draft", "status: beta");
+    const r = validatePlaybookCandidate(pbBeta, registry, ROUTE_YAML);
+    expect(r.route).toBeDefined();
+    expect(r.route!.status).toBe("ok");
+    expect(r.route!.route_id).toBe("my_candidate_route");
+    expect(r.route!.qualifies_for).toBe("beta");
+    expect(r.pair_status_mismatch).toBe(false);
+    expect(r.pair_qualifies_for).toBe("beta");
+  });
+
+  it("refuses with a sentence — never a throw — when the playbook is already ahead of its route", () => {
+    const pbBeta = PAIR_CANDIDATE.replace("status: draft", "status: beta");
+    const laggingRoute = ROUTE_YAML.replace("status: beta", "status: candidate");
+    let r!: ReturnType<typeof validatePlaybookCandidate>;
+    expect(() => {
+      r = validatePlaybookCandidate(pbBeta, registry, laggingRoute);
+    }).not.toThrow();
+    expect(r.pair_status_mismatch).toBe(true);
+    expect(r.blocking.some((b) => b.includes("can go visible without its golden-path route's declared status"))).toBe(true);
+  });
+
+  it("reports the route side broken when route_yaml fails structural checks", () => {
+    const brokenRoute = ROUTE_YAML.replace("state_store]", "ghost_component]");
+    const r = validatePlaybookCandidate(PAIR_CANDIDATE, registry, brokenRoute);
+    expect(r.route!.qualifies_for).toBeNull();
+    expect(r.route!.missing_components).toContain("ghost_component");
+    expect(r.pair_qualifies_for).toBeNull();
+  });
+
+  it("a published playbook against a merely-validated route is NOT a mismatch (both load with zero flags)", () => {
+    const pbPublished = PAIR_CANDIDATE.replace("status: draft", "status: published");
+    const validatedRoute = ROUTE_YAML.replace("status: beta", "status: validated");
+    const r = validatePlaybookCandidate(pbPublished, registry, validatedRoute);
+    expect(r.pair_status_mismatch).toBe(false);
+  });
+
+  it("reports invalid route YAML without throwing", () => {
+    const r = validatePlaybookCandidate(PAIR_CANDIDATE, registry, "::: not : yaml : [");
+    expect(r.route!.status).toBe("invalid_yaml");
+    expect(r.pair_qualifies_for).toBeNull();
+    expect(r.blocking.some((b) => b.includes("route candidate invalid"))).toBe(true);
+  });
+});
+
 describe("validate_playbook_candidate — parse / schema errors", () => {
   it("returns invalid_yaml for non-YAML", () => {
     const r = validatePlaybookCandidate("::: not : yaml : [", registry);

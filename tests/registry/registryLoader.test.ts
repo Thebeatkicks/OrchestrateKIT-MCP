@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import {
   loadRegistry,
   getRegistryStatus,
@@ -88,6 +90,73 @@ describe("getRegistryStatus", () => {
     expect(status.stack_count).toBe(0);
     expect(status.route_count).toBe(0);
     expect(status.playbook_count).toBe(0);
+  });
+});
+
+describe("MAR-530 — loadRegistry is structurally unbreakable by a half-promotion", () => {
+  function makeHalfPromotedFixture(routeId: string): string {
+    const dir = mkdtempSync(join(tmpdir(), "mar530-"));
+    mkdirSync(join(dir, "components"));
+    mkdirSync(join(dir, "routes"));
+    mkdirSync(join(dir, "playbooks"));
+    writeFileSync(
+      join(dir, "components", "comp_a.component.yaml"),
+      "id: comp_a\nname: Comp A\nstatus: published\ncategory: processing\nsummary: test component\nrisk_level: low\n",
+    );
+    writeFileSync(
+      join(dir, "routes", "test_route.route.yaml"),
+      "id: test_route\nname: Test Route\nstatus: candidate\nsummary: test route\nrisk_level: low\nconfidence: 0.5\n",
+    );
+    writeFileSync(
+      join(dir, "playbooks", "test_playbook.playbook.yaml"),
+      [
+        "id: test_playbook",
+        'version: "0.1.0"',
+        "status: beta",
+        "title: Test Playbook",
+        "summary: test playbook",
+        "workflow_type: test",
+        `golden_path_route_id: ${routeId}`,
+        'stack_id: ""',
+        "risk_level: low",
+        "",
+      ].join("\n"),
+    );
+    return dir;
+  }
+
+  it("the exact failure LAB hit: a playbook promoted to beta past its still-candidate route never throws", () => {
+    const dir = makeHalfPromotedFixture("test_route");
+    try {
+      // This is the exact call LAB's promotion-queue session made that threw
+      // `Unknown route id` for every caller — includeBeta:true surfaces the
+      // beta playbook while its route (still candidate) stays invisible.
+      let registry: ReturnType<typeof loadRegistry> | undefined;
+      expect(() => {
+        registry = loadRegistry({ registryDir: dir, includeBeta: true });
+      }).not.toThrow();
+
+      expect(registry!.playbooks).toHaveLength(1);
+      const warning = registry!.validationWarnings.find(
+        (w) => w.entity === "playbook:test_playbook" && w.field === "golden_path_route_id",
+      );
+      expect(warning).toBeDefined();
+      expect(warning!.severity).toBe("warning");
+      expect(warning!.message).toMatch(/not visible at this status filter/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a genuinely unknown route id still throws in strict mode (regression guard)", () => {
+    const dir = makeHalfPromotedFixture("no_such_route_at_all");
+    try {
+      expect(() => loadRegistry({ registryDir: dir, includeBeta: true })).toThrow(
+        RegistryValidationError,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

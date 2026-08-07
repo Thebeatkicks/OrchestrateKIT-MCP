@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "OrchestrateKit MCP",
-  "updated_at": "2026-08-07 (post PR #160 merge: MAR-525 sub-item 2a + MAR-527)",
+  "updated_at": "2026-08-07 (post MAR-530 merge: playbook/route atomic-pair certification)",
   "current_wave": "News Scout routing prerequisites",
   "authority": {
     "implementation": "Git",
@@ -234,6 +234,17 @@
         "command": "pnpm verify",
         "exact_goal_command": "pnpm exec vitest run tests/graph/crmReadVocabulary.test.ts"
       }
+    },
+    {
+      "id": "MAR-530",
+      "lifecycle": "merged",
+      "linear_status": "Done",
+      "commit": "31781fb",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/registry/registryLoader.test.ts tests/registry/registryLint.test.ts tests/tools/validatePlaybookCandidate.test.ts"
+      },
+      "note": "Found by LAB's promotion-queue session (/promote, orchestratelab PR #58) by doing it and reverting: promoting a playbook past its still-candidate golden-path route made loadRegistry({ includeBeta: true }) throw 'Unknown route id' for EVERY caller (not just the one playbook), and validate_playbook_candidate read playbooks only — nothing in the MCP could certify a route at all. Fixed both halves, the atomic-pair option (not 'route inherits playbook certification'), since it is the one that keeps loadRegistry structurally unbreakable by a half-promotion. (1) src/registry/registryValidation.ts + registryAssembly.ts: validateCrossReferences resolves golden_path_route_id against the full unfiltered route set first; a route that exists but is invisible only at the current status filter is now a severity:'warning' entry that never fails a strict load (a genuinely unknown route id is still a hard error). (2) A new CI/lint gate, lintPlaybookRouteStatusOrder in registryLint.ts, makes the drift impossible to land in the first place. It deliberately does NOT use a raw status-rank comparison: src/registry/lifecycleStatus.ts's routeLagsBehindPlaybook models the real constraint that beta/candidate are gated behind two INDEPENDENT loadRegistry flags (includeBeta, includeCandidates) while published/validated need neither — a naive rank check was caught live wrongly flagging 7 real 'published' playbooks pointing at merely-'validated' routes (both load with zero flags, always fine) before it shipped. (3) validate_playbook_candidate gained an optional route_yaml input: supplying it certifies the playbook + route pair together, reporting pair_qualifies_for as the lower of each side's own structural DoD ceiling, and pair_status_mismatch:true with a plain blocking sentence — never a throw — when the playbook's declared status is already ahead of its route's. Locked by tests/registry/registryLoader.test.ts (drives the exact LAB failure plus a regression guard for a truly-unknown route id), tests/registry/registryLint.test.ts (the new gate, including the published/validated non-violation case), and 7 new cases in tests/tools/validatePlaybookCandidate.test.ts. pnpm verify: 2358/2358."
     },
     {
       "id": "MCP-INVOICE-SAFETY-CORPUS",
