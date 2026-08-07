@@ -108,6 +108,28 @@ const EXACTLY_ONCE_SIGNALS = [
 const EXACTLY_ONCE_COMPONENTS = ["deduplication", "state_store"];
 
 /**
+ * Components that pull content in from OUTSIDE the user's own corpus (MAR-525
+ * 2b). Their presence in a route contradicts an owned-corpus-only goal: each
+ * declares outbound fetching of third-party content as its job.
+ * `knowledge_ingestion` is deliberately absent — it is the owned-corpus reader.
+ */
+export const PUBLIC_SOURCE_COMPONENTS = new Set([
+  "source_retrieval",
+  "data_scraper",
+  "page_monitor",
+  "public_feed_fetch",
+]);
+
+/**
+ * Public-source components present in a route — the components that would let
+ * third-party content into an owned corpus. Exported so the Layer-1 card states
+ * the same fact from the same list the constraint check uses (MAR-525 2b).
+ */
+export function publicSourceComponentsIn(componentIds: Iterable<string>): string[] {
+  return [...componentIds].filter((id) => PUBLIC_SOURCE_COMPONENTS.has(id));
+}
+
+/**
  * Quantities are only extracted when the counted thing is a workflow artifact —
  * a fixed noun list, mirroring coverage.ts's demand lexicon, so "one of the
  * options" or "one click" never false-alarm.
@@ -177,6 +199,39 @@ export function computeConstraintCoverage(input: ConstraintCoverageInput): Const
             goal_phrase: phrase,
             status: "structural",
             representation: "route contains no external-write components",
+            acceptance_criterion: null,
+          },
+    );
+  }
+
+  // ── prohibition: owned-corpus only (MAR-525 2b) ──
+  // The guardrail `second_brain_assistant.playbook.yaml` owns but can never
+  // deliver: that playbook is `status: candidate`, so it is invisible to every
+  // live tool and its guardrail list never reaches a plan. The user stated the
+  // scope in the goal, so the check is grounded there instead — and it reports
+  // on the ROUTE, which is what actually decides whether public content can
+  // enter the index.
+  if (signals.owned_corpus.detected) {
+    const phrase = signals.owned_corpus.trigger ?? "owned corpus";
+    const leaked = publicSourceComponentsIn(executionOrder);
+    checks.push(
+      leaked.length > 0
+        ? {
+            constraint_class: "prohibition",
+            goal_phrase: phrase,
+            status: "violated",
+            representation:
+              `route ingests from public/external sources: ${leaked.join(", ")} — ` +
+              `the owned-corpus-only guardrail this goal implies is NOT carried`,
+            acceptance_criterion: null,
+          }
+        : {
+            constraint_class: "prohibition",
+            goal_phrase: phrase,
+            status: "structural",
+            representation:
+              `route contains no public-source component (${[...PUBLIC_SOURCE_COMPONENTS].sort().join(", ")}) — ` +
+              `the index stays scoped to your own content`,
             acceptance_criterion: null,
           },
     );
