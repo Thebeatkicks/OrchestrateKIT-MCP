@@ -559,6 +559,58 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > gold
 }
 `;
 
+exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > invoice_intake_po_match > matches the golden transcript snapshot 1`] = `
+{
+  "final_goal": "[text]",
+  "fixture": "invoice_intake_po_match",
+  "initial_goal": "[text]",
+  "steps": [
+    {
+      "automation_clearance_level": "L2",
+      "clarifying_question_ids": [],
+      "coverage_label": "full",
+      "enforced_approval_gates": [
+        "human_approval_gate",
+      ],
+      "kind": "plan",
+      "plan_source": "playbook",
+      "playbook_id": "invoice_intake_po_match",
+      "recommended_next_click": {
+        "action": "assistant:choose_assistant_surface",
+        "id": "build_in_assistant",
+        "label": "[text]",
+      },
+      "round": 0,
+      "route": [
+        "pdf_extraction",
+        "email_read",
+        "schema_validation",
+        "threshold_router",
+        "data_normalizer",
+        "reviewer_notification",
+        "human_approval_gate",
+        "audit_log",
+      ],
+      "route_status": "validated",
+    },
+    {
+      "durable_build_goal": false,
+      "honest_disclosure": true,
+      "kind": "attended_dry_run_option",
+      "present": true,
+      "walking_skeleton_disclosed": false,
+    },
+    {
+      "action": "assistant:choose_assistant_surface",
+      "kind": "terminal:assistant_surface",
+      "named_surface": null,
+    },
+  ],
+  "terminal": "assistant_surface",
+  "transcript_version": "orchestratekit.golden_journey.v1",
+}
+`;
+
 exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > multi_agent_coder_loop > matches the golden transcript snapshot 1`] = `
 {
   "final_goal": "[text]",

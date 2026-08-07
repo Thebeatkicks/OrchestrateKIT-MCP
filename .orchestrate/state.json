@@ -171,14 +171,25 @@
     },
     {
       "id": "MAR-519",
-      "lifecycle": "planned",
+      "lifecycle": "merged",
       "linear_status": "In Review",
       "commit": "213b8b7",
       "proof": {
         "command": "pnpm verify",
         "exact_goal_command": "pnpm exec vitest run tests/tools/dashBrokerRoundTrip.test.ts"
       },
-      "note": "NOT YET MERGED — implemented on branch 000henrik/mar-519-mcp-export_build_brief-emits-agent_domtask_inputs-from (commit 213b8b7), pushed, PR #157 open. MAR-507 (merged to orchestratedash via PR #60) built DASH's Inputs panel, which renders `agent_dom.task_inputs`; MAR-499 pinned the `taskInputRole` schema block but left whether the MCP should emit it as a separate, not-yet-filed question, and DASH's own tests/inputs-panel.test.ts recorded that no shipped example does. export_build_brief now takes an optional `task_inputs` array (same explicit-signal pattern as MAR-463's cadence_enabled / MAR-494's dash_broker_available — no inference from goal text), validated at the tool boundary against DASH's pinned taskInputRole shape, threaded through buildAgentManifest into agent_dom.task_inputs. Honest absence: the field is omitted (not an empty array) when a plan declares no roles, which is every plan today — no registry component/playbook/route declares a local-file-input role yet, so this ships the emission mechanism and proves the round trip, not a new golden journey. tests/tools/dashBrokerRoundTrip.test.ts gains 3 assertions validated against the pinned DASH schema: honest absence, the golden case (DASH's own customer_brief/price_list DECLARING fixture from tests/inputs-panel.test.ts, byte-identical ids/labels), and a malformed id failing that same pinned schema as a second backstop beyond the zod boundary. pnpm verify: 2274/2274 (2271 baseline + 3 new). Still needed before promotion to merged: PR review and merge."
+      "note": "Merged to master via PR #157 (db9bf81). MAR-507 (merged to orchestratedash via PR #60) built DASH's Inputs panel, which renders `agent_dom.task_inputs`; MAR-499 pinned the `taskInputRole` schema block but left whether the MCP should emit it as a separate, not-yet-filed question, and DASH's own tests/inputs-panel.test.ts recorded that no shipped example does. export_build_brief now takes an optional `task_inputs` array (same explicit-signal pattern as MAR-463's cadence_enabled / MAR-494's dash_broker_available — no inference from goal text), validated at the tool boundary against DASH's pinned taskInputRole shape, threaded through buildAgentManifest into agent_dom.task_inputs. Honest absence: the field is omitted (not an empty array) when a plan declares no roles, which is every plan today — no registry component/playbook/route declares a local-file-input role yet, so this ships the emission mechanism and proves the round trip, not a new golden journey. tests/tools/dashBrokerRoundTrip.test.ts gains 3 assertions validated against the pinned DASH schema: honest absence, the golden case (DASH's own customer_brief/price_list DECLARING fixture from tests/inputs-panel.test.ts, byte-identical ids/labels), and a malformed id failing that same pinned schema as a second backstop beyond the zod boundary. `linear_status` still reads In Review pending Henrik moving MAR-519 to Done; lifecycle promotion to `merged` does not wait on that. Not yet `proven`: no installed-DASH-workspace screenshot exists showing the Inputs panel actually rendering these roles, since no shipped goal emits them yet."
+    },
+    {
+      "id": "MAR-521",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "commit": "3f72d8e",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/journey"
+      },
+      "note": "NOT YET MERGED — implemented on branch 000henrik/mar-513-invoice-intake-golden-journey-fixture (commit 3f72d8e), pushed, PR #158 open. MAR-513's gap-list audit (code-grounded, 2026-08-06) found `invoice_intake_po_match` — its own playbook notes call it 'the most-repeated shape in lab.db', promoted via MAR-302 from 4+ real OrchestrateLab sessions — had never been exercised by the MAR-387 golden-journey harness despite being one of the four README 'Try This First' starter goals. Added the fixture: routes deterministically to invoice_intake_po_match_route_v1 with zero clarifying questions, terminal `build_in_assistant` (the MAR-386 scope assessor reads no-scheduled-trigger + mandatory-per-invoice-gate as attended/on-demand regardless of the L2 risk level — recorded as the expected shape, not a bug). `pr_review_readonly` (the other uncovered starter goal from the same gap-list item) is separate follow-up scope. pnpm verify: 2278/2278 (2274 baseline + 4 new). Still needed before promotion to merged: PR review and merge."
     },
     {
       "id": "MCP-INVOICE-SAFETY-CORPUS",
