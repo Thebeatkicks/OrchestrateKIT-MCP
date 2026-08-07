@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "OrchestrateKit MCP",
-  "updated_at": "2026-08-07 (MAR-538/539 read-vs-write class fixes; MAR-540 filed with assessment)",
+  "updated_at": "2026-08-07 (MAR-538/539 read-vs-write class fixes; MAR-540/541 filed with assessments)",
   "current_wave": "Read-vs-write class correctness (MAR-526 follow-ups)",
   "authority": {
     "implementation": "Git",
@@ -292,6 +292,12 @@
       "lifecycle": "planned",
       "linear_status": "Backlog",
       "note": "Approval provenance, from LAB's day-one signal intake (MAR-532): five separate partial plans all matched human_approval_gate + audit_log and all missed binding an approval to the exact action executed. ASSESSED AS BOTH a component gap and an edge gap. Mechanism = component gap: the gate's declared output is 'approved | rejected | timeout', a decision with no identity attached to what was decided, and audit_log takes the executed payload with no reference to an approved one, so no consumer can compare them; the drift failure modes appear in neither component's failure_modes (the gate records the HUMAN failing to read, not the system executing something else). Invisibility = edge gap, and it is concrete: of 163 real edges (164 files, one of which is _template.edge.yaml), human_approval_gate has ZERO outgoing edges (13 point at it, none leave it), and its own YAML's recommended_with: audit_log exists in the component file and NOT in the graph - route composition orders these components but never relates them. Sequence is not provenance. Worse than 'no component': a goal explicitly asking for 'an audit trail proving what I approved is exactly what ran' returns approval '✅ enforced' with unmatched_demand [] - a green check no fixture backs. NOT IMPLEMENTED deliberately: the hint-reachable shape is one slice but serves only users who already know to ask, leaving the default overclaim untouched and entrenching the wrong shape; the correct augmenter-injected shape changes every gated plan's route and ripples through the suite, EXPECTED_RELEASE_FINGERPRINT, the MAR-426 manifest fixture, benchmarks/public/*, the golden journeys and the DASH round-trip fixtures - not one slice. Filed with a six-point acceptance bar rather than half-shipped, per MAR-526's own slicing precedent."
+    },
+    {
+      "id": "MAR-541",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "note": "The read/write class is still live for two more bare provider tokens, found by generalising MAR-538's fix rather than waiting for a report. Live-probed on the MAR-538/539 branch (e176b29), so NOT regressions from that fix. (a) Stripe: stripe_data_read is read-only and stripe/billing/subscription map to it unconditionally, so 'when a customer asks for a refund, issue the refund in Stripe after I approve it' composes stripe_data_read -> job_queue -> human_approval_gate -> auth_failure_handler. A goal asking to MOVE MONEY gets a plan whose only Stripe step reads data, plus an approval gate guarding an action that is not in the route at all - enforced_approval_gates satisfied with nothing to approve, which is MAR-540's overclaim reached from another direction. No Stripe-write component exists, so unlike Airtable this cannot be solved by re-pointing the hint: either add one, or report the write as unmatched_demand. (b) Postgres/MySQL: MAR-254 fixed the generic half and left the provider half. Its own comment says 'Provider names are domain-unique; the generic forms are direction-carrying PHRASES', treating uniqueness as sufficient when unique is not directional. 'write the processed rows into our Postgres database every night' composes scheduled_trigger -> db_read -> audit_log; 'insert each new record into the mysql table' composes db_read -> schema_validation -> audit_log. Read controls for both providers are correct and must stay correct. Acceptance bar leads with SWEEP not patch: every KEYWORD_HINTS entry whose target component has permissions.write: [] is audited for direction and the result recorded including the entries judged safe - MAR-254, MAR-526 slice 1 and MAR-538 each fixed one token in isolation and nothing ever swept the table. Filed Urgent."
     }
   ]
 }
