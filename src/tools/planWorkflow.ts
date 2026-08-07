@@ -54,6 +54,7 @@ import {
 import { computeCoverage, type Coverage } from "../graph/coverage.js";
 import {
   computeConstraintCoverage,
+  publicSourceComponentsIn,
   type ConstraintCoverage,
   type ConstraintStatus,
 } from "../graph/constraintCoverage.js";
@@ -5276,6 +5277,23 @@ function buildGuidedPlanMarkdown(
     cardSafeguard = `approval is required but not enforced — add ${safety.approval_gates_required.join(", ")} before building`;
   } else {
     cardSafeguard = `no approval gate required for this plan`;
+  }
+  // MAR-525 2b: an owned-corpus goal ("my notes", "second brain") carries ONE
+  // defining safety property — the index is built from the user's own content
+  // and nothing else. `second_brain_assistant.playbook.yaml` states it as its
+  // first guardrail but is `status: candidate`, so it never loads and the
+  // guardrail never reaches a plan; before this the goal was routed to the
+  // public-web `research_agent_citations` and the card said nothing at all
+  // (live probe 2026-08-07). Say it on the card either way: confirmed when the
+  // route honours it, named as a gap when the route still fetches public
+  // content. Never a silent drop.
+  const cardOwnedCorpus = detectConstraintSignals(goal).owned_corpus;
+  if (cardOwnedCorpus.detected) {
+    const publicSources = publicSourceComponentsIn(cardRouteIds);
+    cardSafeguard +=
+      publicSources.length > 0
+        ? `; ⚠️ owned-corpus-only NOT carried — this route ingests public content (${publicSources.join(", ")}) although your goal named your own corpus ("${cardOwnedCorpus.trigger}")`
+        : `; the index stays scoped to your own content ("${cardOwnedCorpus.trigger}") — no public URLs or third-party pages are ingested`;
   }
   const cardUncovered = coverage.unmatched_demand.length;
   const cardAutoText =

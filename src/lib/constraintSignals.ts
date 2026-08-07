@@ -187,6 +187,11 @@ export type ConstraintSignals = {
   attended_required: ConstraintSignal;
   draft_only: ConstraintSignal;
   no_outbound: ConstraintSignal;
+  /**
+   * MAR-525 2b: the goal names an OWNED corpus (notes, docs, vault), so the
+   * index must not be built from public web content.
+   */
+  owned_corpus: ConstraintSignal;
   /** unattended + attended both present — surface both with a ⚠️ marker. */
   conflict: boolean;
 };
@@ -302,6 +307,92 @@ const READ_ONLY_SIGNALS = [
 ];
 
 /**
+ * OWNED-CORPUS scope phrases (MAR-525 sub-item 2b).
+ *
+ * A "second brain" goal states, in the goal itself, that the corpus the agent
+ * answers from is the user's OWN content — notes, docs, a vault, a project
+ * wiki. `second_brain_assistant.playbook.yaml` calls that its defining
+ * guardrail ("Scope the vector index to the OWNED corpus only — never ingest
+ * public URLs or third-party content into the personal knowledge base"), but
+ * that playbook is `status: candidate` and therefore invisible to every live
+ * MCP tool (`DEFAULT_ALLOWED = published/validated`, see registryAssembly.ts),
+ * and promoting it needs OrchestrateLab session evidence an MCP-only change
+ * cannot manufacture. So the guardrail is detected from the GOAL — where the
+ * user actually stated it — instead of from a playbook that never loads.
+ *
+ * Deliberately POSSESSIVE and narrow, and deliberately NOT the matcher's
+ * `knowledge` domain table: that table also contains mechanism words ("vector
+ * store", "embeddings", "semantic search", "rag pipeline") which say nothing
+ * about who owns the corpus — a RAG pipeline over public documentation is a
+ * perfectly ordinary goal. Only phrases that name the user's own content count.
+ */
+export const OWNED_CORPUS_SIGNALS = [
+  "second brain",
+  "project brain",
+  "my notes",
+  "my own notes",
+  "personal notes",
+  "my docs",
+  "my documents",
+  "my own documents",
+  "personal knowledge",
+  "personal wiki",
+  "my wiki",
+  "notes vault",
+  "note vault",
+  "my knowledge base",
+  "own corpus",
+  "owned corpus",
+  "obsidian",
+  "zettelkasten",
+];
+
+/**
+ * AFFIRMATIVE public/external-source intent. Present alongside an owned-corpus
+ * phrase, the goal is asking for both ("answer from my notes and search the
+ * web for context") — an owned-corpus-ONLY guardrail is then not what the user
+ * asked for, so it is not claimed and the external fetch is not dropped. Same
+ * escape-hatch shape as the matcher's CRM_WRITE_INTENT.
+ *
+ * Every phrase is affirmative on purpose. "Never index public web pages" is a
+ * second-brain goal RESTATING the guardrail, not asking for the web — a
+ * mention-based list would have read it backwards and disabled the very
+ * guardrail the sentence asks for (caught live while probing, 2026-08-07).
+ * `occursUnnegated` covers the remaining direct-negation shapes ("never search
+ * the web").
+ */
+export const EXTERNAL_SOURCE_INTENT_SIGNALS = [
+  "search the web",
+  "searches the web",
+  "web search",
+  "search online",
+  "on the internet",
+  "from the internet",
+  "across the internet",
+  "online sources",
+  "external sources",
+  "third-party sources",
+  "third party sources",
+];
+
+/**
+ * True when the goal names an owned corpus AND does not also ask for public /
+ * external sources. Shared by the matcher (which drops the external-fetch
+ * component `source_retrieval` on such a goal) and by constraint coverage
+ * (which reports whether the route honours the scope). Pure string logic.
+ */
+export function hasOwnedCorpusScope(goal: string): boolean {
+  return firstOwnedCorpusSignal(goal) !== null;
+}
+
+/** The owned-corpus phrase the goal used, or null — the compiler shows its work. */
+export function firstOwnedCorpusSignal(goal: string): string | null {
+  const g = goal.toLowerCase();
+  if (EXTERNAL_SOURCE_INTENT_SIGNALS.some((s) => occursUnnegated(g, s, true))) return null;
+  return firstMatch(g, OWNED_CORPUS_SIGNALS);
+}
+
+/**
  * Detect the goal's explicit constraints with their trigger phrases (MAR-255).
  * Uses the planner's own predicates for unattended/attended (single source),
  * plus brief-side phrase tables for the classes the planner tracks implicitly
@@ -314,6 +405,9 @@ export function detectConstraintSignals(goal: string): ConstraintSignals {
   const readOnlyTrigger = firstMatch(g, READ_ONLY_SIGNALS);
   const draftOnlyTrigger = firstMatch(g, DRAFT_ONLY_SIGNALS);
   const noOutboundTrigger = firstMatch(g, NO_OUTBOUND_SIGNALS);
+  // MAR-525 2b: read from the RAW goal — an owned-corpus phrase is a scope
+  // statement, never part of an approval-gated prohibition clause.
+  const ownedCorpusTrigger = firstOwnedCorpusSignal(rawGoal);
 
   const unattended = hasUnattendedWaiver(rawGoal);
   const unattendedTrigger = unattended
@@ -345,6 +439,7 @@ export function detectConstraintSignals(goal: string): ConstraintSignals {
     attended_required: { detected: attended, trigger: attendedTrigger },
     draft_only: { detected: draftOnlyTrigger !== null, trigger: draftOnlyTrigger },
     no_outbound: { detected: noOutboundTrigger !== null, trigger: noOutboundTrigger },
+    owned_corpus: { detected: ownedCorpusTrigger !== null, trigger: ownedCorpusTrigger },
     conflict,
   };
 }

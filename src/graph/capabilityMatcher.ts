@@ -1,6 +1,9 @@
 import type { Component } from "../registry/componentSchema.js";
 import type { Edge } from "../registry/edgeSchema.js";
-import { neutralizeApprovalGatedProhibitions } from "../lib/constraintSignals.js";
+import {
+  hasOwnedCorpusScope,
+  neutralizeApprovalGatedProhibitions,
+} from "../lib/constraintSignals.js";
 
 /**
  * Which scoring pass produced a match token (MAR-250). "hint" and "segment" are
@@ -369,6 +372,15 @@ const DOMAIN_KEYWORDS: Record<Exclude<Domain, "generic_orchestration">, string[]
     "obsidian",
     "zettelkasten",
     "personal wiki",
+    // MAR-525 2b: the remaining OWNED_CORPUS_SIGNALS phrases. "vault" alone
+    // still never triggers (bank vault) — only "notes vault"/"note vault" do.
+    "my own notes",
+    "my own documents",
+    "my wiki",
+    "notes vault",
+    "note vault",
+    "own corpus",
+    "owned corpus",
     "ask my",
     "ask questions about my",
     "questions about my notes",
@@ -1003,6 +1015,42 @@ function suppressCrmNoteForDataReport(
 }
 
 /**
+ * MAR-525 2b: source_retrieval-on-a-second-brain suppression.
+ *
+ * `source_retrieval` is the research domain's EXTERNAL fetch — its own registry
+ * entry declares "outbound HTTP requests to external sources" as a side effect
+ * and lists only `research_agent_citations` / `research_route_v1` as its tested
+ * homes. It is deliberately NOT a `knowledge` component (COMPONENT_DOMAINS
+ * above): on an owned-corpus goal the retrieval step is `vector_store`.
+ *
+ * It leaks in anyway, because a second-brain goal almost always states the
+ * ATTRIBUTION half of the pattern — "cites the source note for every claim" —
+ * and "cite"/"citation" is a `research` DOMAIN_KEYWORD. The knowledge and
+ * research domains then co-exist, source_retrieval becomes eligible, and the
+ * composed candidate ends up shaped exactly like `research_agent_citations`.
+ * Live-probed 2026-08-07: "answers questions from my personal notes vault and
+ * cites the source note for every claim" returned `plan_source: "playbook"`,
+ * `research_agent_citations`, route `user_goal_intake → source_retrieval →
+ * source_ranking → research_synthesis → citation_checker →
+ * source_freshness_check → state_store` — a public-web research pipeline for a
+ * private notes vault, with safety_review "pass" and risk 0.
+ *
+ * Drop source_retrieval ONLY in that shape: the goal names an OWNED corpus and
+ * does NOT also ask for public/external sources (`hasOwnedCorpusScope` carries
+ * both halves). A genuine research goal never names the user's own notes, so
+ * MAR-217's behaviour is untouched everywhere outside this shape; a mixed goal
+ * ("my notes AND the public web") keeps source_retrieval, because the escape
+ * tokens in EXTERNAL_SOURCE_INTENT_SIGNALS clear the owned-corpus signal.
+ */
+function suppressSourceRetrievalForOwnedCorpus(
+  goalLower: string,
+  domainAllowed: Set<string>,
+): void {
+  if (!hasOwnedCorpusScope(goalLower)) return;
+  domainAllowed.delete("source_retrieval");
+}
+
+/**
  * MAR-303: "in the loop" idiom suppression for loop_controller. The idiom "no
  * human in the loop" / "human in the loop" / "keep me in the loop" is an
  * attended/unattended phrase — the OPPOSITE of asking for iteration — but the
@@ -1325,8 +1373,26 @@ const KEYWORD_HINTS: Record<string, string[]> = {
   "my docs": ["knowledge_ingestion", "vector_store"],
   "my documents": ["knowledge_ingestion", "vector_store"],
   "personal knowledge": ["knowledge_ingestion", "vector_store"],
+  // MAR-525 2b: the rest of OWNED_CORPUS_SIGNALS. Every phrase on that list
+  // suppresses the external fetch `source_retrieval`, so every phrase must also
+  // select the OWNED-corpus retrieval path — otherwise the suppression leaves a
+  // route that ranks and synthesises with nothing to read (observed live before
+  // these entries existed). `tests/graph/ownedCorpusScope.test.ts` asserts the
+  // invariant for the whole list, so the two tables cannot drift apart.
+  "my own notes": ["knowledge_ingestion", "vector_store"],
+  "personal notes": ["knowledge_ingestion", "vector_store"],
+  "my own documents": ["knowledge_ingestion", "vector_store"],
+  "personal wiki": ["knowledge_ingestion", "vector_store"],
+  "my wiki": ["knowledge_ingestion", "vector_store"],
+  "notes vault": ["knowledge_ingestion", "vector_store"],
+  "note vault": ["knowledge_ingestion", "vector_store"],
+  "own corpus": ["knowledge_ingestion", "vector_store"],
+  "owned corpus": ["knowledge_ingestion", "vector_store"],
   obsidian: ["knowledge_ingestion", "vector_store", "note_linking"],
-  zettelkasten: ["knowledge_ingestion", "note_linking"],
+  // MAR-525 2b: vector_store added — a zettelkasten is an owned corpus you
+  // QUERY, and this phrase now suppresses the external fetch, so ingest +
+  // backlinks alone would leave nothing to retrieve from.
+  zettelkasten: ["knowledge_ingestion", "note_linking", "vector_store"],
   "retrieval augmented": ["vector_store", "research_synthesis"],
   "retrieval-augmented": ["vector_store", "research_synthesis"],
   "rag over": ["vector_store", "research_synthesis"],
@@ -2108,6 +2174,10 @@ export function matchCapabilities(
   // MAR-303: a database-source report goal with no CRM-write intent drops the
   // crm_note_write false-positive ("sales" data subject → crm_sales domain).
   suppressCrmNoteForDataReport(goalLower, domainAllowed);
+  // MAR-525 2b: a goal that names the user's OWN corpus drops the external
+  // fetch source_retrieval, which "cite"/"citation" (a research DOMAIN_KEYWORD
+  // a second-brain goal states by nature) otherwise makes eligible.
+  suppressSourceRetrievalForOwnedCorpus(goalLower, domainAllowed);
   // MAR-303: the "in the loop" idiom (with no real iteration/fan-out signal)
   // drops the loop_controller false-positive on unattended report/monitor goals.
   suppressLoopControllerForIdiom(goalLower, domainAllowed);

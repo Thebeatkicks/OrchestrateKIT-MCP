@@ -1006,6 +1006,55 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > read
 }
 `;
 
+exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > second_brain_owned_corpus > matches the golden transcript snapshot 1`] = `
+{
+  "final_goal": "[text]",
+  "fixture": "second_brain_owned_corpus",
+  "initial_goal": "[text]",
+  "steps": [
+    {
+      "automation_clearance_level": "L1",
+      "clarifying_question_ids": [],
+      "coverage_label": "partial",
+      "enforced_approval_gates": [],
+      "kind": "plan",
+      "plan_source": "composed",
+      "playbook_id": null,
+      "recommended_next_click": {
+        "action": "assistant:choose_assistant_surface",
+        "id": "build_in_assistant",
+        "label": "[text]",
+      },
+      "round": 0,
+      "route": [
+        "knowledge_ingestion",
+        "citation_checker",
+        "source_freshness_check",
+        "vector_store",
+        "source_ranking",
+        "research_synthesis",
+        "audit_log",
+      ],
+      "route_status": "candidate",
+    },
+    {
+      "durable_build_goal": false,
+      "honest_disclosure": true,
+      "kind": "attended_dry_run_option",
+      "present": true,
+      "walking_skeleton_disclosed": false,
+    },
+    {
+      "action": "assistant:choose_assistant_surface",
+      "kind": "terminal:assistant_surface",
+      "named_surface": null,
+    },
+  ],
+  "terminal": "assistant_surface",
+  "transcript_version": "orchestratekit.golden_journey.v1",
+}
+`;
+
 exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > vague_email_assistant > matches the golden transcript snapshot 1`] = `
 {
   "final_goal": "[text]",

@@ -1078,6 +1078,13 @@ function s0Constraints(goal: string, approvalAdvisory: { reason: string } | null
     entries.push(`attended — a human reviews before actions _(trigger: "${sig.attended_required.trigger}")_`);
   if (sig.unattended.detected && !sig.attended_required.detected)
     entries.push(`unattended — no human in the loop _(trigger: "${sig.unattended.trigger}")_`);
+  // MAR-525 2b: the owned-corpus guardrail `second_brain_assistant` owns but,
+  // being status: candidate, can never deliver — read from the goal instead.
+  if (sig.owned_corpus.detected)
+    entries.push(
+      `owned-corpus only — index built from your own content, never public URLs or ` +
+        `third-party pages _(trigger: "${sig.owned_corpus.trigger}")_`,
+    );
 
   if (entries.length === 0) {
     // Only when it's actually true (MAR-255 edge case: keep today's line).

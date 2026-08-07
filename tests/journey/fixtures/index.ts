@@ -21,6 +21,9 @@
  *     hard no-write guarantee, added 2026-08-07)
  *   • chat_triggered_assistant → build_in_assistant (MAR-513 gap-list item 2a: route
  *     coverage for a candidate playbook that had no route file at all, added 2026-08-07)
+ *   • second_brain_owned_corpus → build_in_assistant (MAR-525 sub-item 2b: the goal
+ *     shape that used to be shadowed by research_agent_citations, dropping the
+ *     owned-corpus-only guardrail, added 2026-08-07)
  *   • multi_agent_coder_loop → generate_linear_project → linear_issues (large — plan it)
  *
  * MAR-395: the two SMALL fixtures used to terminate on `attended_dry_run`. A
@@ -599,6 +602,58 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
       "build_in_assistant terminal. Candidate playbook status means this stays plan_source " +
       "composed rather than playbook — see chat_triggered_assistant_route_v1's notes for why " +
       "that is the honest, live-probed shape rather than a guess.",
+  },
+  {
+    name: "second_brain_owned_corpus",
+    // MAR-525 sub-item 2b. This goal is second_brain_assistant's OWN shape and
+    // it used to come back as `plan_source: "playbook"` /
+    // `research_agent_citations` — a public-web research pipeline
+    // (user_goal_intake → source_retrieval → source_ranking →
+    // research_synthesis → citation_checker → source_freshness_check →
+    // state_store) with safety_review "pass" and risk 0, silently dropping the
+    // owned-corpus-only guardrail the goal implies (live probe 2026-08-07).
+    //
+    // second_brain_assistant itself stays `status: candidate` and therefore
+    // invisible (DEFAULT_ALLOWED = published/validated; promotion needs
+    // OrchestrateLab evidence per validate_playbook_candidate DoD #4), so
+    // plan_source stays "composed" — but the goal now composes the OWNED
+    // corpus path and the card states the guardrail either way.
+    goal:
+      "Build an assistant that answers questions from my personal notes vault and cites " +
+      "the source note for every claim.",
+    canned_answers: {},
+    coverage_tags: [],
+    expectations: {
+      initial: {
+        plan_source: "composed",
+        playbook_id: null,
+        route_includes: [
+          "knowledge_ingestion",
+          "vector_store",
+          "source_ranking",
+          "research_synthesis",
+          "audit_log",
+        ],
+        // The whole point: no public/external fetch may enter a route whose
+        // goal named the user's own corpus.
+        route_excludes: [
+          "source_retrieval",
+          "data_scraper",
+          "page_monitor",
+          "public_feed_fetch",
+        ],
+        enforced_approval_gates: [],
+        automation_clearance_level: "L1",
+        clarifying_questions: [],
+        recommended_next_click_id: "build_in_assistant",
+      },
+    },
+    notes:
+      "Small/attended knowledge-query scope, so the ⭐ is the no-code assistant surface. " +
+      "The durable regression gate for MAR-525 2b: the shadowing (research_agent_citations " +
+      "winning a personal-notes goal) is locked out by plan_source/playbook_id, and the " +
+      "owned-corpus guardrail by route_excludes. Behavioural assertions on the card wording " +
+      "live in tests/graph/ownedCorpusScope.test.ts.",
   },
   {
     name: "multi_agent_coder_loop",
