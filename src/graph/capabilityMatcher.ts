@@ -1772,6 +1772,12 @@ const SCHEDULE_TIME_PATTERNS: RegExp[] = [
   /\bat\s+\d{1,2}(:\d{2})?\s*(am|pm)\b/, // "at 8am", "at 8:30 pm"
   /\bat\s+\d{1,2}:\d{2}\b/, // "at 18:00"
   /\b(weekly|biweekly|monthly)\s+on\b/, // "weekly on Tuesdays"
+  // MAR-526 slice 4: "every morning"/"every hour" reached scheduled_trigger via
+  // their phrase hints, but "every 5 minutes" (the natural cadence for an
+  // uptime/metric/log monitor, not a daily digest) did not — the live monitor
+  // goal composed with no trigger at all. Requires an explicit number + unit so
+  // "every second counts" or a bare "minutes" never fires.
+  /\b(every|each)\s+\d+\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b/,
 ];
 
 /** True when the goal states a recurring weekday/clock schedule (MAR-253). */

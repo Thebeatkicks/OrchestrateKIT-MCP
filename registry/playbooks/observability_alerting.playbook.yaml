@@ -1,0 +1,124 @@
+id: observability_alerting
+version: "0.1.0"
+status: beta
+title: Infra/App Observability Alerting (Unattended)
+summary: >
+  Blueprint for an unattended observability agent: on a short interval, poll
+  service uptime, a metrics-provider threshold, and application logs for
+  anomalies, and post a Slack alert on any signal. Distinct from
+  competitor_price_monitor's page-watch shape — this is infra/app monitoring
+  across three provider classes, not a web-page diff; competitor_price_monitor's
+  own avoid_when already points users here. Beta blueprint: the component
+  chain is the shape the live matcher composes for this goal (probed
+  2026-08-07, not hand-authored), and validate_playbook_candidate certifies
+  the full structural Definition of Done — but DoD #4 (2-3 real Lab sessions)
+  and #5 (a benchmark prompt) need evidence a stateless MCP session cannot
+  see, so it stops at beta.
+workflow_type: monitoring
+risk_level: low
+golden_path_route_id: observability_alerting_route_v1
+stack_id: default_orchestratekit_stack
+
+components:
+  - scheduled_trigger
+  - uptime_check
+  - metric_threshold_monitor
+  - log_monitor
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - slack_notification
+  - audit_log
+
+edges:
+  - scheduled_trigger__compatible__uptime_check
+  - uptime_check__produces__slack_notification
+  - uptime_check__safer_with__auth_failure_handler
+  - metric_threshold_monitor__produces__slack_notification
+  - metric_threshold_monitor__safer_with__auth_failure_handler
+  - log_monitor__produces__slack_notification
+  - log_monitor__safer_with__auth_failure_handler
+
+best_for:
+  - a single unattended alerting agent covering uptime, a key metric threshold, and log anomalies across one or more providers
+  - keeping an on-call/engineering Slack channel current without a human checking three separate dashboards
+  - a "day-one observability" setup before a team has built out dedicated alerting infrastructure
+
+avoid_when:
+  - the target is a competitor's or any third-party WEB PAGE rather than your own infra/app — that is competitor_price_monitor's page-watch shape, not this one
+  - the alert must be approved before it is shared — that is an attended pattern; this one posts directly and keeps the gate as an advisory only
+  - only one signal type is needed and the other two providers add setup cost with no value — build a narrower single-source route instead
+
+recommended_architecture:
+  pattern: Schedule → poll uptime/metric/logs in parallel → post to Slack per breach (advisory-gated, credential-resilient)
+  why: >
+    Every step is a read-only poll except the final Slack post, which is
+    notification-class egress (blast radius: an internal message).
+    human_approval_gate is present because slack_notification is
+    unconditionally gated by policy, but the goal's explicit "unattended"
+    phrasing keeps it advisory rather than enforced (MAR-132) — the workflow
+    still cannot exceed "poll and alert" even if prompted to, since each
+    provider credential is read-only and the only write is the Slack post.
+
+llm_driven_steps: []
+
+deterministic_steps:
+  - scheduled_trigger
+  - uptime_check
+  - metric_threshold_monitor
+  - log_monitor
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - slack_notification
+  - audit_log
+
+permissions:
+  read:
+    - uptime provider API (read-only)
+    - metrics provider query API (read-only)
+    - log provider query API (read-only)
+  write:
+    - Slack channel post (notification-class egress only)
+    - audit log store
+  approval_required_for: []
+
+guardrails:
+  - Use a consecutive-failure or debounce threshold on every signal — a single transient blip must not fire a false alert
+  - Scope every provider credential read-only — the workflow's only write is the Slack post
+  - auth_failure_handler must escalate a scoped-out or expired provider credential before the run is marked successful — an error must never read as "all clear"
+  - Keep the approval gate as a visible advisory even though the goal waives enforcement — never silently drop the recommendation
+  - Redact PII/secrets from log lines before they reach the alert message
+  - Log every run (which signals were checked, breach/no-breach, post id) to audit_log with a timestamp
+
+failure_modes:
+  - A single transient probe failure fires a false "down"/breach alert without a consecutive-failure or debounce threshold
+  - The metric or log query has a gap (no data points, or a timed-out query on a log volume spike) and a real breach or anomaly is silently missed
+  - Flapping — a metric oscillating around its threshold fires repeated alerts without state-based debouncing
+  - A monitoring-provider credential is scoped out or expired and the resulting error is read as "all clear" instead of a monitor failure
+  - Scheduled trigger drift or misfire — no polling cycle runs and nobody notices without a heartbeat
+  - PII or secrets in log lines are forwarded to the alert channel without redaction
+
+evals:
+  - down/breach/anomaly detection recall on fixture series with known events for each of the three signal types
+  - false-positive rate on stable/noisy-but-in-bounds fixtures (debounce correctness)
+  - auth failure detection rate across all three provider credentials
+  - egress delivery — the Slack post lands on every triggering run
+  - audit completeness — every run has a record
+
+implementation_steps:
+  - "Step 1: Register a scheduled_trigger for the polling interval (e.g. every 5 minutes)."
+  - "Step 2: Implement uptime_check against the target endpoint(s) with an N-consecutive-failure threshold before firing."
+  - "Step 3: Implement metric_threshold_monitor against the metrics provider with an explicit threshold and comparison operator, debounced against flapping."
+  - "Step 4: Implement log_monitor against the log provider with a pattern/anomaly rule and a redaction pass on matched lines."
+  - "Step 5: Implement schema_validation on every emitted event (availability, breach, log-match) before it reaches the alert."
+  - "Step 6: Post via slack_notification to the on-call/engineering channel. This is the only egress — notification-class, internal."
+  - "Step 7: Wrap every provider poll and the Slack post with auth_failure_handler — a credential failure escalates and the run is NOT marked successful."
+  - "Step 8: Keep human_approval_gate as a visible advisory in the run record even though the goal's unattended phrasing waives enforcement."
+  - "Step 9: Write an audit_log record per run: which signals were checked, breach/no-breach per signal, Slack message id, timestamp."
+
+sources:
+  - title: Slack API — chat.postMessage
+    url: https://api.slack.com/methods/chat.postMessage
+    source_type: official_docs
+    last_checked: "2026-08-07"

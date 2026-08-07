@@ -1,0 +1,80 @@
+id: observability_alerting_route_v1
+name: Infra/App Observability Alerting (Unattended, Advisory Gate)
+status: beta
+summary: >
+  Golden-path route for a scheduled, unattended observability agent: on a
+  short interval, poll service uptime, a metrics-provider threshold, and
+  application logs for anomalies, and post a Slack alert on any signal.
+  Distinct from competitor_price_monitor's page-watch shape — this is
+  infra/app monitoring across three provider classes (uptime, metrics, logs),
+  not a web-page diff. Exactly the shape compose_workflow_route/plan_workflow
+  produce for a natural "every 5 minutes, unattended, monitor our service
+  uptime, error rate metric, and logs for anomalies, and alert Slack" goal
+  (live-probed 2026-08-07), not a hand-authored ideal.
+goal_patterns:
+  - every \d+\s*(seconds?|minutes?|hours?) .* (monitor|check) .* (uptime|metric|log) .* (alert|notify) .* slack
+  - monitor .* (uptime|error rate|logs) .* unattended .* slack
+components:
+  - scheduled_trigger
+  - uptime_check
+  - metric_threshold_monitor
+  - log_monitor
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - slack_notification
+  - audit_log
+edges:
+  - scheduled_trigger__compatible__uptime_check
+  - uptime_check__produces__slack_notification
+  - uptime_check__safer_with__auth_failure_handler
+  - metric_threshold_monitor__produces__slack_notification
+  - metric_threshold_monitor__safer_with__auth_failure_handler
+  - log_monitor__produces__slack_notification
+  - log_monitor__safer_with__auth_failure_handler
+known_playbooks_reused: []
+untested_edges: []
+risk_level: low
+confidence: 0.71
+required_evals:
+  - approval advisory surfaces on every run — the route never silently drops the recommendation just because the goal waived attended review
+  - no external write occurs — the only egress is a notification-class Slack post
+failure_modes:
+  - A single transient probe failure fires a false "down"/breach alert without a consecutive-failure or debounce threshold
+  - The metric or log query has a gap (no data points, or a timed-out query on a log volume spike) and a real breach or anomaly is silently missed
+  - Flapping — a metric oscillating around its threshold fires repeated alerts without state-based debouncing
+  - A monitoring-provider credential is scoped out or expired and the resulting error is read as "all clear" instead of a monitor failure
+  - Scheduled trigger drift or misfire — no polling cycle runs and nobody notices without a heartbeat
+evals:
+  - down/breach/anomaly detection recall on fixture series with known events for each of the three signal types
+  - false-positive rate on stable/noisy-but-in-bounds fixtures (debounce correctness)
+  - auth failure detection rate across all three provider credentials
+  - egress delivery — the Slack post lands on every triggering run
+  - audit completeness — every run has a record
+notes: >
+  MAR-526 slice 4 (MAR-513 gap-list item 3): uptime_check, metric_threshold_monitor
+  and log_monitor all carried live capabilityMatcher vocabulary (MAR-243's own
+  HINT_ONLY + monitoring-domain gating, already correct) while backing no route
+  or playbook at all — competitor_price_monitor's own avoid_when already points
+  users here for non-page monitoring, a documented, expected gap. All three
+  components were independently reachable via their existing hints; the one
+  real gap found while probing was structural, not component-specific:
+  scheduled_trigger's phrase hints covered "every morning"/"every hour" but not
+  "every 5 minutes" — the natural cadence for this kind of monitor, not a daily
+  digest — so a live monitoring goal composed with NO trigger at all. Fixed in
+  src/graph/capabilityMatcher.ts (SCHEDULE_TIME_PATTERNS) with a
+  number+unit-gated regex, tested in tests/graph/capabilityMatcher.test.ts.
+
+  All edges reused from the existing registry (uptime_check/metric_threshold_monitor/
+  log_monitor__produces__slack_notification and their __safer_with__auth_failure_handler
+  pairs, plus scheduled_trigger__compatible__uptime_check) — no new edges needed.
+  human_approval_gate rides in because slack_notification is unconditionally in
+  ALWAYS_REQUIRES_GATE (src/graph/safetyAugmenter.ts); the goal's "unattended"
+  phrasing downgrades it to an advisory rather than removing it.
+  reviewer_notification also composes on this goal (generic "alert" word-overlap
+  noise) — deliberately excluded, same class as chat_triggered_assistant_route_v1
+  and airtable_data_report_route_v1. Combining three provider connections drives
+  plan_workflow's scope_assessment to "large" ("4 connections to wire up"),
+  recommending the Linear-project path rather than a single dry run — an
+  accurate reflection of real setup cost, not a routing bug.
+sources: []

@@ -829,6 +829,50 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
       "purely on the write-component heuristic, not a gate requirement (probed 2026-08-07).",
   },
   {
+    name: "observability_alerting",
+    // MAR-526 slice 4 (MAR-513 gap-list item 3): uptime_check,
+    // metric_threshold_monitor and log_monitor all carried live
+    // capabilityMatcher vocabulary while backing no route or playbook at
+    // all — competitor_price_monitor's own avoid_when already points users
+    // here for non-page monitoring. All three were already independently
+    // reachable; the durable regression gate for observability_alerting_route_v1
+    // (status: beta — still outside the default-loaded registry, so
+    // plan_source stays composed).
+    goal:
+      "every 5 minutes, unattended, monitor our service uptime, error rate metric, and " +
+      "logs for anomalies, and alert Slack",
+    canned_answers: {},
+    coverage_tags: [],
+    expectations: {
+      initial: {
+        plan_source: "composed",
+        playbook_id: null,
+        route_includes: [
+          "scheduled_trigger",
+          "uptime_check",
+          "metric_threshold_monitor",
+          "log_monitor",
+          "human_approval_gate",
+          "slack_notification",
+          "audit_log",
+        ],
+        // Infra/app monitoring, never a web-page watch.
+        route_excludes: ["page_monitor"],
+        enforced_approval_gates: [],
+        automation_clearance_level: "L2",
+        clarifying_questions: [],
+        recommended_next_click_id: "generate_linear_project",
+      },
+    },
+    notes:
+      "Combining three provider connections (uptime, metrics, logs) drives scope_assessment " +
+      "to 'large' ('4 connections to wire up') — the ⭐ is generating the plan as Linear " +
+      "issues, not a single dry run, an accurate reflection of real setup cost rather than " +
+      "a routing bug. reviewer_notification also rides in on this goal (generic 'alert' " +
+      "word-overlap noise) — deliberately NOT in route_excludes because the live matcher " +
+      "puts it there (probed 2026-08-07), same class as chat_triggered_assistant_route_v1.",
+  },
+  {
     name: "multi_agent_coder_loop",
     goal:
       "Run a coder agent and a reviewer agent in a loop until all tests pass, maximum 5 " +
