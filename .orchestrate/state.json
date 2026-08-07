@@ -227,8 +227,8 @@
     {
       "id": "MAR-526",
       "lifecycle": "planned",
-      "linear_status": "Backlog",
-      "note": "Filed, not attempted this session: 14 components (registry-verified 2026-08-07; MAR-513's original comment said 15, likely an off-by-one) with live capabilityMatcher.ts vocabulary but no backing route/playbook, across 5 unrelated domains (CRM, data sources, file_storage export, observability, orchestration primitives/egress). Sliced into 5 follow-up sub-items on the issue itself. MAR-513 gap-list item 3."
+      "linear_status": "In Progress",
+      "note": "MAR-513 gap-list item 3: 14 components with live capabilityMatcher vocabulary but no backing route/playbook, sliced into 5 sub-items on the issue. SLICE 1 (CRM: crm_record_read, lead_enrichment, deal_stage_update) is done on this branch. crm_record_read was not merely uncovered but UNREACHABLE: HINT_ONLY, and none of its hints ('crm record', 'read the crm', 'look up', 'contact record', 'deal record') fire on the natural way a goal states a CRM read, so 'reads new leads from our CRM' selected crm_note_write (the CRM WRITE) for the read step and 'reads contacts from HubSpot' was reported as unmatched demand. Added CRM-naming read hints plus the missing 'pipedrive' domain keyword (hubspot/salesforce were already there), then live-probed the composed shape and named it as registry/playbooks/crm_lead_enrichment.playbook.yaml + registry/routes/crm_lead_enrichment_route_v1.route.yaml. Status beta, which is what validate_playbook_candidate actually certifies (full structural DoD; only #4 Lab sessions and #5 benchmark prompt are unverifiable) — beta is still outside DEFAULT_ALLOWED, so plan_source stays composed. Slices 2-5 (data sources, file_storage, observability, orchestration/egress) not attempted."
     },
     {
       "id": "MCP-INVOICE-SAFETY-CORPUS",

@@ -24,6 +24,9 @@
  *   • second_brain_owned_corpus → build_in_assistant (MAR-525 sub-item 2b: the goal
  *     shape that used to be shadowed by research_agent_citations, dropping the
  *     owned-corpus-only guardrail, added 2026-08-07)
+ *   • crm_lead_enrichment → dry run → prepare_runtime (MAR-526 slice 1: CRM read →
+ *     enrich → gated deal advance, the first route to carry crm_record_read /
+ *     lead_enrichment / deal_stage_update, added 2026-08-07)
  *   • multi_agent_coder_loop → generate_linear_project → linear_issues (large — plan it)
  *
  * MAR-395: the two SMALL fixtures used to terminate on `attended_dry_run`. A
@@ -659,6 +662,53 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
       "winning a personal-notes goal) is locked out by plan_source/playbook_id, and the " +
       "owned-corpus guardrail by route_excludes. Behavioural assertions on the card wording " +
       "live in tests/graph/ownedCorpusScope.test.ts.",
+  },
+  {
+    name: "crm_lead_enrichment",
+    // MAR-526 slice 1 (MAR-513 gap-list item 3): crm_record_read,
+    // lead_enrichment and deal_stage_update all carried live matcher
+    // vocabulary while backing no route or playbook at all. crm_record_read
+    // was worse than uncovered — it was UNREACHABLE: HINT_ONLY, and none of
+    // its hints fired on the natural way a goal states a CRM read, so this
+    // goal used to select crm_note_write (the CRM WRITE) for its read step.
+    // This fixture pins the shape the matcher composes now that the read
+    // vocabulary is complete, and is the durable gate for
+    // crm_lead_enrichment_route_v1 (status: beta — still outside the
+    // default-loaded registry, so plan_source stays composed).
+    goal:
+      "Build an agent that reads new leads from our CRM every morning, enriches each one " +
+      "with company size and industry from an enrichment provider, and updates the deal " +
+      "stage after I approve.",
+    canned_answers: {},
+    coverage_tags: [],
+    expectations: {
+      initial: {
+        plan_source: "composed",
+        playbook_id: null,
+        route_includes: [
+          "scheduled_trigger",
+          "crm_record_read",
+          "lead_enrichment",
+          "human_approval_gate",
+          "deal_stage_update",
+          "audit_log",
+        ],
+        // The read step must be the CRM READ, never a page scrape or a
+        // mailbox read — those are other playbooks' shapes.
+        route_excludes: ["data_scraper", "email_read", "page_monitor"],
+        enforced_approval_gates: ["human_approval_gate"],
+        automation_clearance_level: "L3",
+        clarifying_questions: [],
+        recommended_next_click_id: "dry_run_in_chat",
+      },
+    },
+    notes:
+      "Medium scope with an irreversible external write, so the gate is enforced and " +
+      "clearance is L3 — deal_stage_update declares `requires: human_approval_gate` in its " +
+      "own component YAML, so the gate is a registry fact rather than a heuristic. " +
+      "crm_note_write rides in as MAR-242's documented default CRM write and sits behind " +
+      "the same gate; it is deliberately not in route_excludes because the live matcher " +
+      "puts it there (probed 2026-08-07).",
   },
   {
     name: "multi_agent_coder_loop",
