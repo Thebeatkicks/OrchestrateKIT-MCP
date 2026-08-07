@@ -22,6 +22,7 @@
  */
 
 import {
+  containsPhrase,
   detectConstraintSignals,
   outboundComponentsExcludedByConstraints,
 } from "../lib/constraintSignals.js";
@@ -146,8 +147,14 @@ const QUANTITY_RE = new RegExp(
 
 const DURATION_RE = /\b\d+[-\s]?(?:minutes?|mins?|hours?|hrs?|days?)\b/gi;
 
+/**
+ * Whole-word phrase match, shared with the §0 detector. Bare `includes` let a
+ * phrase sitting inside a longer word count as if the user had written it —
+ * "unread" matched inside "unreadable", and the read-only class fired on
+ * "thread only" (th·"read only"). See constraintSignals.containsPhrase.
+ */
 function firstMatch(goalLower: string, phrases: string[]): string | null {
-  for (const p of phrases) if (goalLower.includes(p)) return p;
+  for (const p of phrases) if (containsPhrase(goalLower, p)) return p;
   return null;
 }
 

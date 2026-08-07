@@ -571,7 +571,12 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
       "classifies it, performs the action, and posts the result in the same thread only after " +
       "I approve it.",
     canned_answers: {},
-    coverage_tags: ["read_only"],
+    // NOT read_only: this goal posts to Discord. It carried the `read_only`
+    // tag because "the same THREAD ONLY after I approve" substring-matched
+    // "read only" and fired the read-only prohibition — the false positive this
+    // fixture's own goal wording exposed. `readonly_attended_inbox_summary` and
+    // `pr_review_readonly` carry the tag for real.
+    coverage_tags: [],
     expectations: {
       initial: {
         plan_source: "composed",
