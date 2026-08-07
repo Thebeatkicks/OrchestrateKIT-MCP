@@ -711,6 +711,90 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
       "puts it there (probed 2026-08-07).",
   },
   {
+    name: "stripe_data_report",
+    // MAR-526 slice 2 (MAR-513 gap-list item 3): stripe_data_read carried
+    // live capabilityMatcher vocabulary while backing no route or playbook
+    // at all. Unlike crm_record_read (slice 1) it was already REACHABLE —
+    // this goal correctly selects it, not data_scraper or nothing — so this
+    // fixture is pure golden-path naming, the durable regression gate for
+    // stripe_data_report_route_v1 (status: beta — still outside the
+    // default-loaded registry, so plan_source stays composed).
+    goal:
+      "every morning, unattended, pull churn data from Stripe and post an at-risk-accounts " +
+      "summary to Slack",
+    canned_answers: {},
+    coverage_tags: [],
+    expectations: {
+      initial: {
+        plan_source: "composed",
+        playbook_id: null,
+        route_includes: [
+          "scheduled_trigger",
+          "stripe_data_read",
+          "data_normalizer",
+          "human_approval_gate",
+          "slack_notification",
+          "audit_log",
+        ],
+        // The read step must be the Stripe-specific integration, never the
+        // generic scraper — that is a different, less-honest golden path.
+        route_excludes: ["data_scraper"],
+        enforced_approval_gates: [],
+        automation_clearance_level: "L2",
+        clarifying_questions: [],
+        recommended_next_click_id: "dry_run_in_chat",
+      },
+    },
+    notes:
+      "human_approval_gate rides in because slack_notification is unconditionally in " +
+      "ALWAYS_REQUIRES_GATE (src/graph/safetyAugmenter.ts); the goal's explicit " +
+      "'unattended' phrasing downgrades it to an advisory (MAR-132) rather than removing " +
+      "it, which is why enforced_approval_gates stays empty even though the component is " +
+      "present on the route (probed 2026-08-07).",
+  },
+  {
+    name: "airtable_data_report",
+    // MAR-526 slice 2 (MAR-513 gap-list item 3): airtable_lookup, same
+    // finding as stripe_data_read above — already reachable, just unnamed.
+    // The durable regression gate for airtable_data_report_route_v1 (status:
+    // beta — still outside the default-loaded registry, so plan_source
+    // stays composed).
+    goal:
+      "every morning, unattended, read records from our Airtable base and post a summary " +
+      "report to Slack",
+    canned_answers: {},
+    coverage_tags: [],
+    expectations: {
+      initial: {
+        plan_source: "composed",
+        playbook_id: null,
+        route_includes: [
+          "scheduled_trigger",
+          "airtable_lookup",
+          "report_generation",
+          "human_approval_gate",
+          "slack_notification",
+          "audit_log",
+        ],
+        // The read step must be the Airtable-specific integration, never the
+        // generic scraper — that is a different, less-honest golden path.
+        route_excludes: ["data_scraper"],
+        enforced_approval_gates: [],
+        automation_clearance_level: "L2",
+        clarifying_questions: [],
+        recommended_next_click_id: "dry_run_in_chat",
+      },
+    },
+    notes:
+      "threshold_router and reviewer_notification also ride in on this goal — compose " +
+      "noise from airtable_lookup's own summary text overlapping threshold_router's " +
+      "'routing logic' vocabulary (matcher-flagged as word-overlap only, the same class " +
+      "chat_triggered_assistant_route_v1 already documents) — deliberately NOT in " +
+      "route_excludes because the live matcher puts them there (probed 2026-08-07). " +
+      "human_approval_gate is advisory-only for the same MAR-132 reason as " +
+      "stripe_data_report above.",
+  },
+  {
     name: "scheduled_data_export",
     // MAR-526 slice 3 (MAR-513 gap-list item 3): file_storage carried live
     // capabilityMatcher vocabulary ("spreadsheet", "google sheet", "csv",

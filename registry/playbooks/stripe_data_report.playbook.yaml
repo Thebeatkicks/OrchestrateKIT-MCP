@@ -1,0 +1,121 @@
+id: stripe_data_report
+version: "0.1.0"
+status: beta
+title: Scheduled Stripe Data Report to Slack (Unattended)
+summary: >
+  Blueprint for an unattended Stripe reporting agent: on a schedule, read
+  billing/subscription/churn data from Stripe, normalise Stripe's field
+  shapes (cents → decimal, snake_case → business fields), and post a summary
+  to an internal Slack channel. Beta blueprint: the component chain is the
+  shape the live matcher composes for this goal (probed 2026-08-07, not
+  hand-authored), and validate_playbook_candidate certifies the full
+  structural Definition of Done — but DoD #4 (2-3 real Lab sessions) and #5
+  (a benchmark prompt) need evidence a stateless MCP session cannot see, so
+  it stops at beta.
+workflow_type: data-etl
+risk_level: medium
+golden_path_route_id: stripe_data_report_route_v1
+stack_id: default_orchestratekit_stack
+
+components:
+  - scheduled_trigger
+  - stripe_data_read
+  - schema_validation
+  - data_normalizer
+  - human_approval_gate
+  - auth_failure_handler
+  - slack_notification
+  - audit_log
+
+edges:
+  - stripe_data_read__produces__data_normalizer
+  - stripe_data_read__produces__slack_notification
+  - stripe_data_read__safer_with__auth_failure_handler
+  - audit_log__recommended__slack_notification
+  - slack_notification__safer_with__auth_failure_handler
+
+best_for:
+  - a recurring internal Stripe digest — churn, billing, or subscription metrics posted to Slack on a schedule
+  - unattended revenue reporting where the only output is an internal message, not a customer-facing artifact
+  - keeping a finance/growth channel current without a human pulling the Stripe dashboard by hand
+
+avoid_when:
+  - the goal writes anything back to Stripe (refunds, subscription changes) — this playbook is read-only
+  - the report must be approved before it is shared — that is an attended pattern; this one posts directly and keeps the gate as an advisory only
+  - the source is a generic HTTP page or CSV rather than the Stripe API — use data_scraper
+
+recommended_architecture:
+  pattern: Schedule → read Stripe → normalise → validate → post to Slack (advisory-gated, credential-resilient)
+  why: >
+    Every step is a read or a local normalise/render except the final Slack
+    post, which is notification-class egress (blast radius: an internal
+    message). human_approval_gate is present because slack_notification is
+    unconditionally gated by policy, but the goal's explicit "unattended"
+    phrasing keeps it advisory rather than enforced (MAR-132) — the workflow
+    still cannot exceed "read Stripe and report" even if prompted to, since
+    the only credential it needs is a read-only Stripe key plus a Slack post
+    token.
+
+llm_driven_steps: []
+
+deterministic_steps:
+  - scheduled_trigger
+  - stripe_data_read
+  - schema_validation
+  - data_normalizer
+  - human_approval_gate
+  - auth_failure_handler
+  - slack_notification
+  - audit_log
+
+permissions:
+  read:
+    - Stripe API (read-only restricted key scoped to the requested resource)
+  write:
+    - Slack channel post (notification-class egress only)
+    - audit log store
+  approval_required_for: []
+
+guardrails:
+  - Use a Stripe RESTRICTED key with only the read permissions the report needs — never a full-access secret key
+  - Normalise cents to decimal and resolve currency explicitly before any arithmetic or display
+  - Reject schema drift in the Stripe response shape — an unexpected field layout is an error, not something to coerce
+  - auth_failure_handler must escalate a scoped-out or expired Stripe key before the run is marked successful — a 403 must never read as "no data"
+  - Keep the approval gate as a visible advisory even though the goal waives enforcement — never silently drop the recommendation
+  - Log every run (query window, validation outcome, post id) to audit_log with a timestamp
+  - Never expose raw Stripe customer/subscription IDs in the audit log without anonymisation
+
+failure_modes:
+  - Stripe API rate limit or a transient error returns a partial result and the report ships looking complete
+  - Stripe amounts are in the smallest currency unit (cents) — a missed conversion inflates every figure 100x
+  - Multiple Stripe accounts or currencies are silently summed as if single-currency
+  - The Stripe key still authenticates but lacks the specific read scope for the requested resource, and the 403 is read downstream as "no data this period"
+  - Scheduled trigger drift or misfire — no report ships and nobody notices without a heartbeat
+  - Approval gate advisory is ignored often enough that it becomes a rubber stamp instead of a real check before wider rollout
+
+evals:
+  - churn/billing/subscription retrieval accuracy against a fixture Stripe account
+  - currency normalization correctness (cents → decimal, multi-currency handling)
+  - schema-drift rejection on an altered Stripe response shape
+  - egress delivery — the Slack post lands on every successful run
+  - audit completeness — every run has a record
+
+implementation_steps:
+  - "Step 1: Register a scheduled_trigger for the cadence (e.g. daily 8am). Pin the timezone."
+  - "Step 2: Implement stripe_data_read with a RESTRICTED read-only key scoped to the requested resource (e.g. subscriptions, charges)."
+  - "Step 3: Implement data_normalizer to convert cents to decimal, resolve currency, and rename Stripe's snake_case fields to business-domain names."
+  - "Step 4: Implement schema_validation on the normalised result — reject empty/partial results and unexpected shapes before anything renders."
+  - "Step 5: Post via slack_notification to the internal channel. This is the only egress — notification-class, internal."
+  - "Step 6: Wrap the Stripe read and the Slack post with auth_failure_handler — a credential failure escalates and the run is NOT marked successful."
+  - "Step 7: Keep human_approval_gate as a visible advisory in the run record even though the goal's unattended phrasing waives enforcement."
+  - "Step 8: Write an audit_log record per run: query window, validation outcome, Slack message id, timestamp."
+
+sources:
+  - title: Stripe API — Subscriptions
+    url: https://docs.stripe.com/api/subscriptions
+    source_type: official_docs
+    last_checked: "2026-08-07"
+  - title: Stripe API — Restricted API keys
+    url: https://docs.stripe.com/keys#limit-access
+    source_type: official_docs
+    last_checked: "2026-08-07"

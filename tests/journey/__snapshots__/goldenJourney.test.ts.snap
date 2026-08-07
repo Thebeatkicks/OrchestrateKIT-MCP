@@ -1,5 +1,74 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > airtable_data_report > matches the golden transcript snapshot 1`] = `
+{
+  "final_goal": "[text]",
+  "fixture": "airtable_data_report",
+  "initial_goal": "[text]",
+  "steps": [
+    {
+      "automation_clearance_level": "L2",
+      "clarifying_question_ids": [],
+      "coverage_label": "partial",
+      "enforced_approval_gates": [],
+      "kind": "plan",
+      "plan_source": "composed",
+      "playbook_id": null,
+      "recommended_next_click": {
+        "action": "assistant:attended_dry_run_in_chat",
+        "id": "dry_run_in_chat",
+        "label": "Dry run it attended in this chat now — nothing persists, then build",
+      },
+      "round": 0,
+      "route": [
+        "scheduled_trigger",
+        "airtable_lookup",
+        "schema_validation",
+        "threshold_router",
+        "report_generation",
+        "reviewer_notification",
+        "auth_failure_handler",
+        "human_approval_gate",
+        "slack_notification",
+        "audit_log",
+      ],
+      "route_status": "candidate",
+    },
+    {
+      "durable_build_goal": false,
+      "honest_disclosure": true,
+      "kind": "attended_dry_run_option",
+      "present": true,
+      "walking_skeleton_disclosed": false,
+    },
+    {
+      "attended": true,
+      "kind": "dry_run",
+      "nothing_persists": true,
+      "scope_size": "medium",
+    },
+    {
+      "kind": "terminal:prepare_runtime",
+      "manifest_control_surface_ids": [
+        "runtime_provider_control",
+      ],
+      "manifest_interaction_surface_ids": [
+        "slack_interaction",
+      ],
+      "manifest_runtime_class": "scheduled_job",
+      "manifest_runtime_label": "Managed scheduled job",
+      "manifest_version": 2,
+      "next_achievable_step": "[text]",
+      "recommended_setup_availability": "requires setup",
+      "recommended_setup_label": "Prepare runtime and connections",
+      "runtime_class": "managed_scheduled_job",
+    },
+  ],
+  "terminal": "prepare_runtime",
+  "transcript_version": "orchestratekit.golden_journey.v1",
+}
+`;
+
 exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > chat_triggered_assistant > matches the golden transcript snapshot 1`] = `
 {
   "final_goal": "[text]",
@@ -1185,6 +1254,73 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > seco
     },
   ],
   "terminal": "assistant_surface",
+  "transcript_version": "orchestratekit.golden_journey.v1",
+}
+`;
+
+exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > stripe_data_report > matches the golden transcript snapshot 1`] = `
+{
+  "final_goal": "[text]",
+  "fixture": "stripe_data_report",
+  "initial_goal": "[text]",
+  "steps": [
+    {
+      "automation_clearance_level": "L2",
+      "clarifying_question_ids": [],
+      "coverage_label": "full",
+      "enforced_approval_gates": [],
+      "kind": "plan",
+      "plan_source": "composed",
+      "playbook_id": null,
+      "recommended_next_click": {
+        "action": "assistant:attended_dry_run_in_chat",
+        "id": "dry_run_in_chat",
+        "label": "Dry run it attended in this chat now — nothing persists, then build",
+      },
+      "round": 0,
+      "route": [
+        "scheduled_trigger",
+        "stripe_data_read",
+        "schema_validation",
+        "data_normalizer",
+        "human_approval_gate",
+        "auth_failure_handler",
+        "slack_notification",
+        "audit_log",
+      ],
+      "route_status": "candidate",
+    },
+    {
+      "durable_build_goal": false,
+      "honest_disclosure": true,
+      "kind": "attended_dry_run_option",
+      "present": true,
+      "walking_skeleton_disclosed": false,
+    },
+    {
+      "attended": true,
+      "kind": "dry_run",
+      "nothing_persists": true,
+      "scope_size": "medium",
+    },
+    {
+      "kind": "terminal:prepare_runtime",
+      "manifest_control_surface_ids": [
+        "runtime_provider_control",
+      ],
+      "manifest_interaction_surface_ids": [
+        "slack_interaction",
+      ],
+      "manifest_runtime_class": "scheduled_job",
+      "manifest_runtime_label": "Managed scheduled job",
+      "manifest_version": 2,
+      "next_achievable_step": "[text]",
+      "recommended_setup_availability": "requires setup",
+      "recommended_setup_label": "Prepare runtime and connections",
+      "runtime_class": "managed_scheduled_job",
+    },
+  ],
+  "terminal": "prepare_runtime",
   "transcript_version": "orchestratekit.golden_journey.v1",
 }
 `;

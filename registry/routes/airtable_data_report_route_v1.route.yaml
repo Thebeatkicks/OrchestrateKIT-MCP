@@ -1,0 +1,73 @@
+id: airtable_data_report_route_v1
+name: Scheduled Airtable Data Report to Slack (Unattended, Advisory Gate)
+status: beta
+summary: >
+  Golden-path route for a scheduled, unattended Airtable reporting agent: on a
+  cadence, read records from an Airtable base, render a summary report, and
+  post it to an internal Slack channel. Exactly the core shape
+  compose_workflow_route/plan_workflow produce for a natural "every morning,
+  unattended, read records from our Airtable base and post a summary report
+  to Slack" goal (live-probed 2026-08-07), not a hand-authored ideal.
+  threshold_router and reviewer_notification are deliberately EXCLUDED —
+  compose noise from airtable_lookup's own summary text overlapping
+  threshold_router's "routing logic" vocabulary (flagged by the matcher
+  itself as "matched on generic word overlap only"), the same class of
+  documented exclusion chat_triggered_assistant_route_v1 already uses.
+goal_patterns:
+  - (read|reads|pull|pulls) .* (records?|rows?) .* airtable .* (summary|report)
+  - airtable .* every (morning|day) .* (summary|report) .* slack
+components:
+  - scheduled_trigger
+  - airtable_lookup
+  - report_generation
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - slack_notification
+  - audit_log
+edges:
+  - airtable_lookup__produces__report_generation
+  - airtable_lookup__safer_with__auth_failure_handler
+  - report_generation__produces__slack_notification
+  - audit_log__recommended__slack_notification
+  - slack_notification__safer_with__auth_failure_handler
+known_playbooks_reused: []
+untested_edges: []
+risk_level: low
+confidence: 0.71
+required_evals:
+  - approval advisory surfaces on every run — the route never silently drops the recommendation just because the goal waived attended review
+  - no external write occurs — the only egress is a notification-class Slack post
+failure_modes:
+  - Airtable API rate limit (5 req/s per base) truncates a large base mid-read and the report ships looking complete
+  - A filter formula syntax error returns an empty result set instead of an error, and an empty-but-valid report ships
+  - Field names with spaces or special characters break downstream key access in report rendering
+  - The Airtable token still authenticates but lacks the requested base's scope, and the 401/403 is read downstream as "no records this period"
+  - Scheduled trigger drift or misfire — no report ships and nobody notices without a heartbeat
+evals:
+  - record retrieval accuracy and pagination correctness against a fixture base
+  - filter formula correctness across representative query patterns
+  - schema-drift rejection on an altered field shape
+  - egress delivery — the Slack post lands on every successful run
+  - audit completeness — every run has a record
+notes: >
+  MAR-526 slice 2 (MAR-513 gap-list item 3): airtable_lookup carried live
+  capabilityMatcher vocabulary while backing no route or playbook at all.
+  Like stripe_data_read, airtable_lookup was already reachable — "read
+  records from our Airtable base and post a summary report to Slack"
+  correctly selects it — so this slice is pure golden-path naming, not a
+  matcher fix. README.md and docs/CONNECTION_SETUP.md market Airtable as
+  connectable via the generic data_scraper component; that stays accurate
+  (data_scraper remains a valid generic fallback) and is unchanged — this
+  route gives the SPECIFIC Airtable integration a named, certified home.
+
+  New edge airtable_lookup__produces__report_generation mirrors the existing
+  db_read__produces__report_generation edge (scheduled_data_report_route_v1)
+  for a SaaS-API source instead of a SQL/warehouse one — the same "read →
+  render" relationship, different source component.
+
+  human_approval_gate is present for the same policy reason as
+  stripe_data_report_route_v1 (slack_notification is unconditionally in
+  ALWAYS_REQUIRES_GATE); the goal's "unattended" phrasing downgrades it to
+  advisory rather than removing it.
+sources: []
