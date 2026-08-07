@@ -1,0 +1,12 @@
+id: airtable_lookup__produces__report_generation
+from: airtable_lookup
+to: report_generation
+relation: produces_input_for
+status: published
+reason: The record set read from an Airtable base is exactly the structured data a report template renders — mirrors db_read__produces__report_generation for a SaaS-API source instead of a SQL/warehouse one.
+severity: medium
+notes: Validate the record set (schema_validation) before rendering — a partial page (rate-limited or a bad filter formula) renders a confident-looking report with missing rows, which is worse than a loud failure.
+conditions: []
+tested: true
+test_refs:
+  - "route:airtable_data_report_route_v1"

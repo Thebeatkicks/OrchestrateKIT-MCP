@@ -1,0 +1,73 @@
+id: stripe_data_report_route_v1
+name: Scheduled Stripe Data Report to Slack (Unattended, Advisory Gate)
+status: beta
+summary: >
+  Golden-path route for a scheduled, unattended Stripe reporting agent: on a
+  cadence, read billing/subscription/churn data from Stripe, normalise
+  Stripe's field shapes, and post a summary to an internal Slack channel.
+  Exactly the shape compose_workflow_route/plan_workflow produce for a natural
+  "every morning, unattended, pull churn data from Stripe and post a summary
+  to Slack" goal (live-probed 2026-08-07), not a hand-authored ideal —
+  human_approval_gate is present because slack_notification always requires
+  one by policy, downgraded to an advisory (never enforced) because the goal
+  explicitly waives attended review.
+goal_patterns:
+  - (pull|read|fetch|pulls|reads) .* (churn|billing|subscription) .* stripe .* (summary|report)
+  - stripe .* every (morning|day) .* (summary|report) .* slack
+components:
+  - scheduled_trigger
+  - stripe_data_read
+  - schema_validation
+  - data_normalizer
+  - human_approval_gate
+  - auth_failure_handler
+  - slack_notification
+  - audit_log
+edges:
+  - stripe_data_read__produces__data_normalizer
+  - stripe_data_read__produces__slack_notification
+  - stripe_data_read__safer_with__auth_failure_handler
+  - audit_log__recommended__slack_notification
+  - slack_notification__safer_with__auth_failure_handler
+known_playbooks_reused: []
+untested_edges: []
+risk_level: medium
+confidence: 0.77
+required_evals:
+  - approval advisory surfaces on every run — the route never silently drops the recommendation just because the goal waived attended review
+  - no external write occurs — the only egress is a notification-class Slack post
+failure_modes:
+  - Stripe API rate limit or a transient error returns a partial result and the report ships looking complete
+  - Stripe amounts are in the smallest currency unit (cents) — a missed conversion in data_normalizer inflates every figure 100x
+  - Multiple Stripe accounts/currencies are silently summed as if single-currency
+  - The Stripe key still authenticates but lacks the specific read scope for the requested resource, and the 403 is read downstream as "no data this period" instead of a credential failure
+  - Scheduled trigger drift or misfire — no report ships and nobody notices without a heartbeat
+evals:
+  - churn/billing/subscription retrieval accuracy against a fixture Stripe account
+  - currency normalization correctness (cents → decimal, multi-currency handling)
+  - schema-drift rejection on an altered Stripe response shape
+  - egress delivery — the Slack post lands on every successful run
+  - audit completeness — every run has a record
+notes: >
+  MAR-526 slice 2 (MAR-513 gap-list item 3): stripe_data_read carried live
+  capabilityMatcher vocabulary while backing no route or playbook at all.
+  Unlike crm_record_read (slice 1), stripe_data_read was already reachable —
+  "pull churn data from Stripe and post a summary to Slack" correctly selects
+  it, not data_scraper or nothing — so this slice is pure golden-path naming,
+  not a matcher fix. README.md and docs/CONNECTION_SETUP.md both market Stripe
+  as connectable via the generic data_scraper component; that documentation
+  stays accurate (data_scraper remains a valid generic fallback) and is not
+  changed here — this route gives the SPECIFIC Stripe integration a named,
+  certified home instead of only generic vocabulary.
+
+  human_approval_gate is in the route because slack_notification is
+  unconditionally in ALWAYS_REQUIRES_GATE (src/graph/safetyAugmenter.ts) —
+  the matcher adds it regardless of how notification-class the write is. The
+  goal's explicit "unattended" phrasing downgrades it from enforced to
+  advisory (MAR-132) rather than removing it, which is why it is a component
+  on this route but enforced_approval_gates is empty on the golden-journey
+  fixture. This is deliberately NOT the same shape as scheduled_data_report_route_v1
+  (which hand-omits the gate entirely) — that route predates this policy
+  being applied this strictly and is out of scope to revisit here; this route
+  reflects what the live matcher composes today.
+sources: []
