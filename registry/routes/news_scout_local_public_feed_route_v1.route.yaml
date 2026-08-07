@@ -1,0 +1,46 @@
+id: news_scout_local_public_feed_route_v1
+name: News Scout — Local Public Feed Digest
+status: candidate
+summary: >
+  Golden-path route for a scheduled, zero-credential news scout: an anonymous
+  public RSS/Atom/JSON feed read fires on a schedule and every run is logged.
+  Exactly the shape compose_workflow_route produces for the MAR-455/456 goal
+  (live-probed 2026-08-07) — no state, dedupe, or notification component is
+  injected, because this route's job is a local digest file, not change
+  detection or a delivered alert.
+goal_patterns:
+  - watch public (news|rss|atom) feeds .* (digest|summary) file
+  - scheduled? public feed (read|scan|scout) .* local (file|computer)
+components:
+  - scheduled_trigger
+  - public_feed_fetch
+  - audit_log
+edges:
+  - scheduled_trigger__compatible__public_feed_fetch
+known_playbooks_reused: []
+untested_edges: []
+risk_level: low
+confidence: 0.75
+required_evals:
+  - parse seeded RSS, Atom, and JSON fixtures into the same normalized entry shape
+  - prove no credential or connection requirement is emitted for anonymous public endpoints
+failure_modes:
+  - a source stops exposing a usable feed and silently returns zero items until reclassified as a webpage source
+  - malformed XML/JSON from a feed source returns a structured parse failure instead of a partial digest
+  - the local scheduler misses a run (machine asleep/off) and the digest silently has a gap
+evals:
+  - trigger fires within acceptable drift of the scheduled time (< 60s for a daily digest)
+  - audit completeness — every scheduled run (fetched, empty, or failed) has a corresponding audit_log record
+notes: >
+  Promoted from the MAR-455/456 live-session goal per MAR-513's gap-list item
+  3: a real, repeatedly-composed usage pattern proven 5x-deterministic by the
+  MAR-387 golden-journey harness (news_scout_local_public_feed fixture,
+  tests/journey/fixtures/index.ts) but never named as a route or playbook.
+  validate_playbook_candidate certifies the paired playbook at candidate
+  (its 3-component shape is exactly what compose_workflow_route produces for
+  this goal, not padded to clear the beta component-count bar); validated/
+  published needs OrchestrateLab session evidence this MCP session cannot
+  see. The runtime recommendation lands on
+  local_scheduled_runtime, never a paid always-on host — see the fixture's
+  MAR-456 regression lock and docs/ADR-MAR-456-scheduled-trigger-manifest-export.md.
+sources: []

@@ -19,6 +19,8 @@
  *   • pr_review_readonly → dry run → prepare_runtime (MAR-513 gap-list item 2: the
  *     other uncovered README starter goal — webhook-triggered, must-run-while-offline,
  *     hard no-write guarantee, added 2026-08-07)
+ *   • chat_triggered_assistant → build_in_assistant (MAR-513 gap-list item 2a: route
+ *     coverage for a candidate playbook that had no route file at all, added 2026-08-07)
  *   • multi_agent_coder_loop → generate_linear_project → linear_issues (large — plan it)
  *
  * MAR-395: the two SMALL fixtures used to terminate on `attended_dry_run`. A
@@ -199,7 +201,14 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
     },
     notes:
       "MAR-456 regression lock: a computer-on scheduled goal whose output is a local file must " +
-      "recommend the local runtime over paid self-hosting, and the legacy hosting field must agree.",
+      "recommend the local runtime over paid self-hosting, and the legacy hosting field must agree. " +
+      "MAR-513 gap-list item 3: this composed shape is now also named as a registry artifact — " +
+      "registry/playbooks/news_scout_local_public_feed.playbook.yaml and its route " +
+      "news_scout_local_public_feed_route_v1 (both status: candidate, matching " +
+      "validate_playbook_candidate's own certification — 3 components is below the beta " +
+      "component-count bar, and validated/published needs Lab evidence this MCP session cannot " +
+      "see). Candidate status keeps it out of the default-loaded registry, so plan_source stays " +
+      "composed here; this fixture remains that named pattern's durable regression gate.",
   },
   {
     name: "one_shot_inbox_summary",
@@ -540,6 +549,56 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
       "competitor_price_monitor's fully_unattended fixture — and the ⭐ dry run resolves " +
       "to the prepare_runtime terminal, not build_brief. Read-only is the whole point: " +
       "route_excludes locks the no-write guarantee the MAR-140/MAR-267 lineage exists to hold.",
+  },
+  {
+    name: "chat_triggered_assistant",
+    // MAR-513 gap-list item 2a: chat_triggered_assistant is stuck at
+    // status: candidate with zero fixture coverage, and its own
+    // golden_path_route_id was an explicit empty string (no route file at
+    // all) until this session added chat_triggered_assistant_route_v1.
+    // Candidate status keeps both out of the default-loaded registry
+    // (loadRegistry({ includeBeta: false }), no includeCandidates option —
+    // see registryAssembly.ts), so plan_source stays composed here even
+    // after naming the route; that promotion needs OrchestrateLab session
+    // evidence this MCP session cannot see. This fixture is the durable
+    // regression gate for the composed shape the live matcher actually
+    // produces for the playbook's own goal (live-probed 2026-08-07).
+    goal:
+      "Build a Discord bot that responds to a slash command from an allowed team member, " +
+      "classifies it, performs the action, and posts the result in the same thread only after " +
+      "I approve it.",
+    canned_answers: {},
+    coverage_tags: ["read_only"],
+    expectations: {
+      initial: {
+        plan_source: "composed",
+        playbook_id: null,
+        route_includes: [
+          "chat_trigger",
+          "schema_validation",
+          "human_approval_gate",
+          "auth_failure_handler",
+          "discord_notification",
+          "audit_log",
+        ],
+        // Two components on chat_triggered_assistant's own aspirational list —
+        // intent_classifier and state_store — do not cleanly fire from natural
+        // phrasing of this goal (see chat_triggered_assistant_route_v1's notes);
+        // reviewer_notification and loop_controller are matcher noise observed
+        // while probing nearby phrasings and must never leak into this route.
+        route_excludes: ["intent_classifier", "state_store", "reviewer_notification", "loop_controller"],
+        enforced_approval_gates: ["human_approval_gate"],
+        automation_clearance_level: "L2",
+        clarifying_questions: [],
+        recommended_next_click_id: "build_in_assistant",
+      },
+    },
+    notes:
+      "Route coverage for chat_triggered_assistant (MAR-513 gap-list item 2a): small/attended " +
+      "scope, so the ⭐ is the no-code assistant surface, same family as invoice_intake_po_match's " +
+      "build_in_assistant terminal. Candidate playbook status means this stays plan_source " +
+      "composed rather than playbook — see chat_triggered_assistant_route_v1's notes for why " +
+      "that is the honest, live-probed shape rather than a guess.",
   },
   {
     name: "multi_agent_coder_loop",

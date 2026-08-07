@@ -1,0 +1,93 @@
+id: news_scout_local_public_feed
+version: 0.1.0
+status: candidate
+title: News Scout — Local Public Feed Digest
+summary: >
+  Blueprint for a scheduled agent that watches public RSS/Atom/JSON feeds for a
+  topic and writes a daily digest file on the user's own computer — zero
+  credentials, zero hosting bill. Promoted from the MAR-455/456 live-session
+  goal (MAR-513 gap-list item 3): a real, repeatedly-composed usage pattern
+  that the MAR-387 golden-journey harness has proven 5x-deterministic
+  (news_scout_local_public_feed fixture) but that had no named route or
+  playbook behind it. validate_playbook_candidate certifies this at
+  `candidate` — its 3-component shape is exactly what compose_workflow_route
+  produces for this goal (live-probed 2026-08-07, not padded to clear the
+  beta component-count bar), and validated/published needs OrchestrateLab
+  session evidence this MCP session cannot see.
+workflow_type: content-digest
+risk_level: low
+golden_path_route_id: news_scout_local_public_feed_route_v1
+stack_id: default_orchestratekit_stack
+
+# Component set is exactly what compose_workflow_route produces for the
+# MAR-455/456 goal, live-probed 2026-08-07 (not guessed): a scheduled trigger
+# fires an anonymous public-feed read, and the run is logged. No credential,
+# state, or dedupe component is injected because the goal has no scheduled
+# competitor-price-style change-detection shape — see avoid_when.
+components:
+  - scheduled_trigger
+  - public_feed_fetch
+  - audit_log
+
+edges:
+  - scheduled_trigger__compatible__public_feed_fetch
+
+best_for:
+  - a personal news/topic digest that reads public RSS/Atom/JSON feeds on a schedule and writes a local file
+  - a zero-credential content scout — no crawler account, API key, OAuth grant, or billing relationship required
+  - a goal whose output stays on the user's own computer and does not need to run while the computer is off
+
+avoid_when:
+  - the source has no usable feed/API endpoint and must be scraped as a rendered webpage (use page_monitor / data_scraper instead)
+  - the goal is change-detection on a specific page (competitor_price_monitor territory), not a topic digest across many feeds
+  - the digest must be delivered somewhere other than a local file (e.g. Slack/email) with no local-file requirement — re-evaluate the destination component
+  - the agent must keep running while the computer is asleep or off (needs a hosted/managed scheduled runtime, not the local_scheduled_runtime recommendation this playbook assumes)
+
+recommended_architecture:
+  pattern: Schedule → anonymous public feed read → write local digest → audit
+  why: >
+    The only external action is an anonymous HTTP GET against public feed
+    endpoints, so the route carries zero credential-bearing connections and
+    needs no human approval gate. scheduled_trigger and public_feed_fetch are
+    linked by the registry's own scheduled_trigger__compatible__public_feed_fetch
+    edge; audit_log records each run so a missed or empty digest is
+    diagnosable without re-exposing feed content. Because the goal's output
+    is a file on the user's own computer and nothing requires computer-off
+    execution, the runtime recommendation lands on a local scheduled task
+    (local_scheduled_runtime) rather than a paid always-on host — the MAR-456
+    regression this playbook's golden-journey fixture locks.
+
+llm_driven_steps: []
+
+deterministic_steps:
+  - scheduled_trigger
+  - public_feed_fetch
+  - audit_log
+
+guardrails:
+  - Anonymous public endpoints only — never add an authenticated/private feed source to this route; that belongs to a different, credentialed component
+  - Keep the local-file destination honest — if the goal actually needs Slack/email delivery, re-run compose_workflow_route rather than silently bolting on a notification component here
+  - Do not add a scheduled competitor-price-style state_store/deduplication chain — that is competitor_price_monitor's territory, not this playbook's
+  - The daily/topic window filter lives in public_feed_fetch's own filter_feed_entries capability — do not duplicate it as a separate step
+  - audit_log records the run outcome (fetched/empty/failed) and item count, never the full digest content
+
+failure_modes:
+  - a source stops exposing a usable feed and silently returns zero items until reclassified as a webpage source (public_feed_fetch's own failure mode)
+  - malformed XML/JSON from a feed source returns a structured parse failure instead of a partial digest
+  - the local scheduler misses a run (machine asleep/off) and the digest silently has a gap — audit_log is the only record of a missed run
+  - missing published_at metadata on a feed item breaks the daily-window filter and either drops or duplicates that item across runs
+
+evals:
+  - parse seeded RSS, Atom, and JSON fixtures into the same normalized digest entry shape (public_feed_fetch's own eval)
+  - prove no credential or connection requirement is emitted for anonymous public endpoints
+  - trigger fires within acceptable drift of the scheduled time (< 60s for a daily digest)
+  - audit completeness — every scheduled run (fetched, empty, or failed) has a corresponding audit_log record
+
+implementation_steps:
+  - "Step 1: Configure scheduled_trigger with the daily cadence and timezone for the digest run."
+  - "Step 2: Configure public_feed_fetch with the public feed URLs and the topic filter (e.g. \"AI agents\") applied via filter_feed_entries."
+  - "Step 3: Write the normalized, filtered entries to a local digest file (date-stamped) on the user's own computer."
+  - "Step 4: Write an audit_log record for every run: fetched/empty/failed status and item count — never the full entry content."
+  - "Step 5: Install the schedule on a local task scheduler (cron / Task Scheduler) — this playbook assumes local_scheduled_runtime; re-plan if the goal needs computer-off execution."
+
+sources: []
