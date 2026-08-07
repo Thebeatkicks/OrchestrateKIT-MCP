@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "OrchestrateKit MCP",
-  "updated_at": "2026-08-07 (PR #160 open: MAR-525/527)",
+  "updated_at": "2026-08-07 (post PR #160 merge: MAR-525 sub-item 2a + MAR-527)",
   "current_wave": "News Scout routing prerequisites",
   "authority": {
     "implementation": "Git",
@@ -204,15 +204,25 @@
     },
     {
       "id": "MAR-527",
-      "lifecycle": "planned",
-      "linear_status": "In Review",
-      "note": "PR #160 (pending merge): promotes news_scout_local_public_feed's fixture-proven composed shape (public_feed_fetch + scheduled_trigger + audit_log, live-probed 2026-08-07) to a named registry/playbooks + registry/routes pair, status candidate (validate_playbook_candidate's own ceiling without Lab evidence). Candidate status keeps it out of the default-loaded registry, so plan_source stays composed; the value is a durable named artifact, not a routing-behavior change. MAR-513 gap-list item 4."
+      "lifecycle": "merged",
+      "linear_status": "Done",
+      "commit": "4ad9717",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/journey"
+      },
+      "note": "Merged to master via PR #160 (9f3a9dc). Promotes news_scout_local_public_feed's fixture-proven composed shape (public_feed_fetch + scheduled_trigger + audit_log, live-probed 2026-08-07) to a named registry/playbooks + registry/routes pair, status candidate (validate_playbook_candidate's own certified ceiling without Lab evidence — not padded to clear the beta component-count bar). Candidate status keeps it out of the default-loaded registry, so plan_source stays composed for this goal; the value delivered is a durable named artifact, not a routing-behavior change. Re-verified on merged master: pnpm verify 2286/2286. MAR-513 gap-list item 4."
     },
     {
       "id": "MAR-525",
-      "lifecycle": "planned",
+      "lifecycle": "merged",
       "linear_status": "In Progress",
-      "note": "PR #160 (pending merge) closes sub-item 2a only: chat_triggered_assistant_route_v1 fills the playbook's previously empty golden_path_route_id with the live-probed composed shape, plus a new golden-journey fixture. Sub-item 2b (second_brain_assistant, shadowed by the validated research_agent_citations playbook — drops the owned-corpus guardrail) stays open, deliberately not fixtured against today's shadowing behavior. Do not promote this issue to merged/Done on PR #160's merge alone — 2b is unresolved. MAR-513 gap-list item 2."
+      "commit": "4ad9717",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/journey"
+      },
+      "note": "Sub-item 2a merged to master via PR #160 (9f3a9dc): chat_triggered_assistant_route_v1 fills the playbook's previously empty golden_path_route_id with the live-probed composed shape, plus a new golden-journey fixture. Re-verified on merged master: pnpm verify 2286/2286. Sub-item 2b (second_brain_assistant, shadowed by the validated research_agent_citations playbook — drops the owned-corpus guardrail) stays open and unfixtured by design. Linear status stays In Progress, not Done — the issue's full acceptance bar (both 2a and 2b) is not yet met; lifecycle=merged here describes 2a's code only. MAR-513 gap-list item 2."
     },
     {
       "id": "MAR-526",
