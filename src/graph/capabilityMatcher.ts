@@ -1124,6 +1124,160 @@ function suppressAirtableLookupForWriteGoal(
 const AIRTABLE_GOAL_NAMES_A_CRM = ["crm", "hubspot", "salesforce", "pipedrive"];
 
 /**
+ * MAR-541: SQL/warehouse provider-token direction, generalising MAR-538's
+ * Airtable fix to `db_read`'s own KEYWORD_HINTS. MAR-254 gave the GENERIC forms
+ * direction ("from our database", "query the database" carry the preposition/
+ * verb already) but left the PROVIDER names bare: `postgres`, `postgresql`,
+ * `mysql`, `bigquery`, `snowflake`, `"sql database"`, `"data warehouse"` map to
+ * `db_read` — read-only, `permissions.write: []` — with no direction at all, so
+ * "write the processed rows into our Postgres database every night" composed
+ * `scheduled_trigger → db_read → audit_log` and "insert each new record into
+ * the mysql table" composed `db_read → schema_validation → audit_log`: a write
+ * goal planned as a read, worse still because `coverage.unmatched_demand`
+ * stayed empty — `postgres`/`mysql`/`bigquery`/`snowflake` are themselves
+ * `DEMAND_NOUNS` in `coverage.ts`, so db_read's own hint match claimed the
+ * token and the noun-grouping in `groupNounUnits` folded the adjacent object
+ * ("rows", "record") into the same claimed unit. MAR-254's own comment treated
+ * provider-name uniqueness as sufficient; uniqueness is not direction.
+ *
+ * Same preposition anchor as MAR-538, generalised from "airtable" to the full
+ * set of provider/place nouns `db_read` is reachable through (including the
+ * bare "database"/"warehouse" nouns, so "write into our database" — silently
+ * uncovered today rather than wrongly read — degrades the same way once a
+ * provider name sits nearby: "write into our Postgres database").
+ */
+const DB_WRITE_VERBS =
+  /(?<!\w)(write|writes|writing|wrote|save|saves|saving|saved|store|stores|storing|stored|create|creates|creating|created|add|adds|adding|added|append|appends|appending|appended|insert|inserts|inserting|inserted|update|updates|updating|updated|upsert|upserts|upserting|push|pushes|pushing|populate|populates|populating|sync)(?!\w)/;
+const DB_OBJECT = "(postgres|postgresql|mysql|bigquery|snowflake|database|warehouse)";
+// "sql database" and "data warehouse" are the two existing compound
+// KEYWORD_HINTS phrases — the object noun itself ("database"/"warehouse")
+// sits behind a "sql "/"data " modifier, which a bare `${DB_OBJECT}` anchor
+// misses entirely ("into our data warehouse" has no destination match without
+// this, silently falling through as hasDbWriteIntent === false).
+const DB_OBJECT_PREFIX = "(?:sql\\s+|data\\s+)?";
+const DB_DESTINATION = new RegExp(
+  `(?<!\\w)(?:to|into|in)\\s+(?:a|an|the|our|my|your|their|its)?\\s*${DB_OBJECT_PREFIX}${DB_OBJECT}(?!\\w)`,
+);
+const DB_SOURCE = new RegExp(
+  `(?<!\\w)from\\s+(?:a|an|the|our|my|your|their|its)?\\s*${DB_OBJECT_PREFIX}${DB_OBJECT}(?!\\w)`,
+);
+const DB_READ_VERB_OBJECT = new RegExp(
+  `(?<!\\w)(read|reads|reading|pull|pulls|pulling|fetch|fetches|fetching|query|queries|querying|look up|looks up|looking up|list|lists|listing|retrieve|retrieves|retrieving|load|loads|loading|scan|scans|scanning|select|selects|selecting)(?!\\w)[^.;!?]{0,40}?(?<!\\w)${DB_OBJECT_PREFIX}${DB_OBJECT}(?!\\w)`,
+);
+
+/**
+ * True when the goal asks for something to be written INTO a SQL/warehouse
+ * source (MAR-541).
+ *
+ * RECORDED LIMIT (MAR-529 discipline — state it, do not hide it): a goal whose
+ * ONLY write signal is a write-typed SQL statement named inside the "sql
+ * query" noun phrase itself — "run an UPDATE sql query against our database" —
+ * is not caught. The wrapping sentence has no write verb of its own (no
+ * "write"/"insert"/"update the database"), only "run", so DB_WRITE_VERBS never
+ * fires; and "query" independently satisfies DB_READ_VERB_OBJECT, which has no
+ * way to know the query it names is a write statement. This is not new: the
+ * bare "sql query" KEYWORD_HINT carried no direction at all before this fix
+ * either. Disambiguating the query's own verb (UPDATE/INSERT/DELETE vs SELECT)
+ * from the sentence's verb needs parsing the object noun phrase, not lexical
+ * direction-matching between two independent signals.
+ */
+export function hasDbWriteIntent(goalLower: string): boolean {
+  return DB_WRITE_VERBS.test(goalLower) && DB_DESTINATION.test(goalLower);
+}
+
+/**
+ * The specific provider/place noun the write destination matched on (e.g.
+ * "postgres", "warehouse"), or null. Used to name the file_storage bump token
+ * so `coverage.ts`'s DEMAND_NOUNS credit ("postgres" etc. are all listed
+ * there) claims the SAME word the user wrote, the way MAR-538's
+ * "airtable-write phrase" token happens to contain "airtable" — mirrored here
+ * deliberately rather than left to coincidence.
+ */
+export function dbWriteDestinationObject(goalLower: string): string | null {
+  return goalLower.match(DB_DESTINATION)?.[1] ?? null;
+}
+
+/** True when the goal asks for something to be read OUT OF a SQL/warehouse source (MAR-541). */
+export function hasDbReadIntent(goalLower: string): boolean {
+  return DB_SOURCE.test(goalLower) || DB_READ_VERB_OBJECT.test(goalLower);
+}
+
+function suppressDbReadForWriteGoal(goalLower: string, domainAllowed: Set<string>): void {
+  if (!hasDbWriteIntent(goalLower)) return;
+  if (hasDbReadIntent(goalLower)) return;
+  domainAllowed.delete("db_read");
+}
+
+/**
+ * MAR-541: Stripe direction. `stripe_data_read` is read-only — `permissions.write`
+ * is `[]`, its Connect entry grants only `customers:read`/`subscriptions:read`/
+ * `charges:read` — but the bare `stripe`/`billing`/`subscription` KEYWORD_HINTS
+ * carry no direction, so a goal asking Stripe to DO something (move money,
+ * change a subscription) selected the same read-only component: "when a
+ * customer asks for a refund, issue the refund in Stripe after I approve it"
+ * composed `stripe_data_read → job_queue → human_approval_gate →
+ * auth_failure_handler` — the only Stripe step in the route READS data, and the
+ * approval gate guards an action that is not in the route at all.
+ *
+ * Unlike Airtable and the SQL sources, there is NO destination component this
+ * can be repointed to: `file_storage` is a storage destination, not a payments
+ * API, and no Stripe-write component exists in the registry. Per the MAR-541
+ * acceptance bar, the honest behaviour is refusal, not substitution — suppress
+ * `stripe_data_read` so it stops standing in for the write, and let
+ * `coverage.ts`'s existing MAR-396 money-noun lexicon (`refund` and `stripe`
+ * are both `DEMAND_NOUNS`) surface the gap as `unmatched_demand` once the
+ * token is no longer falsely claimed. Verified live before this fix: "issue
+ * the refund in Stripe after I approve it" reported `unmatched_demand: []` for
+ * that clause — `groupNounUnits` folded the adjacent "refund" and "stripe"
+ * tokens into one unit (MAX_GAP 2), and the unit counted as covered because
+ * `stripe_data_read`'s own hint match claimed "stripe". Suppressing the false
+ * match un-claims "stripe" and the same grouping now correctly reports the
+ * gap instead of hiding it.
+ *
+ * Anchored the same way as MAR-538: a genuine Stripe ACTION verb next to a
+ * money-moving object noun, never a bare verb anywhere in the sentence — "pull
+ * churn data from Stripe" has a verb but no money-action object, so it stays a
+ * read. Read intent (a read verb near the Stripe context) is checked
+ * independently and always wins, so a mixed "look up the subscription and
+ * cancel it in Stripe" is not this function's concern to resolve — it still
+ * suppresses only when no read signal is present at all.
+ */
+const STRIPE_WRITE_VERBS =
+  /(?<!\w)(issue|issues|issuing|issued|create|creates|creating|created|cancel|cancels|cancelling|canceling|cancelled|canceled|charge|charges|charging|charged|refund|refunds|refunding|refunded|process|processes|processing|processed|capture|captures|capturing|captured|update|updates|updating|updated|apply|applies|applying|applied|initiate|initiates|initiating|initiated|void|voids|voiding|voided|reimburse|reimburses|reimbursing|reimbursed)(?!\w)/;
+/**
+ * Money-moving object nouns only — deliberately NOT "invoice"/"invoices" (a PDF
+ * document concept elsewhere in the registry via `pdf_extraction`, a different
+ * axis entirely) and not "data"/"customer" (too generic; "create a customer
+ * record" is a CRM shape, not necessarily Stripe).
+ */
+const STRIPE_MONEY_OBJECT =
+  /(?<!\w)(refund|refunds|subscription|subscriptions|charge|charges|payment|payments|payout|payouts|plan|plans)(?!\w)/;
+const STRIPE_WRITE_VERB_OBJECT = new RegExp(
+  `(?<!\\w)(issue|issues|issuing|issued|create|creates|creating|created|cancel|cancels|cancelling|canceling|cancelled|canceled|charge|charges|charging|charged|refund|refunds|refunding|refunded|process|processes|processing|processed|capture|captures|capturing|captured|update|updates|updating|updated|apply|applies|applying|applied|initiate|initiates|initiating|initiated|void|voids|voiding|voided|reimburse|reimburses|reimbursing|reimbursed)(?!\\w)[^.;!?]{0,40}?${STRIPE_MONEY_OBJECT.source}`,
+);
+const STRIPE_READ_VERB_CONTEXT =
+  /(?<!\w)(pull|pulls|pulling|fetch|fetches|fetching|read|reads|reading|query|queries|querying|retrieve|retrieves|retrieving|look up|looks up|looking up|list|lists|listing|load|loads|loading|export|exports|exporting)(?!\w)[^.;!?]{0,40}?(?<!\w)(stripe|billing|subscription)(?!\w)/;
+
+/** True when the goal asks Stripe to perform a money-moving action (MAR-541). */
+export function hasStripeWriteIntent(goalLower: string): boolean {
+  return STRIPE_WRITE_VERBS.test(goalLower) && STRIPE_WRITE_VERB_OBJECT.test(goalLower);
+}
+
+/** True when the goal asks to read data OUT OF Stripe (MAR-541). */
+export function hasStripeReadIntent(goalLower: string): boolean {
+  return STRIPE_READ_VERB_CONTEXT.test(goalLower);
+}
+
+function suppressStripeDataReadForWriteGoal(
+  goalLower: string,
+  domainAllowed: Set<string>,
+): void {
+  if (!hasStripeWriteIntent(goalLower)) return;
+  if (hasStripeReadIntent(goalLower)) return;
+  domainAllowed.delete("stripe_data_read");
+}
+
+/**
  * MAR-525 2b: source_retrieval-on-a-second-brain suppression.
  *
  * `source_retrieval` is the research domain's EXTERNAL fetch — its own registry
@@ -2323,6 +2477,15 @@ export function matchCapabilities(
   // a READ-only component whose Connect entry provisions a read-only token.
   // The write destination is bumped in Pass 1d below.
   suppressAirtableLookupForWriteGoal(goalLower, domainAllowed);
+  // MAR-541: the same class, generalised. A goal that writes INTO a SQL/
+  // warehouse source drops db_read; the write destination is bumped in Pass 1d
+  // below, same as Airtable.
+  suppressDbReadForWriteGoal(goalLower, domainAllowed);
+  // MAR-541: a goal asking Stripe to perform a money-moving action drops
+  // stripe_data_read. Unlike Airtable/SQL there is no destination to bump —
+  // no Stripe-write component exists — so the write surfaces honestly as
+  // coverage.unmatched_demand instead of a silently wrong read.
+  suppressStripeDataReadForWriteGoal(goalLower, domainAllowed);
   // MAR-303: the "in the loop" idiom (with no real iteration/fan-out signal)
   // drops the loop_controller false-positive on unattended report/monitor goals.
   suppressLoopControllerForIdiom(goalLower, domainAllowed);
@@ -2381,6 +2544,14 @@ export function matchCapabilities(
   // both the source and the destination.
   if (domainAllowed.has("file_storage") && hasAirtableWriteIntent(goalLower)) {
     bump("file_storage", 2, "airtable-write phrase", "hint");
+  }
+
+  // Pass 1e (MAR-541): SQL/warehouse-as-DESTINATION, same reasoning as Pass 1d —
+  // db_read is suppressed above on a write goal, so file_storage (which names
+  // "a database table" as one of its destinations) becomes the write step.
+  if (domainAllowed.has("file_storage") && hasDbWriteIntent(goalLower)) {
+    const dbObject = dbWriteDestinationObject(goalLower) ?? "database";
+    bump("file_storage", 2, `${dbObject}-write phrase`, "hint");
   }
 
   // Passes 2–4: per-component token matching (gated)
