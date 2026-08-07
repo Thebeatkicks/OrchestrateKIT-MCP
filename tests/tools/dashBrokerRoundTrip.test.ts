@@ -157,7 +157,20 @@ const MANUAL_RUNNER_TRIGGER: TriggerExplanation = {
   limitation: "No schedule or inbound event is configured.",
 };
 
-function planAndBrief(opts: { dash_broker_available?: boolean }) {
+type TaskInputRoleFixture = {
+  id: string;
+  label: string;
+  description?: string;
+  required: boolean;
+  min_count?: number;
+  max_count?: number;
+  media_types?: string[];
+};
+
+function planAndBrief(opts: {
+  dash_broker_available?: boolean;
+  task_inputs?: TaskInputRoleFixture[];
+}) {
   const plan = planWorkflow({ goal: LEAD_GOAL, must_have_capabilities: [], must_avoid: [] }, registry);
   const wizard = plan.goal_to_product_wizard;
   return exportBuildBrief({
@@ -186,6 +199,7 @@ function planAndBrief(opts: { dash_broker_available?: boolean }) {
     build_target: "code",
     output_location: "HubSpot notes",
     dash_broker_available: opts.dash_broker_available,
+    task_inputs: opts.task_inputs,
     generated_at: "2026-08-06T00:00:00Z",
     llm_provider: "anthropic",
   });
@@ -274,5 +288,69 @@ describe("MAR-477 — export_build_brief output vs the pinned DASH broker facts"
     expect(hubspot, "goal names hubspot as a connection").toBeDefined();
     expect(pinnedProfileFor(hubspot!.provider), "hubspot has no pinned DASH broker profile").toBeUndefined();
     expect(hubspot?.ownership).not.toBe("dash_managed");
+  });
+});
+
+/**
+ * MAR-507 companion — export_build_brief emitting `agent_dom.task_inputs`.
+ *
+ * DASH's own `tests/inputs-panel.test.ts` (orchestratedash, MAR-507) proves
+ * its Inputs panel against a literal `DECLARING` fixture of two roles —
+ * `customer_brief` and `price_list`, the MAR-434 golden journey ("turn a
+ * customer brief and a price list into an offert"). The roles below use the
+ * SAME ids, labels, description and media types on purpose: this is the MCP
+ * half of that same journey, and reusing DASH's own literal is what makes the
+ * two repos' independent tests point at one shared golden case rather than
+ * two similar-looking ones that could quietly drift apart.
+ *
+ * Like the broker-facts assertions above, the schema check here is run
+ * against `tests/fixtures/dash/agent.manifest.v2.schema.json` — DASH's real
+ * pinned contract, not a local approximation of it.
+ */
+describe("MAR-507 companion — export_build_brief emits task_inputs against DASH's pinned schema", () => {
+  const GOLDEN_ROLES: TaskInputRoleFixture[] = [
+    {
+      id: "customer_brief",
+      label: "Customer brief",
+      description: "The document describing what the customer asked for.",
+      required: true,
+      max_count: 1,
+      media_types: ["application/pdf", "text/plain"],
+    },
+    {
+      id: "price_list",
+      label: "Price list",
+      required: false,
+      max_count: 3,
+    },
+  ];
+
+  it("honest absence: a plan that declares no roles omits agent_dom.task_inputs entirely", () => {
+    const b = planAndBrief({});
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    // Not an empty array — DASH's own buildInputRoles() treats absence and an
+    // empty declaration the same on screen, but the schema's own warning is
+    // that absence must never be read as an unrestricted agent, so the
+    // emitter does not manufacture a block nothing declared.
+    expect("task_inputs" in b.agent_manifest.agent_dom).toBe(false);
+  });
+
+  it("the golden case: declared roles round-trip into agent_dom.task_inputs and validate against DASH's schema", () => {
+    const b = planAndBrief({ task_inputs: GOLDEN_ROLES });
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect(b.agent_manifest.agent_dom.task_inputs).toEqual(GOLDEN_ROLES);
+  });
+
+  it("an id DASH's own pattern would refuse fails the pinned schema, not just a local check", () => {
+    // `exportBuildBrief` is a plain deterministic function with no zod layer
+    // of its own — the MCP tool's registerTool wrapper is what enforces the
+    // taskInputRole id pattern on a real call. This asserts the pinned AJV
+    // schema is a second, independent backstop: a manifest that slipped an
+    // id DASH would show to a person (the exact leak `lib/copy/identifiers.ts`
+    // exists to prevent) fails validation here rather than shipping.
+    const b = planAndBrief({
+      task_inputs: [{ id: "Customer Brief", label: "Customer brief", required: true }],
+    });
+    expect(validateManifest(b.agent_manifest)).toBe(false);
   });
 });

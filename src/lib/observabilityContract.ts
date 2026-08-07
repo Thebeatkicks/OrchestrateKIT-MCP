@@ -88,6 +88,25 @@ export type AgentDomCommand =
   | "cancel";
 export type AgentDomConnectionOwnership = "dash_managed" | "agent_managed" | "external";
 
+/**
+ * MAR-507 companion: one kind of file a task accepts, in the plan's own
+ * vocabulary — mirrors DASH's `taskInputRole` exactly (see
+ * tests/fixtures/dash/agent.manifest.v2.schema.json#/$defs/taskInputRole).
+ * `id` is technical (carried in commands, never rendered); `label` is what a
+ * person reads on the picker DASH's Inputs panel (MAR-507) renders.
+ */
+export type AgentDomTaskInputRole = {
+  id: string;
+  label: string;
+  description?: string;
+  required: boolean;
+  min_count?: number;
+  max_count?: number;
+  media_types?: string[];
+  max_file_bytes?: number;
+  max_total_bytes?: number;
+};
+
 /** A route step as seen by the manifest builder (plan_workflow's RouteStep subset). */
 export type ManifestRouteStep = {
   step: number;
@@ -605,6 +624,15 @@ export type AgentManifest = {
       interaction: AgentDomLocation[];
     };
     connections: AgentDomConnection[];
+    /**
+     * MAR-507 companion: what files this agent accepts as a task, declared
+     * per role. Omitted (rather than an empty array) when the plan declares
+     * no file-input step — absence must never be read as an unrestricted
+     * agent, so DASH's Inputs panel stays invisible for every plan that had
+     * nothing to declare, which is every plan today (no shipped route uses a
+     * local-file-selection step yet).
+     */
+    task_inputs?: AgentDomTaskInputRole[];
     control: {
       supported: boolean;
       command_version: 1;
@@ -671,6 +699,14 @@ export function buildAgentManifest(input: {
    * docs/ADR-MAR-456-scheduled-trigger-manifest-export.md.
    */
   cadence_enabled?: boolean;
+  /**
+   * MAR-507 companion: declared input roles in the plan's own vocabulary.
+   * Absent or empty is the honest default — every plan with no file-input
+   * step — and the manifest omits `agent_dom.task_inputs` entirely rather
+   * than emitting an empty array, matching DASH's own "absence means this
+   * agent takes no files" reading (tests/fixtures/dash/agent.manifest.v2.schema.json#/$defs/taskInputRole).
+   */
+  task_inputs?: AgentDomTaskInputRole[];
 }): AgentManifest {
   const agentName =
     input.agent_name?.trim() || agentSlug(input.playbook_id, input.goal);
@@ -778,6 +814,9 @@ export function buildAgentManifest(input: {
         routeSteps: input.route_steps,
         runtimeKind,
       }),
+      ...(input.task_inputs && input.task_inputs.length > 0
+        ? { task_inputs: input.task_inputs }
+        : {}),
       control: {
         supported,
         command_version: 1,
