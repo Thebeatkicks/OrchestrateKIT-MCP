@@ -41,6 +41,7 @@ import {
   buildAgentManifest,
   DASH_ENDPOINT_ENV,
   DASH_TOKEN_ENV,
+  type AgentDomTaskInputRole,
   type AgentManifest,
   type ManifestBuildTarget,
 } from "../lib/observabilityContract.js";
@@ -78,6 +79,29 @@ const RouteStepShape = z
     risk_level: z.string().optional(),
   })
   .passthrough();
+
+// MAR-507 companion: mirrors DASH's `taskInputRole` exactly — see
+// tests/fixtures/dash/agent.manifest.v2.schema.json#/$defs/taskInputRole.
+// Validated at this boundary so a caller cannot emit a role DASH would
+// refuse to parse (a raw id it would show a person, a label past its own
+// length ceiling); the emitter's job is to be honest, not permissive.
+const TaskInputRoleInputShape = z
+  .object({
+    id: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[a-z0-9_]+$/, "technical vocabulary only — lowercase letters, digits, underscore"),
+    label: z.string().min(1).max(120),
+    description: z.string().max(400).optional(),
+    required: z.boolean(),
+    min_count: z.number().int().min(0).optional(),
+    max_count: z.number().int().min(1).optional(),
+    media_types: z.array(z.string().min(1).max(120)).optional(),
+    max_file_bytes: z.number().int().min(1).optional(),
+    max_total_bytes: z.number().int().min(1).optional(),
+  })
+  .strict();
 
 const SafetyReviewShape = z
   .object({
@@ -323,6 +347,19 @@ export const InputShape = {
       "'dash_managed' — the value DASH's broker requires before it will resolve a grant. " +
       "A remote runtime still downgrades it to 'agent_managed' per ADR 0006. See " +
       "docs/ADR-MAR-494-dash-broker-availability-signal.md.",
+    ),
+  task_inputs: z
+    .array(TaskInputRoleInputShape)
+    .optional()
+    .describe(
+      "MAR-507 companion: what files this agent accepts as a task, declared per role in " +
+      "the plan's own vocabulary (id/label/description/required/min_count/max_count/" +
+      "media_types). Absent or empty is the honest default — every plan with no file-input " +
+      "step — and 'agent_dom.task_inputs' is omitted entirely rather than exported as an " +
+      "empty array. DASH's Inputs panel (MAR-507) is invisible on the exported agent's " +
+      "workspace until this is declared; declaring it is what lets a person select a local " +
+      "file against a named role instead of a raw id. See " +
+      "tests/fixtures/dash/agent.manifest.v2.schema.json#/$defs/taskInputRole.",
     ),
   // ── MAR-460: public-runner eligibility (fail closed) ──
   runner_posture: z
@@ -2362,6 +2399,8 @@ export type ExportBuildBriefInput = {
   cadence_enabled?: boolean;
   /** MAR-494: the caller asserts DASH's broker is present; absent/false is the honest default. See docs/ADR-MAR-494-dash-broker-availability-signal.md. */
   dash_broker_available?: boolean;
+  /** MAR-507 companion: declared input roles, in the plan's own vocabulary. Absent/empty omits agent_dom.task_inputs entirely. */
+  task_inputs?: AgentDomTaskInputRole[];
   agent_name?: string;
   // ── MAR-460: public-runner eligibility; see src/lib/runnerEligibility.ts ──
   /** Defaults to the strictest posture ('public') — an undeclared posture is not evidence of a narrow one. */
@@ -2553,6 +2592,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     control_surface: input.control_surface,
     interaction_surface: input.interaction_surface,
     trigger_explanation: input.trigger_explanation,
+    task_inputs: input.task_inputs,
   });
 
   // MAR-460: assessed for every export, including the ones that supply nothing —
@@ -2836,6 +2876,7 @@ export function registerExportBuildBrief(server: McpServer): void {
           output_location: input.output_location,
           cadence_enabled: input.cadence_enabled,
           dash_broker_available: input.dash_broker_available,
+          task_inputs: input.task_inputs as AgentDomTaskInputRole[] | undefined,
           agent_name: input.agent_name,
           llm_provider: input.llm_provider,
         });
