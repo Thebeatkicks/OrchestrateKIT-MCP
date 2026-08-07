@@ -81,6 +81,99 @@ describe("detectConstraintSignals (MAR-255)", () => {
   });
 });
 
+/**
+ * Word-boundary matching. Naive `String.includes` counted a phrase that merely
+ * sat inside a longer word: "posts the result in the same THREAD ONLY after I
+ * approve" contains "read only" (th·"read only"), so a goal explicitly asking
+ * the agent to POST was told its route violated a read-only prohibition the
+ * user never stated — and `constraint_label` degraded to "gaps". That exact
+ * goal ships as the `chat_triggered_assistant` golden-journey fixture.
+ *
+ * Every false-positive shape is paired with the true positive it must not cost.
+ */
+describe("phrases match whole words only", () => {
+  const FALSE_POSITIVES: Array<[string, string]> = [
+    ["thread only", "Post the result in the same thread only after I approve it."],
+    ["thread-only", "Keep a thread-only reply policy for the bot."],
+    ["unread only", "Summarize the unread only messages in my inbox."],
+    ["spread only", "Spread only the approved content across the channels."],
+    ["no written", "No written approval needed, just post it."],
+  ];
+
+  for (const [shape, goal] of FALSE_POSITIVES) {
+    it(`"${shape}" does not fire the read-only prohibition`, () => {
+      expect(detectConstraintSignals(goal).read_only.detected).toBe(false);
+      expect(hasWriteConstraint(goal)).toBe(false);
+    });
+  }
+
+  // `hasWriteConstraint` reads the narrower MAR-142 planner table
+  // (WRITE_CONSTRAINT_SIGNALS); the §0 read_only class adds the edit/commit
+  // phrases. That split is pre-existing and deliberate — `inWriteTable` records
+  // which side of it each phrase belongs to rather than blurring the two.
+  const TRUE_POSITIVES: Array<{ phrase: string; goal: string; inWriteTable: boolean }> = [
+    { phrase: "read-only", goal: "Scan the PR diff for problems, read-only.", inWriteTable: true },
+    { phrase: "read only", goal: "This is read only — do not change anything.", inWriteTable: true },
+    { phrase: "never write", goal: "Review the PR but never write anything.", inWriteTable: true },
+    { phrase: "never writes", goal: "The agent never writes to the database.", inWriteTable: true },
+    { phrase: "no writes", goal: "Report on the tables with no writes at all.", inWriteTable: true },
+    { phrase: "never edit", goal: "Never edit or commit any code.", inWriteTable: false },
+    {
+      phrase: "never editing",
+      goal: "Never editing the repository, only reporting.",
+      inWriteTable: false,
+    },
+    {
+      phrase: "never commits",
+      goal: "The reviewer never commits anything itself.",
+      inWriteTable: false,
+    },
+  ];
+
+  for (const { phrase, goal, inWriteTable } of TRUE_POSITIVES) {
+    it(`"${phrase}" still fires the read-only prohibition`, () => {
+      expect(detectConstraintSignals(goal).read_only.detected).toBe(true);
+      expect(hasWriteConstraint(goal)).toBe(inWriteTable);
+    });
+  }
+
+  it("does not read an approval phrase out of a longer word", () => {
+    // "preview before" contains "review before".
+    expect(occursUnnegated("show me a preview before publishing", "review before", true)).toBe(
+      false,
+    );
+    expect(occursUnnegated("a human must review before publishing", "review before", true)).toBe(
+      true,
+    );
+  });
+
+  it("does not read a waiver out of a longer word", () => {
+    // "no gateway" contains "no gate"; "no humanity check" contains "no human".
+    expect(hasUnattendedWaiver("route it through our no gateway proxy")).toBe(false);
+    expect(hasUnattendedWaiver("run it with no gate and no human")).toBe(true);
+  });
+
+  it("KNOWN LIMIT: a real word sequence still fires, boundaries or not", () => {
+    // "…anything I already READ ONLY after the digest" is a genuine two-word
+    // sequence, not a phrase buried inside a longer word. Whole-word matching
+    // cannot separate it from the constraint; that needs parsing, not matching.
+    // Recorded so the limit is visible rather than discovered later.
+    const goal = "Skip anything I already read only after the daily digest.";
+    expect(detectConstraintSignals(goal).read_only.detected).toBe(true);
+  });
+
+  it("the chat-bot fixture goal is not read-only — it posts", () => {
+    // Verbatim from tests/journey/fixtures/index.ts.
+    const goal =
+      "Build a Discord bot that responds to a slash command from an allowed team member, " +
+      "classifies it, performs the action, and posts the result in the same thread only after " +
+      "I approve it.";
+    const s = detectConstraintSignals(goal);
+    expect(s.read_only.detected).toBe(false);
+    expect(s.attended_required.detected).toBe(true);
+  });
+});
+
 describe("planner predicates re-exported unchanged (pure refactor)", () => {
   it("hasWriteConstraint fires on the MAR-142 phrase table", () => {
     expect(hasWriteConstraint("read-only on all external sites")).toBe(true);

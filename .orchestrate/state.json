@@ -239,6 +239,16 @@
         "command": "pnpm verify"
       },
       "note": "Explicit invoice-payment instructions now deterministically require human approval without fuzzy-matching ordinary phrases such as pay attention."
+    },
+    {
+      "id": "MAR-529",
+      "lifecycle": "planned",
+      "linear_status": "In Progress",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/lib/constraintSignals.test.ts"
+      },
+      "note": "Goal-constraint phrase tables were matched with bare String.includes, so a phrase sitting inside a longer word counted as if the user had written it. 'posts the result in the same THREAD ONLY after I approve' contains 'read only' (th-read only) and fired the read-only prohibition on a goal that explicitly asks the agent to POST, degrading constraint_label to gaps; 'unread only', 'spread only', 'thread-only', 'no written approval' and 'preview before' (vs the approval phrase 'review before') failed the same way. Matching is now whole-word via (?<!\\w)...(?!\\w) lookarounds in src/lib/constraintSignals.ts, shared by constraintCoverage's own firstMatch. Inflections that substring matching had covered implicitly are now ENUMERATED in the tables (never writes, never edits/editing, never commits/committing) so a reader can see exactly what fires. The chat_triggered_assistant golden fixture's coverage_tags: ['read_only'] was a mislabel produced by this bug and is corrected."
     }
   ]
 }

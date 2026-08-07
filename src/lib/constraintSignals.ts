@@ -11,6 +11,51 @@
  * Pure string logic — no registry, no LLM, no state.
  */
 
+// ───────────────────── word-boundary phrase matching ─────────────────────
+
+/**
+ * Every phrase table below is matched with WORD BOUNDARIES, not bare
+ * `String.includes`.
+ *
+ * Naive substring matching read a phrase that merely happened to sit inside a
+ * longer word as if the user had written it. The one that shipped: "post the
+ * result in the same THREAD ONLY after I approve" contains "read only"
+ * (th·"read only") and fired the read-only prohibition — so a goal that
+ * explicitly asks the agent to POST was told its route violated a no-write
+ * constraint the user never stated, and `constraint_label` degraded to "gaps".
+ * "unread only", "spread only" and "thread-only" all failed the same way, and
+ * `preview before` matched the approval phrase "review before".
+ *
+ * `(?<!\w)` / `(?!\w)` rather than `\b`: a phrase may begin or end with a
+ * non-word character ("read-only"), where `\b` asserts the opposite of what is
+ * wanted. Inflections are ENUMERATED in the tables ("never write" AND "never
+ * writes") rather than pattern-matched — a reader can see exactly what fires.
+ */
+const PHRASE_PATTERNS = new Map<string, RegExp>();
+
+function phrasePattern(phrase: string, flags = ""): RegExp {
+  const key = `${flags} ${phrase}`;
+  const cached = PHRASE_PATTERNS.get(key);
+  if (cached) return cached;
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(?<!\\w)${escaped}(?!\\w)`, flags);
+  PHRASE_PATTERNS.set(key, pattern);
+  return pattern;
+}
+
+/** True when `phrase` occurs in `text` as whole words. Case-sensitive: callers lowercase first. */
+export function containsPhrase(text: string, phrase: string): boolean {
+  return phrasePattern(phrase).test(text);
+}
+
+/** Start offsets of every whole-word occurrence of `phrase` in `text`. */
+function phraseOffsets(text: string, phrase: string): number[] {
+  const pattern = new RegExp(phrasePattern(phrase).source, "g");
+  const offsets: number[] = [];
+  for (const match of text.matchAll(pattern)) offsets.push(match.index);
+  return offsets;
+}
+
 /**
  * Explicit "read-only / no-write" constraint phrases (MAR-142). Used by the
  * planner to warn when a write-bearing playbook is routed for a constrained
@@ -26,14 +71,18 @@ export const WRITE_CONSTRAINT_SIGNALS = [
   "read-only",
   "read only",
   "never write",
+  // Enumerated inflections: whole-word matching no longer lets "never write"
+  // stand in for "never writes" the way substring matching silently did.
+  "never writes",
   "no write",
   "no writes",
   "no database update",
+  "no database updates",
 ];
 
 export function hasWriteConstraint(goal: string): boolean {
   const g = goal.toLowerCase();
-  return WRITE_CONSTRAINT_SIGNALS.some((s) => g.includes(s));
+  return WRITE_CONSTRAINT_SIGNALS.some((s) => containsPhrase(g, s));
 }
 
 /**
@@ -102,14 +151,13 @@ export function occursUnnegated(goal: string, phrase: string, includeNo: boolean
   const neg = includeNo
     ? /\b(not|never|no longer|isn't|is not|aren't|won't|wont|no|without)\b\W*$/
     : /\b(not|never|no longer|isn't|is not|aren't|won't|wont)\b\W*$/;
-  let from = 0;
-  for (;;) {
-    const idx = goal.indexOf(phrase, from);
-    if (idx < 0) return false;
+  // Whole-word offsets only: a bare indexOf found "review before" inside
+  // "preview before" and reported an approval requirement nobody stated.
+  for (const idx of phraseOffsets(goal, phrase)) {
     const before = goal.slice(Math.max(0, idx - 16), idx);
     if (!neg.test(before)) return true; // a clean, non-negated occurrence
-    from = idx + phrase.length;
   }
+  return false;
 }
 
 /** True when the goal explicitly REQUIRES a human approval gate (MAR-229). */
@@ -130,7 +178,7 @@ export function hasUnattendedWaiver(goal: string): boolean {
   const g = goal.toLowerCase();
   if (hasExplicitApprovalRequirement(g)) return false;
   return UNATTENDED_WAIVER_SIGNALS.some((s) => {
-    if (!g.includes(s)) return false;
+    if (!containsPhrase(g, s)) return false;
     // negatable signals ("not unattended") don't count when negated
     if (NEGATABLE_WAIVER_SIGNALS.includes(s) && !occursUnnegated(g, s, false)) {
       return false;
@@ -196,9 +244,9 @@ export type ConstraintSignals = {
   conflict: boolean;
 };
 
-/** First matching phrase from a list (substring on the lowercased goal). */
+/** First matching phrase from a list (whole-word match on the lowercased goal). */
 function firstMatch(g: string, phrases: string[]): string | null {
-  for (const p of phrases) if (g.includes(p)) return p;
+  for (const p of phrases) if (containsPhrase(g, p)) return p;
   return null;
 }
 
@@ -292,18 +340,27 @@ function hasBroadNoOutboundConstraint(goal: string): boolean {
     "nothing is sent",
     "nothing goes out",
     "nothing sent externally",
-  ].some((s) => g.includes(s));
+  ].some((s) => containsPhrase(g, s));
 }
 
 const READ_ONLY_SIGNALS = [
   "read-only",
   "read only",
   "never write",
+  "never writes",
   "no write",
   "no writes",
   "no database update",
+  "no database updates",
   "never edit",
+  // Enumerated inflections — whole-word matching means "never edit" no longer
+  // covers "never edits"/"never editing", and "never commit" no longer covers
+  // "never commits"/"never committing", the way substring matching did.
+  "never edits",
+  "never editing",
   "never commit",
+  "never commits",
+  "never committing",
 ];
 
 /**
