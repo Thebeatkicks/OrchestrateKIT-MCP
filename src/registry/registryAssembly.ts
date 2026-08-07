@@ -111,15 +111,21 @@ export function assembleRegistry(
   validateNoDuplicateIds(workers, "worker");
 
   const registry: Registry = { components, edges, stacks, routes, playbooks, workers };
-  const validationWarnings = validateCrossReferences(registry);
+  const allRouteIds = new Set(raw.routes.map((r) => r.data.id));
+  const validationWarnings = validateCrossReferences(registry, allRouteIds);
 
-  if (strict && validationWarnings.length > 0) {
-    const details = validationWarnings
+  // MAR-530: a "warning"-severity entry (a route that exists but lags behind
+  // its playbook's status filter) must NEVER throw, in strict mode or not —
+  // loadRegistry is structurally unbreakable by a half-promotion. Only a real
+  // broken reference (default/unset severity) fails a strict load.
+  const hardErrors = validationWarnings.filter((e) => e.severity !== "warning");
+  if (strict && hardErrors.length > 0) {
+    const details = hardErrors
       .map((e) => `  [${e.entity}] ${e.field}: ${e.message}`)
       .join("\n");
     throw new RegistryValidationError(
       `Registry cross-reference errors:\n${details}`,
-      validationWarnings,
+      hardErrors,
     );
   }
 

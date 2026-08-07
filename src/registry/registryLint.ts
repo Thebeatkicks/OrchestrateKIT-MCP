@@ -12,7 +12,9 @@ import type { Component } from "./componentSchema.js";
 import type { Edge } from "./edgeSchema.js";
 import type { Worker } from "./workerSchema.js";
 import type { Playbook } from "./playbookSchema.js";
+import type { Route } from "./routeSchema.js";
 import type { Registry } from "./registryTypes.js";
+import { routeLagsBehindPlaybook } from "./lifecycleStatus.js";
 import { loadRegistry, type LoaderOptions } from "./registryLoader.js";
 import {
   validateCrossReferences,
@@ -208,6 +210,39 @@ export function lintLoopPlaybooks(
   return errors;
 }
 
+/**
+ * Playbook/route pair status-order gate (MAR-530). LAB's promotion queue found
+ * that bumping a playbook's status past its still-lagging golden-path route
+ * makes `loadRegistry({ includeBeta: true })` throw `Unknown route id` for
+ * every caller — a half-promoted pair deadlocks the whole registry, not just
+ * the one playbook. `registryAssembly.ts` now refuses to let that throw, but
+ * the drift is still a real bug: certify the pair atomically. This gate makes
+ * landing the drift impossible in the first place, at CI/lint time, using
+ * `routeLagsBehindPlaybook`'s visibility-flag model rather than a raw status
+ * rank (several real "published" playbooks point at "validated" routes today
+ * — both load with zero flags, so that pairing is fine, not a violation).
+ */
+export function lintPlaybookRouteStatusOrder(
+  playbooks: Playbook[],
+  routes: Route[],
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const routeById = new Map(routes.map((r) => [r.id, r]));
+  for (const pb of playbooks) {
+    if (!pb.golden_path_route_id) continue;
+    const route = routeById.get(pb.golden_path_route_id);
+    if (!route) continue; // unknown/invisible route id is reported by validateCrossReferences
+    if (routeLagsBehindPlaybook(pb.status, route.status)) {
+      errors.push({
+        entity: `playbook:${pb.id}`,
+        field: "golden_path_route_id",
+        message: `Playbook status "${pb.status}" can go visible without its golden-path route "${route.id}" (status "${route.status}") — certify the pair atomically, never promote a playbook past its route.`,
+      });
+    }
+  }
+  return errors;
+}
+
 function lintComponentRefs(registry: Registry): ValidationError[] {
   const errors: ValidationError[] = [];
   const componentIds = new Set(registry.components.map((c) => c.id));
@@ -396,6 +431,7 @@ export function lintRegistry(opts: LoaderOptions = {}): RegistryLintResult {
 
   errors.push(
     ...validateCrossReferences(registry),
+    ...lintPlaybookRouteStatusOrder(registry.playbooks, registry.routes),
     ...lintTestedEdgesRequireRefs(registry.edges),
     ...lintComponentRefs(registry),
     ...lintWorkerContracts(registry.workers),
