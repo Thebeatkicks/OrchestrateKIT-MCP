@@ -216,19 +216,24 @@
     {
       "id": "MAR-525",
       "lifecycle": "merged",
-      "linear_status": "In Progress",
-      "commit": "4ad9717",
+      "linear_status": "Done",
+      "commit": "13f6077",
       "proof": {
         "command": "pnpm verify",
         "exact_goal_command": "pnpm exec vitest run tests/journey"
       },
-      "note": "Sub-item 2a merged via PR #160 (9f3a9dc): chat_triggered_assistant_route_v1 plus a golden-journey fixture. Sub-item 2b now fixed on this branch: second_brain_assistant's own goal shape was fully shadowed by the status: published research_agent_citations playbook, returning a public-web research pipeline (source_retrieval -> ...) for a personal-notes goal with safety_review pass / risk 0 and silently dropping the owned-corpus-only guardrail. Root cause live-probed 2026-08-07: a second-brain goal states the attribution half of the pattern ('cites the source note'), and cite/citation is a research DOMAIN_KEYWORD, which makes the research-only external fetch source_retrieval eligible and the composed candidate indistinguishable from research_agent_citations. Promotion is NOT available as a fix (candidate status is invisible by design; validated needs OrchestrateLab evidence per DoD #4), so the guardrail is read from the GOAL (OWNED_CORPUS_SIGNALS in src/lib/constraintSignals.ts), the external fetch is suppressed on an owned-corpus goal, and the Layer-1 card states the guardrail either as held or as NOT carried. MAR-513 gap-list item 2."
+      "note": "Sub-item 2a merged via PR #160 (9f3a9dc): chat_triggered_assistant_route_v1 plus a golden-journey fixture. Sub-item 2b merged to master via PR #161 (13f6077): second_brain_assistant's own goal shape was fully shadowed by the status: published research_agent_citations playbook, returning a public-web research pipeline (source_retrieval -> ...) for a personal-notes goal with safety_review pass / risk 0 and silently dropping the owned-corpus-only guardrail. Root cause live-probed 2026-08-07: a second-brain goal states the attribution half of the pattern ('cites the source note'), and cite/citation is a research DOMAIN_KEYWORD, which makes the research-only external fetch source_retrieval eligible and the composed candidate indistinguishable from research_agent_citations. Promotion is NOT available as a fix (candidate status is invisible by design; validated needs OrchestrateLab evidence per DoD #4), so the guardrail is read from the GOAL (OWNED_CORPUS_SIGNALS in src/lib/constraintSignals.ts), the external fetch is suppressed on an owned-corpus goal, and the Layer-1 card states the guardrail either as held or as NOT carried. MAR-513 gap-list item 2."
     },
     {
       "id": "MAR-526",
-      "lifecycle": "planned",
+      "lifecycle": "merged",
       "linear_status": "In Progress",
-      "note": "MAR-513 gap-list item 3: 14 components with live capabilityMatcher vocabulary but no backing route/playbook, sliced into 5 sub-items on the issue. SLICE 1 (CRM: crm_record_read, lead_enrichment, deal_stage_update) is done on this branch. crm_record_read was not merely uncovered but UNREACHABLE: HINT_ONLY, and none of its hints ('crm record', 'read the crm', 'look up', 'contact record', 'deal record') fire on the natural way a goal states a CRM read, so 'reads new leads from our CRM' selected crm_note_write (the CRM WRITE) for the read step and 'reads contacts from HubSpot' was reported as unmatched demand. Added CRM-naming read hints plus the missing 'pipedrive' domain keyword (hubspot/salesforce were already there), then live-probed the composed shape and named it as registry/playbooks/crm_lead_enrichment.playbook.yaml + registry/routes/crm_lead_enrichment_route_v1.route.yaml. Status beta, which is what validate_playbook_candidate actually certifies (full structural DoD; only #4 Lab sessions and #5 benchmark prompt are unverifiable) — beta is still outside DEFAULT_ALLOWED, so plan_source stays composed. Slices 2-5 (data sources, file_storage, observability, orchestration/egress) not attempted."
+      "note": "MAR-513 gap-list item 3: 14 components with live capabilityMatcher vocabulary but no backing route/playbook, sliced into 5 sub-items on the issue. SLICE 1 (CRM: crm_record_read, lead_enrichment, deal_stage_update) merged to master via PR #163 (2e98502). crm_record_read was not merely uncovered but UNREACHABLE: HINT_ONLY, and none of its hints ('crm record', 'read the crm', 'look up', 'contact record', 'deal record') fire on the natural way a goal states a CRM read, so 'reads new leads from our CRM' selected crm_note_write (the CRM WRITE) for the read step and 'reads contacts from HubSpot' was reported as unmatched demand. Added CRM-naming read hints plus the missing 'pipedrive' domain keyword (hubspot/salesforce were already there), then live-probed the composed shape and named it as registry/playbooks/crm_lead_enrichment.playbook.yaml + registry/routes/crm_lead_enrichment_route_v1.route.yaml. Status beta, which is what validate_playbook_candidate actually certifies (full structural DoD; only #4 Lab sessions and #5 benchmark prompt are unverifiable) — beta is still outside DEFAULT_ALLOWED, so plan_source stays composed. Slices 2-5 (data sources, file_storage, observability, orchestration/egress) not attempted.",
+      "commit": "2e98502",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/graph/crmReadVocabulary.test.ts"
+      }
     },
     {
       "id": "MCP-INVOICE-SAFETY-CORPUS",
@@ -242,13 +247,14 @@
     },
     {
       "id": "MAR-529",
-      "lifecycle": "planned",
-      "linear_status": "In Progress",
+      "lifecycle": "merged",
+      "linear_status": "Done",
       "proof": {
         "command": "pnpm verify",
         "exact_goal_command": "pnpm exec vitest run tests/lib/constraintSignals.test.ts"
       },
-      "note": "Goal-constraint phrase tables were matched with bare String.includes, so a phrase sitting inside a longer word counted as if the user had written it. 'posts the result in the same THREAD ONLY after I approve' contains 'read only' (th-read only) and fired the read-only prohibition on a goal that explicitly asks the agent to POST, degrading constraint_label to gaps; 'unread only', 'spread only', 'thread-only', 'no written approval' and 'preview before' (vs the approval phrase 'review before') failed the same way. Matching is now whole-word via (?<!\\w)...(?!\\w) lookarounds in src/lib/constraintSignals.ts, shared by constraintCoverage's own firstMatch. Inflections that substring matching had covered implicitly are now ENUMERATED in the tables (never writes, never edits/editing, never commits/committing) so a reader can see exactly what fires. The chat_triggered_assistant golden fixture's coverage_tags: ['read_only'] was a mislabel produced by this bug and is corrected."
+      "note": "Goal-constraint phrase tables were matched with bare String.includes, so a phrase sitting inside a longer word counted as if the user had written it. 'posts the result in the same THREAD ONLY after I approve' contains 'read only' (th-read only) and fired the read-only prohibition on a goal that explicitly asks the agent to POST, degrading constraint_label to gaps; 'unread only', 'spread only', 'thread-only', 'no written approval' and 'preview before' (vs the approval phrase 'review before') failed the same way. Matching is now whole-word via (?<!\\w)...(?!\\w) lookarounds in src/lib/constraintSignals.ts, shared by constraintCoverage's own firstMatch. Inflections that substring matching had covered implicitly are now ENUMERATED in the tables (never writes, never edits/editing, never commits/committing) so a reader can see exactly what fires. The chat_triggered_assistant golden fixture's coverage_tags: ['read_only'] was a mislabel produced by this bug and is corrected.",
+      "commit": "9b76ffd"
     }
   ]
 }
