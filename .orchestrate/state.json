@@ -192,6 +192,17 @@
       "note": "Merged to master via PR #158 (a5ec076), CI green. MAR-513's gap-list audit (code-grounded, 2026-08-06) found `invoice_intake_po_match` — its own playbook notes call it 'the most-repeated shape in lab.db', promoted via MAR-302 from 4+ real OrchestrateLab sessions — had never been exercised by the MAR-387 golden-journey harness despite being one of the four README 'Try This First' starter goals. Added the fixture: routes deterministically to invoice_intake_po_match_route_v1 with zero clarifying questions, terminal `build_in_assistant` (the MAR-386 scope assessor reads no-scheduled-trigger + mandatory-per-invoice-gate as attended/on-demand regardless of the L2 risk level — recorded as the expected shape, not a bug). `pr_review_readonly` (the other uncovered starter goal from the same gap-list item) is separate follow-up scope, terminates the same way per the MAR-519 precedent: fixture/test issues promote straight to merged on a durable CI gate, no separate installed-runtime proof required. pnpm verify: 2278/2278 (2274 baseline + 4 new). Linear moved to Done in the same session."
     },
     {
+      "id": "MAR-524",
+      "lifecycle": "planned",
+      "linear_status": "Backlog",
+      "commit": "a173685",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/journey"
+      },
+      "note": "NOT YET MERGED — implemented on branch 000henrik/mar-524-mcp-golden-journey-fixture-for-pr_review_readonly-mar-513 (commit a173685), pushed, PR pending. MAR-513 gap-list item 2 (the other README 'Try This First' starter goal never exercised by the MAR-387 harness, alongside MAR-521's invoice_intake_po_match). Added the pr_review_readonly fixture reusing the exact goal wording already locked by planWorkflow.test.ts's PR_REVIEW_LOCK_GOAL / hostingAndMonitoringEvals.test.ts's PR_REVIEW_WEBHOOK. Webhook-triggered (github_trigger), must_run_while_user_offline true (always-on endpoint needed), so scope lands medium/durable — same family as competitor_price_monitor — and the dry run resolves to prepare_runtime (managed_worker), not build_brief like invoice_intake_po_match's build_in_assistant terminal. route_excludes locks the MAR-267 no-write guarantee (code_editing, test_runner absent). Both MCP-side (playbook status: published, route status: validated) — no LAB-side work needed. pnpm verify: 2282/2282 (2278 baseline + 4 new). Still needed before promotion to merged: PR review and merge."
+    },
+    {
       "id": "MCP-INVOICE-SAFETY-CORPUS",
       "lifecycle": "proven",
       "linear_status": "Local evidence",
