@@ -14,6 +14,8 @@
  *   • one_shot_inbox_summary → build_in_assistant → assistant_surface terminal (small)
  *   • readonly_attended_inbox_summary → build_in_assistant → assistant_surface (small, explicit no-write/no-durable regression)
  *   • gmail_lead_to_crm → dry run → build_brief (medium, attended runtime)
+ *   • invoice_intake_po_match → build_in_assistant (MAR-513: high-risk but attended/
+ *     on-demand, mandatory-gate, README starter goal, added 2026-08-07)
  *   • multi_agent_coder_loop → generate_linear_project → linear_issues (large — plan it)
  *
  * MAR-395: the two SMALL fixtures used to terminate on `attended_dry_run`. A
@@ -455,6 +457,46 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
     notes:
       "Medium scope but attended runtime (manual trigger), so the dry run leads to the " +
       "build_brief deliverable rather than a runtime setup contract.",
+  },
+  {
+    name: "invoice_intake_po_match",
+    // One of two README "Try This First" starter goals a code-grounded MAR-513
+    // audit found never exercised by this harness (2026-08-06), despite the
+    // playbook's own notes calling it "the most-repeated shape in lab.db"
+    // (promoted via MAR-302, 4+ real OrchestrateLab sessions).
+    goal:
+      "Read invoices from a shared inbox, extract the line items and totals, match " +
+      "each one against the matching purchase order, flag discrepancies, and require " +
+      "my approval before anything is routed to accounting. Never post to the ledger " +
+      "automatically.",
+    canned_answers: {},
+    coverage_tags: ["validated_playbook"],
+    expectations: {
+      initial: {
+        plan_source: "playbook",
+        playbook_id: "invoice_intake_po_match",
+        route_includes: [
+          "email_read",
+          "pdf_extraction",
+          "schema_validation",
+          "threshold_router",
+          "human_approval_gate",
+          "audit_log",
+        ],
+        route_excludes: ["email_draft", "email_send", "optional_email_send", "data_scraper"],
+        enforced_approval_gates: ["human_approval_gate"],
+        automation_clearance_level: "L2",
+        clarifying_questions: [],
+        // No scheduled_trigger and a MANDATORY per-invoice gate reads as
+        // attended + on-demand to the scope assessor, so the ⭐ recommends
+        // the no-code assistant surface, not a runtime setup contract.
+        recommended_next_click_id: "build_in_assistant",
+      },
+    },
+    notes:
+      "High-risk (L2), mandatory-every-invoice gate, but attended/on-demand rather than " +
+      "scheduled, so the ⭐ is the no-code assistant surface (build_in_assistant), not " +
+      "dry_run_in_chat → build_brief like gmail_lead_to_crm's medium/attended shape.",
   },
   {
     name: "multi_agent_coder_loop",
