@@ -11,9 +11,17 @@ summary: >
   action runs, and treat the message body as untrusted input. The reply is an
   external write and stays behind human approval until the route is validated.
   Candidate blueprint (not yet promoted from logged sessions).
+
+  MAR-513 gap-list item 2a (2026-08-07): golden_path_route_id was an empty
+  string with no route file behind it at all. chat_triggered_assistant_route_v1
+  now fills that gap with the route the live matcher actually produces for
+  this playbook's own goal shape (live-probed, not hand-copied from the
+  component list below) — see that route's notes for the two components
+  (intent_classifier, state_store) that do not cleanly fire from natural
+  phrasing of this goal.
 workflow_type: chat
 risk_level: high
-golden_path_route_id: ''
+golden_path_route_id: chat_triggered_assistant_route_v1
 stack_id: default_orchestratekit_stack
 
 components:
