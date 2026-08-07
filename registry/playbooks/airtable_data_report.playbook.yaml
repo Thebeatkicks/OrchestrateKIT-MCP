@@ -1,0 +1,121 @@
+id: airtable_data_report
+version: "0.1.0"
+status: beta
+title: Scheduled Airtable Data Report to Slack (Unattended)
+summary: >
+  Blueprint for an unattended Airtable reporting agent: on a schedule, read
+  records from an Airtable base, render a summary report, and post it to an
+  internal Slack channel. Beta blueprint: the core component chain is the
+  shape the live matcher composes for this goal (probed 2026-08-07, not
+  hand-authored — see the paired route's notes for the two components
+  deliberately excluded as compose noise), and validate_playbook_candidate
+  certifies the full structural Definition of Done — but DoD #4 (2-3 real Lab
+  sessions) and #5 (a benchmark prompt) need evidence a stateless MCP session
+  cannot see, so it stops at beta.
+workflow_type: data-etl
+risk_level: low
+golden_path_route_id: airtable_data_report_route_v1
+stack_id: default_orchestratekit_stack
+
+components:
+  - scheduled_trigger
+  - airtable_lookup
+  - report_generation
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - slack_notification
+  - audit_log
+
+edges:
+  - airtable_lookup__produces__report_generation
+  - airtable_lookup__safer_with__auth_failure_handler
+  - report_generation__produces__slack_notification
+  - audit_log__recommended__slack_notification
+  - slack_notification__safer_with__auth_failure_handler
+
+best_for:
+  - a recurring internal Airtable digest — record counts, status breakdowns, or field summaries posted to Slack on a schedule
+  - unattended reporting where the only output is an internal message, not a write back to the base
+  - keeping a team channel current on an Airtable-tracked process without a human opening the base by hand
+
+avoid_when:
+  - the goal writes anything back to the Airtable base — this playbook is read-only
+  - the report must be approved before it is shared — that is an attended pattern; this one posts directly and keeps the gate as an advisory only
+  - the source is a generic web page or CSV rather than the Airtable API — use data_scraper
+
+recommended_architecture:
+  pattern: Schedule → read Airtable → render report → validate → post to Slack (advisory-gated, credential-resilient)
+  why: >
+    Every step is a read or a local render except the final Slack post,
+    which is notification-class egress (blast radius: an internal message).
+    human_approval_gate is present because slack_notification is
+    unconditionally gated by policy, but the goal's explicit "unattended"
+    phrasing keeps it advisory rather than enforced (MAR-132) — the workflow
+    still cannot exceed "read Airtable and report" even if prompted to,
+    since the only credential it needs is a read-only Airtable token plus a
+    Slack post token.
+
+llm_driven_steps:
+  - report_generation — summarise the record set into a readable report
+
+deterministic_steps:
+  - scheduled_trigger
+  - airtable_lookup
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - slack_notification
+  - audit_log
+
+permissions:
+  read:
+    - Airtable base (read-only personal access token or OAuth scope)
+  write:
+    - Slack channel post (notification-class egress only)
+    - audit log store
+  approval_required_for: []
+
+guardrails:
+  - Use a read-only Airtable personal access token scoped to only the requested base
+  - Validate the record set before rendering — an empty or partial page (rate limit, bad filter) must not ship as a "healthy" report
+  - Normalise field names before rendering — spaces/special characters in Airtable field names break naive key access
+  - auth_failure_handler must escalate a scoped-out or expired Airtable token before the run is marked successful — a 401/403 must never read as "no records"
+  - Keep the approval gate as a visible advisory even though the goal waives enforcement — never silently drop the recommendation
+  - Log every run (query window, validation outcome, post id) to audit_log with a timestamp
+  - Respect Airtable's rate limit (5 req/s per base) with backoff rather than dropping records silently
+
+failure_modes:
+  - Airtable API rate limit (5 req/s per base) truncates a large base mid-read and the report ships looking complete
+  - A filter formula syntax error returns an empty result set instead of an error, and an empty-but-valid report ships
+  - Field names with spaces or special characters break downstream key access in report rendering
+  - The Airtable token still authenticates but lacks the requested base's scope, and the 401/403 is read downstream as "no records this period"
+  - Scheduled trigger drift or misfire — no report ships and nobody notices without a heartbeat
+  - Approval gate advisory is ignored often enough that it becomes a rubber stamp instead of a real check before wider rollout
+
+evals:
+  - record retrieval accuracy and pagination correctness against a fixture base
+  - filter formula correctness across representative query patterns
+  - schema-drift rejection on an altered field shape
+  - egress delivery — the Slack post lands on every successful run
+  - audit completeness — every run has a record
+
+implementation_steps:
+  - "Step 1: Register a scheduled_trigger for the cadence (e.g. daily 8am). Pin the timezone."
+  - "Step 2: Implement airtable_lookup with a read-only personal access token scoped to the requested base. Paginate; a stale cursor on a large base silently truncates the batch."
+  - "Step 3: Implement report_generation to summarise the record set (a standard model is enough for a count/status digest)."
+  - "Step 4: Implement schema_validation on the rendered result — reject empty/partial results and unexpected field shapes before anything posts."
+  - "Step 5: Post via slack_notification to the internal channel. This is the only egress — notification-class, internal."
+  - "Step 6: Wrap the Airtable read and the Slack post with auth_failure_handler — a credential failure escalates and the run is NOT marked successful."
+  - "Step 7: Keep human_approval_gate as a visible advisory in the run record even though the goal's unattended phrasing waives enforcement."
+  - "Step 8: Write an audit_log record per run: query window, validation outcome, Slack message id, timestamp."
+
+sources:
+  - title: Airtable Web API — list records
+    url: https://airtable.com/developers/web/api/list-records
+    source_type: official_docs
+    last_checked: "2026-08-07"
+  - title: Airtable Web API — rate limits
+    url: https://airtable.com/developers/web/api/rate-limits
+    source_type: official_docs
+    last_checked: "2026-08-07"
