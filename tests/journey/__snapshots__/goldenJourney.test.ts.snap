@@ -917,6 +917,59 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > news
 }
 `;
 
+exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > observability_alerting > matches the golden transcript snapshot 1`] = `
+{
+  "final_goal": "[text]",
+  "fixture": "observability_alerting",
+  "initial_goal": "[text]",
+  "steps": [
+    {
+      "automation_clearance_level": "L2",
+      "clarifying_question_ids": [],
+      "coverage_label": "partial",
+      "enforced_approval_gates": [],
+      "kind": "plan",
+      "plan_source": "composed",
+      "playbook_id": null,
+      "recommended_next_click": {
+        "action": "export_build_brief({ handoff_targets: ['linear'], delivery_mode: 'full' })",
+        "id": "generate_linear_project",
+        "label": "Generate the plan as Linear issues",
+      },
+      "round": 0,
+      "route": [
+        "metric_threshold_monitor",
+        "log_monitor",
+        "scheduled_trigger",
+        "uptime_check",
+        "schema_validation",
+        "reviewer_notification",
+        "auth_failure_handler",
+        "human_approval_gate",
+        "slack_notification",
+        "audit_log",
+      ],
+      "route_status": "candidate",
+    },
+    {
+      "durable_build_goal": false,
+      "honest_disclosure": true,
+      "kind": "attended_dry_run_option",
+      "present": true,
+      "walking_skeleton_disclosed": false,
+    },
+    {
+      "delivery_mode": "full",
+      "handoff_target": "linear",
+      "kind": "terminal:linear_issues",
+      "linear_handoff_non_empty": true,
+    },
+  ],
+  "terminal": "linear_issues",
+  "transcript_version": "orchestratekit.golden_journey.v1",
+}
+`;
+
 exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > one_shot_inbox_summary > matches the golden transcript snapshot 1`] = `
 {
   "final_goal": "summarize my inbox for me now",

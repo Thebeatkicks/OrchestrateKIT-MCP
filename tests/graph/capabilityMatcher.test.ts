@@ -571,6 +571,28 @@ describe("matchCapabilities — Dogfood Round 3 residuals", () => {
     expect(ids).not.toContain("calendar_write");
   });
 
+  // ── MAR-526 slice 4: "every N minutes/hours" reaches scheduled_trigger ──
+  // "every morning"/"every hour" reached scheduled_trigger via their phrase
+  // hints, but "every 5 minutes" — the natural cadence for an uptime/metric/log
+  // monitor, not a daily digest — did not, so a live monitoring goal composed
+  // with no trigger at all.
+  it("inversion: 'every 5 minutes' selects scheduled_trigger", () => {
+    const ids = matchedIds(
+      "Every 5 minutes, check if our API endpoint is up and alert Slack if it goes down.",
+    );
+    expect(ids).toContain("scheduled_trigger");
+  });
+
+  it("inversion: 'every 30 seconds' and 'every 2 hours' also select scheduled_trigger", () => {
+    expect(matchedIds("Every 30 seconds, poll the queue depth.")).toContain("scheduled_trigger");
+    expect(matchedIds("Every 2 hours, scan the logs for anomalies.")).toContain("scheduled_trigger");
+  });
+
+  it("does not fire on a bare 'minutes'/'hours' with no every/each + number", () => {
+    const ids = matchedIds("This usually takes a few minutes to run.");
+    expect(ids).not.toContain("scheduled_trigger");
+  });
+
   // ── MAR-140 round-3 residual: non-code negation generalisation ──
   it("MAR-140: 'do not publish externally' suppresses external_publish", () => {
     const ids = matchedIds(
