@@ -8,9 +8,12 @@ import {
   computeBrainCompletionPct,
   lintNoByteOrderMark,
   lintWorkerContracts,
+  lintPlaybookRouteStatusOrder,
 } from "../../src/registry/registryLint.js";
 import { loadRegistry } from "../../src/registry/registryLoader.js";
 import type { Worker } from "../../src/registry/workerSchema.js";
+import type { Playbook } from "../../src/registry/playbookSchema.js";
+import type { Route } from "../../src/registry/routeSchema.js";
 
 function makeWorker(partial: Partial<Worker> & Pick<Worker, "id" | "role">): Worker {
   return {
@@ -30,6 +33,51 @@ function makeWorker(partial: Partial<Worker> & Pick<Worker, "id" | "role">): Wor
     sources: [],
     ...partial,
   } as Worker;
+}
+
+function makePlaybook(partial: Partial<Playbook> & Pick<Playbook, "id" | "status" | "golden_path_route_id">): Playbook {
+  return {
+    version: "0.1.0",
+    title: partial.id,
+    summary: "test",
+    workflow_type: "test",
+    components: [],
+    edges: [],
+    stack_id: "",
+    risk_level: "low",
+    best_for: [],
+    avoid_when: [],
+    llm_driven_steps: [],
+    deterministic_steps: [],
+    permissions: {},
+    guardrails: [],
+    failure_modes: [],
+    evals: [],
+    implementation_steps: [],
+    sources: [],
+    ...partial,
+  } as Playbook;
+}
+
+function makeRoute(partial: Partial<Route> & Pick<Route, "id" | "status">): Route {
+  return {
+    name: partial.id,
+    summary: "test",
+    goal_patterns: [],
+    components: [],
+    edges: [],
+    known_playbooks_reused: [],
+    untested_edges: [],
+    risk_level: "low",
+    confidence: 0.5,
+    required_evals: [],
+    warnings: [],
+    failure_modes: [],
+    evals: [],
+    notes: "",
+    sources: [],
+    ...partial,
+  } as Route;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -134,6 +182,49 @@ describe("registry:lint — worker contract gate (MAR-166)", () => {
       }),
     ]);
     expect(errors.some((e) => e.message.includes("both allowed"))).toBe(true);
+  });
+});
+
+describe("registry:lint — playbook/route status-order gate (MAR-530)", () => {
+  it("flags a playbook certified past its golden-path route's declared status", () => {
+    const route = makeRoute({ id: "r1", status: "candidate" });
+    const pb = makePlaybook({ id: "pb1", status: "beta", golden_path_route_id: "r1" });
+    const errors = lintPlaybookRouteStatusOrder([pb], [route]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].entity).toBe("playbook:pb1");
+    expect(errors[0].field).toBe("golden_path_route_id");
+    expect(errors[0].message).toMatch(/can go visible without its golden-path route/);
+  });
+
+  it("passes when the route shares the playbook's gating flag, or needs no flag at all", () => {
+    const sameLevel = makeRoute({ id: "r1", status: "beta" });
+    const pb = makePlaybook({ id: "pb1", status: "beta", golden_path_route_id: "r1" });
+    expect(lintPlaybookRouteStatusOrder([pb], [sameLevel])).toHaveLength(0);
+
+    const ahead = makeRoute({ id: "r1", status: "published" });
+    expect(lintPlaybookRouteStatusOrder([pb], [ahead])).toHaveLength(0);
+  });
+
+  it("a published playbook pointing at a merely-validated route is NOT a violation (both load with zero flags)", () => {
+    // This is the real, current, intended shape of most of the registry — a
+    // raw status-rank check would wrongly flag every one of these.
+    const route = makeRoute({ id: "r1", status: "validated" });
+    const pb = makePlaybook({ id: "pb1", status: "published", golden_path_route_id: "r1" });
+    expect(lintPlaybookRouteStatusOrder([pb], [route])).toHaveLength(0);
+  });
+
+  it("ignores a playbook with no golden_path_route_id or an unresolvable one (reported elsewhere)", () => {
+    const pbEmpty = makePlaybook({ id: "pb1", status: "beta", golden_path_route_id: "" });
+    expect(lintPlaybookRouteStatusOrder([pbEmpty], [])).toHaveLength(0);
+
+    const pbUnknown = makePlaybook({ id: "pb2", status: "beta", golden_path_route_id: "ghost" });
+    expect(lintPlaybookRouteStatusOrder([pbUnknown], [])).toHaveLength(0);
+  });
+
+  it("the real registry has no playbook certified past its own route", () => {
+    const registry = loadRegistry({ includeBeta: true, includeCandidates: true });
+    const errors = lintPlaybookRouteStatusOrder(registry.playbooks, registry.routes);
+    expect(errors).toHaveLength(0);
   });
 });
 

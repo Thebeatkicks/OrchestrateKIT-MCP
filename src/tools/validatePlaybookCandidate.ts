@@ -15,7 +15,9 @@ import { load as parseYaml } from "js-yaml";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { loadRegistry } from "../registry/registryProvider.js";
 import { PlaybookSchema, type Playbook } from "../registry/playbookSchema.js";
+import { RouteSchema } from "../registry/routeSchema.js";
 import { lintLoopPlaybooks } from "../registry/registryLint.js";
+import { routeLagsBehindPlaybook } from "../registry/lifecycleStatus.js";
 import type { RegistrySnapshot } from "../graph/routeComposer.js";
 import { toErrorResult } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
@@ -43,7 +45,114 @@ export type PlaybookValidation = {
   evidence_required: string[];
   summary_markdown: string;
   next_recommended_tools: string[];
+  /** Present only when `route_yaml` was supplied (MAR-530 atomic-pair certification). */
+  route?: RouteValidation;
+  /** The pair's certifiable ceiling — the lower of the playbook's and route's own qualifies_for. Present only alongside `route`. */
+  pair_qualifies_for?: "draft" | "candidate" | "beta" | null;
+  /** True when the playbook's declared status is already ahead of its route's declared status — the exact MAR-530 failure. Refused here with a sentence; never a throw from the loader. */
+  pair_status_mismatch?: boolean;
 };
+
+export type RouteValidation = {
+  status: "ok" | "invalid_yaml" | "schema_invalid";
+  route_id: string | null;
+  /** The route's own declared status, as written in the supplied YAML. */
+  route_status: string | null;
+  /** Highest lifecycle stage the route's STRUCTURAL DoD supports. */
+  qualifies_for: "candidate" | "beta" | null;
+  missing_components: string[];
+  invalid_edges: string[];
+  blocking: string[];
+};
+
+/** Stage rank shared by the playbook and (the certifiable subset of) the route ladder. */
+const STAGE_RANK: Record<"draft" | "candidate" | "beta", number> = {
+  draft: 0,
+  candidate: 1,
+  beta: 2,
+};
+function rankToStage(rank: number): "draft" | "candidate" | "beta" {
+  return rank <= 0 ? "draft" : rank === 1 ? "candidate" : "beta";
+}
+
+/**
+ * Structural DoD for a route candidate (MAR-530) — the route-side half of
+ * atomic-pair certification. Mirrors the playbook DoD's shape but scoped to
+ * what a route YAML actually declares: components/edges must resolve against
+ * the live registry, and a route needs real failure-mode/eval coverage before
+ * it can certify past "candidate". Never certifies past "beta" — same ceiling
+ * as the playbook side, for the same reason (validated/published need Lab
+ * evidence a stateless advisor cannot see).
+ */
+export function validateRouteCandidate(
+  yamlText: string,
+  registry: RegistrySnapshot,
+): RouteValidation {
+  let raw: unknown;
+  try {
+    raw = parseYaml(yamlText);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return invalidRoute("invalid_yaml", `YAML failed to parse: ${msg}`);
+  }
+  if (typeof raw !== "object" || raw === null) {
+    return invalidRoute("invalid_yaml", "YAML did not parse to a route object.");
+  }
+
+  const parsed = RouteSchema.safeParse(raw);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((i) => `\`${i.path.join(".") || "(root)"}\`: ${i.message}`)
+      .join("; ");
+    return invalidRoute("schema_invalid", `Schema validation failed: ${issues}`);
+  }
+  const route = parsed.data;
+
+  const componentIds = new Set(registry.components.map((c) => c.id));
+  const edgeIds = new Set(registry.edges.map((e) => e.id));
+  const missing_components = route.components.filter((c) => !componentIds.has(c));
+  const invalid_edges = route.edges.filter((e) => !edgeIds.has(e));
+  const refsOk = missing_components.length === 0 && invalid_edges.length === 0;
+  const betaOk = refsOk && route.failure_modes.length >= 3 && route.evals.length >= 2;
+
+  const blocking: string[] = [];
+  if (missing_components.length > 0) {
+    blocking.push(`missing components: ${missing_components.join(", ")}`);
+  }
+  if (invalid_edges.length > 0) {
+    blocking.push(`invalid edges: ${invalid_edges.join(", ")}`);
+  }
+  if (refsOk && !betaOk) {
+    if (route.failure_modes.length < 3) {
+      blocking.push(`needs ≥3 failure_modes (has ${route.failure_modes.length})`);
+    }
+    if (route.evals.length < 2) {
+      blocking.push(`needs ≥2 evals (has ${route.evals.length})`);
+    }
+  }
+
+  return {
+    status: "ok",
+    route_id: route.id,
+    route_status: route.status,
+    qualifies_for: betaOk ? "beta" : refsOk ? "candidate" : null,
+    missing_components,
+    invalid_edges,
+    blocking,
+  };
+}
+
+function invalidRoute(status: "invalid_yaml" | "schema_invalid", message: string): RouteValidation {
+  return {
+    status,
+    route_id: null,
+    route_status: null,
+    qualifies_for: null,
+    missing_components: [],
+    invalid_edges: [],
+    blocking: [message],
+  };
+}
 
 const APPROVAL_WORDS = ["approval", "human", "gate", "sign-off", "sign off", "review"];
 
@@ -84,6 +193,8 @@ function approvalPolicyOk(pb: Playbook): boolean {
 export function validatePlaybookCandidate(
   yamlText: string,
   registry: RegistrySnapshot & { workers?: { id: string; role: string }[] },
+  /** Optional companion route YAML (MAR-530) — supply it to certify the playbook + its golden-path route as an atomic pair. */
+  routeYamlText?: string,
 ): PlaybookValidation {
   // ── parse ──
   let raw: unknown;
@@ -156,6 +267,33 @@ export function validatePlaybookCandidate(
     .filter((d) => d.ok === "unverifiable")
     .map((d) => `#${d.id} ${d.label} — ${d.detail}`);
 
+  // ── MAR-530: atomic-pair certification against the golden-path route ──
+  // Nothing else in the MCP can certify a route. Supplying route_yaml here
+  // certifies the PAIR: the ceiling is the lower of what each side
+  // structurally qualifies for, and a playbook already declared ahead of its
+  // route's declared status is refused with a sentence — never a throw.
+  let route: RouteValidation | undefined;
+  let pair_qualifies_for: PlaybookValidation["qualifies_for"] | undefined;
+  let pair_status_mismatch: boolean | undefined;
+  if (routeYamlText !== undefined) {
+    route = validateRouteCandidate(routeYamlText, registry);
+    if (route.status !== "ok") {
+      pair_qualifies_for = null;
+      blocking.push(`route candidate invalid: ${route.blocking.join("; ")}`);
+    } else {
+      pair_status_mismatch = routeLagsBehindPlaybook(pb.status, route.route_status ?? "");
+      if (pair_status_mismatch) {
+        blocking.push(
+          `Playbook status "${pb.status}" can go visible without its golden-path route's declared status "${route.route_status}" — certify the pair atomically. Promote the route to at least "${pb.status}" first, or hold the playbook at "${route.route_status}".`,
+        );
+      }
+      pair_qualifies_for =
+        route.qualifies_for === null
+          ? null
+          : rankToStage(Math.min(STAGE_RANK[qualifies_for], STAGE_RANK[route.qualifies_for]));
+    }
+  }
+
   return {
     status: "ok",
     playbook_id: pb.id,
@@ -165,8 +303,9 @@ export function validatePlaybookCandidate(
     invalid_edges,
     blocking,
     evidence_required,
-    summary_markdown: renderMarkdown(pb.id, qualifies_for, dod, blocking, evidence_required),
+    summary_markdown: renderMarkdown(pb.id, qualifies_for, dod, blocking, evidence_required, route, pair_qualifies_for, pb.golden_path_route_id),
     next_recommended_tools: ["get_playbook", "get_route", "explain_component"],
+    ...(route !== undefined ? { route, pair_qualifies_for, pair_status_mismatch } : {}),
   };
 }
 
@@ -197,6 +336,9 @@ function renderMarkdown(
   dod: DodCheck[],
   blocking: string[],
   evidence: string[],
+  route?: RouteValidation,
+  pairStage?: PlaybookValidation["qualifies_for"],
+  goldenPathRouteId?: string,
 ): string {
   const icon = (ok: boolean | "unverifiable") => (ok === true ? "✅" : ok === false ? "❌" : "🔍");
   const lines = [
@@ -216,6 +358,25 @@ function renderMarkdown(
   if (evidence.length > 0) {
     lines.push(`### 🔍 Needs Lab evidence (we never fake this)`, ``, ...evidence.map((e) => `- ${e}`), ``);
   }
+  if (route) {
+    lines.push(
+      `### 🔗 Golden-path route pair (MAR-530)`,
+      ``,
+      `Route \`${route.route_id ?? "?"}\` (declared status: ${route.route_status ?? "?"}) qualifies for: **${route.qualifies_for ?? "none — broken references"}**.`,
+      `**Pair ceiling: ${pairStage ?? "null"}** — the lower of the playbook's and route's own qualifies_for. Certify both to the same status together; never promote one without the other.`,
+      ``,
+    );
+    if (route.blocking.length > 0) {
+      lines.push(...route.blocking.map((b) => `- ❌ route: ${b}`), ``);
+    }
+  } else if (goldenPathRouteId) {
+    lines.push(
+      `### 🔗 Golden-path route`,
+      ``,
+      `Pass \`route_yaml\` alongside \`playbook_yaml\` to certify the playbook and its golden-path route as an atomic pair (MAR-530) — a route left behind makes the pair impossible to promote safely.`,
+      ``,
+    );
+  }
   return lines.join("\n");
 }
 
@@ -224,6 +385,13 @@ const InputShape = {
   playbook_yaml: z.string().min(1).describe(
     "The candidate playbook as YAML text (same shape as registry/playbooks/*.playbook.yaml). " +
     "Validated against the live registry and the Definition of Done.",
+  ),
+  route_yaml: z.string().min(1).optional().describe(
+    "Optional companion golden-path route YAML (same shape as registry/routes/*.route.yaml). " +
+    "Supply it to certify the playbook and its route as an atomic pair (MAR-530): the reported " +
+    "qualifies_for becomes the lower of what each side structurally qualifies for, and a " +
+    "playbook whose declared status already sits ahead of its route's is refused with a " +
+    "sentence — never promote a playbook past its still-lagging route.",
   ),
 };
 
@@ -238,15 +406,17 @@ export function registerValidatePlaybookCandidate(server: McpServer): void {
         "missing components, invalid edges, missing failure modes/evals, risk + approval " +
         "policy, LLM-vs-deterministic separation, sources — and reports which lifecycle " +
         "stage it qualifies for (draft → candidate → beta). It never writes to the registry " +
-        "and never certifies validated/published (those need Lab evidence it cannot see).",
+        "and never certifies validated/published (those need Lab evidence it cannot see). " +
+        "Pass the optional route_yaml to certify the playbook + its golden-path route together " +
+        "as an atomic pair (MAR-530) — the only way anything in the MCP certifies a route.",
       inputSchema: InputShape,
       outputSchema: ValidatePlaybookCandidateOutputShape,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (input) => {
       try {
-        const registry = loadRegistry({ includeBeta: true });
-        const result = validatePlaybookCandidate(input.playbook_yaml, registry);
+        const registry = loadRegistry({ includeBeta: true, includeCandidates: true });
+        const result = validatePlaybookCandidate(input.playbook_yaml, registry, input.route_yaml);
         logger.debug(
           `validate_playbook_candidate → status=${result.status} qualifies=${result.qualifies_for}`,
         );
