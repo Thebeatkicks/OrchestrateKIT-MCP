@@ -492,8 +492,36 @@ function isMonitoringDigestOnlyResearch(goalLower: string): boolean {
  *
  * "hourly"/"nightly"/"cron" are pure infra and are intentionally NOT in any
  * DOMAIN_KEYWORDS list — they never establish a domain on their own.
+ *
+ * MAR-539: "draft" joins them. It is a CONTENT noun at least as often as a
+ * mailbox one ("a blog post draft", "compose a review draft", "draft a product
+ * announcement"), and it was establishing email_calendar single-handedly — which
+ * then let `KEYWORD_HINTS.draft` fire and the domain's fuzzy pass drag
+ * `optional_email_send` in behind it. Live-probed on master `59fbbbc`: a
+ * marketing-copy goal ("generate 3 headline variants … compose a review draft …
+ * require my approval") composed an `email_draft` step AND an `optional_email_send`
+ * step — an outbound send on a goal that never mentions email. That is the most
+ * expensive shape of the read-vs-write class bug: an egress the user never asked
+ * for, in a plan whose whole product claim is that it states what the agent may do.
+ *
+ * Two comments in this file already called the word unreliable without wiring it
+ * to the general case: STRONG_EMAIL_CALENDAR_TOKENS "deliberately EXCLUDES
+ * 'draft'", and MAR-219's CHAT_OVERLAPPING_EMAIL_KEYWORDS fixed exactly this bug
+ * for chat goals only. This generalises MAR-219 to every other primary domain via
+ * the mechanism MAR-131 already built for "schedule".
+ *
+ * A real mailbox goal is untouched: "reply"/"replies"/"email"/"gmail"/"inbox"/
+ * "mailbox"/"calendar"/"meeting"/"invite" are all strong, so "draft a reply in
+ * gmail" and "read my unread emails and draft a reply for each one" keep
+ * email_draft exactly as before.
+ *
+ * Recorded limit (MAR-529 discipline — state it, do not hide it): a goal whose
+ * ONLY domain signal is "draft" ("draft a weekly update") has no other primary
+ * domain for suppressWeakOnlyDomain to defer to, so email_calendar survives and
+ * email_draft is still selected. Separating that needs intent parsing, not
+ * lexical de-biasing.
  */
-const WEAK_EMAIL_CALENDAR_KEYWORDS = ["schedule", "scheduling"];
+const WEAK_EMAIL_CALENDAR_KEYWORDS = ["schedule", "scheduling", "draft"];
 
 /**
  * MAR-219: email_calendar keywords that ALSO describe a chat bot's own behaviour.
@@ -1018,6 +1046,82 @@ function suppressCrmNoteForDataReport(
   if (CRM_WRITE_INTENT.some((t) => goalLower.includes(t))) return;
   domainAllowed.delete("crm_note_write");
 }
+
+/**
+ * MAR-538: Airtable direction. `airtable_lookup` is READ-only — `permissions.write`
+ * is `[]`, its Connect entry is labelled "Airtable — read base", and its required
+ * scopes are `data.records:read` / `schema.bases:read`. But the bare `airtable`
+ * KEYWORD_HINT carried no direction, so a goal asking to WRITE to an Airtable base
+ * selected it anyway: "write the output to an Airtable base" composed
+ * `scheduled_trigger → db_read → airtable_lookup → …` with no write component at
+ * all, and the plan told the user to provision a read-only token for a task that
+ * needs writes. A goal asking to WRITE must never be planned as a READ.
+ *
+ * This is the treatment MAR-254 already gave the SQL source ("the generic forms
+ * are direction-carrying PHRASES … so a 'save to a database' WRITE goal never
+ * pulls the READ component via a bare 'database' token"), applied to the provider
+ * token that never got it. No new component is needed: `file_storage`'s own
+ * summary already names "an Airtable base" as a destination and its Connect entry
+ * lists Airtable in `product_examples` with API-key auth.
+ *
+ * Direction is read from the goal's own words, anchored on the PREPOSITION that
+ * attaches to the Airtable object, never on a bare verb anywhere in the sentence:
+ *
+ *   write  = a write verb  AND  `to|into|in (a|an|the|our|…) airtable`
+ *   read   = `from (…) airtable`  OR  a read verb within ~40 chars before it
+ *
+ * The preposition anchor is what makes "save the Airtable records to a
+ * spreadsheet" — a READ of Airtable whose write lands elsewhere — stay a read:
+ * it has a write verb, but nothing writes *to* Airtable.
+ *
+ * The two signals are independent, not a switch. A write signal always selects
+ * the destination; only the READ component's suppression is gated on the absence
+ * of a read signal, so "read from Airtable, enrich, and write back to Airtable"
+ * keeps both halves instead of losing one.
+ */
+const AIRTABLE_WRITE_VERBS =
+  /(?<!\w)(write|writes|writing|wrote|save|saves|saving|saved|store|stores|storing|stored|create|creates|creating|created|add|adds|adding|added|append|appends|appending|appended|insert|inserts|inserting|inserted|update|updates|updating|updated|upsert|upserts|upserting|push|pushes|pushing|populate|populates|populating|sync)(?!\w)/;
+/**
+ * Deliberately NOT in the verb list: "record"/"records" (overwhelmingly the NOUN
+ * in an Airtable goal — "read records from our Airtable base"), "post" (egress to
+ * a channel, not a store) and "log" (substring-prone: blog, login, catalog).
+ */
+const AIRTABLE_DESTINATION =
+  /(?<!\w)(?:to|into|in)\s+(?:a|an|the|our|my|your|their|its)?\s*airtable(?!\w)/;
+const AIRTABLE_SOURCE =
+  /(?<!\w)from\s+(?:a|an|the|our|my|your|their|its)?\s*airtable(?!\w)/;
+const AIRTABLE_READ_VERB_OBJECT =
+  /(?<!\w)(read|reads|reading|pull|pulls|pulling|fetch|fetches|fetching|query|queries|querying|look up|looks up|looking up|list|lists|listing|retrieve|retrieves|retrieving|load|loads|loading|scan|scans|scanning|import|imports|importing)(?!\w)[^.;!?]{0,40}?(?<!\w)airtable(?!\w)/;
+
+/** True when the goal asks for something to be written INTO Airtable (MAR-538). */
+export function hasAirtableWriteIntent(goalLower: string): boolean {
+  return AIRTABLE_WRITE_VERBS.test(goalLower) && AIRTABLE_DESTINATION.test(goalLower);
+}
+
+/** True when the goal asks for something to be read OUT OF Airtable (MAR-538). */
+export function hasAirtableReadIntent(goalLower: string): boolean {
+  return AIRTABLE_SOURCE.test(goalLower) || AIRTABLE_READ_VERB_OBJECT.test(goalLower);
+}
+
+function suppressAirtableLookupForWriteGoal(
+  goalLower: string,
+  domainAllowed: Set<string>,
+): void {
+  if (!hasAirtableWriteIntent(goalLower)) return;
+  if (hasAirtableReadIntent(goalLower)) return;
+  domainAllowed.delete("airtable_lookup");
+  // The cross-system half of the same class: "append each new lead to our
+  // Airtable table" / "update the status field in Airtable when a deal closes"
+  // establish crm_sales on "lead"/"deal", and crm_note_write — a HubSpot /
+  // Salesforce note — became the only write in the route. The user named the
+  // destination, and it was not the CRM. Suppressed only when the goal names no
+  // CRM system of its own (same escape-token shape as suppressCrmNoteForDataReport).
+  if (!AIRTABLE_GOAL_NAMES_A_CRM.some((t) => goalLower.includes(t))) {
+    domainAllowed.delete("crm_note_write");
+    domainAllowed.delete("deal_stage_update");
+  }
+}
+const AIRTABLE_GOAL_NAMES_A_CRM = ["crm", "hubspot", "salesforce", "pipedrive"];
 
 /**
  * MAR-525 2b: source_retrieval-on-a-second-brain suppression.
@@ -2215,6 +2319,10 @@ export function matchCapabilities(
   // fetch source_retrieval, which "cite"/"citation" (a research DOMAIN_KEYWORD
   // a second-brain goal states by nature) otherwise makes eligible.
   suppressSourceRetrievalForOwnedCorpus(goalLower, domainAllowed);
+  // MAR-538: a goal that writes INTO an Airtable base drops airtable_lookup —
+  // a READ-only component whose Connect entry provisions a read-only token.
+  // The write destination is bumped in Pass 1d below.
+  suppressAirtableLookupForWriteGoal(goalLower, domainAllowed);
   // MAR-303: the "in the loop" idiom (with no real iteration/fan-out signal)
   // drops the loop_controller false-positive on unattended report/monitor goals.
   suppressLoopControllerForIdiom(goalLower, domainAllowed);
@@ -2264,6 +2372,15 @@ export function matchCapabilities(
   // loop_controller even though it carries none of the literal loop tokens.
   if (domainAllowed.has("loop_controller") && hasRevisionLoopSignal(goalLower)) {
     bump("loop_controller", 2, "revision-loop phrase", "hint");
+  }
+
+  // Pass 1d (MAR-538): Airtable-as-DESTINATION. file_storage is HINT_ONLY, so
+  // without this bump an Airtable write goal has no destination component at all
+  // once the read-only airtable_lookup is suppressed. Fires on the write signal
+  // alone (not gated on the read signal), so a read-then-write-back goal gets
+  // both the source and the destination.
+  if (domainAllowed.has("file_storage") && hasAirtableWriteIntent(goalLower)) {
+    bump("file_storage", 2, "airtable-write phrase", "hint");
   }
 
   // Passes 2–4: per-component token matching (gated)
