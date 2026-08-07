@@ -1,0 +1,111 @@
+id: telegram_triggered_assistant
+version: "0.1.0"
+status: beta
+title: Telegram-Triggered Assistant (Authorized Command, Gated Reply)
+summary: >
+  Blueprint for a Telegram bot that runs a bounded task on an inbound slash
+  command from an allowed sender and posts the reply back into the same
+  chat only after human approval. Teams/Telegram parity with
+  chat_triggered_assistant's existing Discord shape — the defining concern is
+  AUTHORIZATION: a chat trigger is invoked by a human, so the agent must
+  verify WHO is allowed to invoke it before any action runs, and treat the
+  message body as untrusted input. Beta blueprint: the component chain is
+  the shape the live matcher composes for this goal (probed 2026-08-07, not
+  hand-authored), and validate_playbook_candidate certifies the full
+  structural Definition of Done — but DoD #4 (2-3 real Lab sessions) and #5
+  (a benchmark prompt) need evidence a stateless MCP session cannot see, so
+  it stops at beta.
+workflow_type: chat
+risk_level: high
+golden_path_route_id: telegram_triggered_assistant_route_v1
+stack_id: default_orchestratekit_stack
+
+components:
+  - chat_trigger
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - telegram_notification
+  - audit_log
+
+edges:
+  - audit_log__recommended__chat_trigger
+  - audit_log__recommended__telegram_notification
+  - telegram_notification__safer_with__auth_failure_handler
+
+best_for:
+  - a support or ops bot that answers questions in a Telegram group or channel
+  - a slash-command agent that runs a bounded task on request and reports back into Telegram
+  - a Telegram-resident agent where only specific users may trigger actions
+
+avoid_when:
+  - a one-way alert or notification with no inbound message (use telegram_notification alone)
+  - an open public bot that anyone can trigger into privileged or irreversible actions
+  - fully autonomous posting with no approval gate before the route is validated
+
+recommended_architecture:
+  pattern: Inbound Telegram update → authorize sender → validate → do work → approve → reply → audit
+  why: >
+    A chat trigger is the only entrypoint a stranger can invoke directly. The
+    authorization check (allowed user id list) and update-signature
+    verification (Telegram's secret_token) must happen FIRST, before any
+    downstream step runs. The reply is an irreversible external post, so it
+    stays behind human approval until logged sessions justify dropping the
+    gate — telegram_notification's own component YAML already requires
+    approval before send, so the gate is a registry fact, not only a policy
+    choice.
+
+llm_driven_steps: []
+
+deterministic_steps:
+  - chat_trigger
+  - schema_validation
+  - human_approval_gate
+  - telegram_notification
+  - auth_failure_handler
+  - audit_log
+
+permissions:
+  read:
+    - inbound Telegram update (via Bot API webhook or long polling)
+  write:
+    - Telegram chat/channel post (via Bot API, approval-gated)
+  approval_required_for:
+    - Telegram message post
+
+guardrails:
+  - Verify the sender's Telegram user id is on the allowed list BEFORE any downstream step runs
+  - Verify Telegram's secret_token on every inbound webhook update and reject anything unsigned
+  - Deduplicate on the update id — Telegram retries delivery and will double-trigger without it
+  - The reply is an external write — keep human_approval_gate until the route earns validated status from logged sessions
+  - Log who triggered which action, from which chat, and when — the audit trail is the only record of who asked
+  - Scope the Bot API token to only the bot's own actions; never reuse a token across unrelated bots
+
+failure_modes:
+  - Unauthorized sender triggers a privileged action because the authorization check was skipped or misconfigured
+  - Prompt-injection in the message body steers the agent into an unintended action
+  - Duplicate delivery without an idempotency key causes a double reply
+  - Bot token expiry or revocation silently stops inbound events or outbound posts — the bot goes deaf or mute with no error surfaced
+  - Reply posted to the wrong chat because the originating context was lost
+
+evals:
+  - authorization enforcement — unauthorized sender is rejected before any action
+  - injection resistance — an instruction embedded in the message body does not expand the agent's allowed actions
+  - idempotency — a duplicated inbound event produces exactly one reply
+  - approval enforcement — no reply is posted when approval is absent
+  - audit completeness — every triggered action has a record of sender, chat, and timestamp
+
+implementation_steps:
+  - "Step 1: Register a Telegram Bot API webhook (or use long polling) pointed at YOUR endpoint. MCP servers cover outbound posting, not the inbound side."
+  - "Step 2: On every update, verify Telegram's secret_token and reject anything unsigned. Deduplicate on the update id."
+  - "Step 3: Authorize the sender against an allowed Telegram user id list. Reject (and audit) anyone not on it BEFORE any further step."
+  - "Step 4: Run schema_validation on the structured update, then do the bounded work for the request. Keep the agent's tool set fixed."
+  - "Step 5: Surface the proposed reply to human_approval_gate. On approval, post via telegram_notification into the originating chat."
+  - "Step 6: Route credential failures (expired/revoked bot token) to auth_failure_handler so a dead listener surfaces a named error instead of going silently offline."
+  - "Step 7: Write an audit_log entry for every triggered action — sender id, authorization result, chat id, outcome."
+
+sources:
+  - title: Telegram Bot API
+    url: https://core.telegram.org/bots/api
+    source_type: official_docs
+    last_checked: "2026-08-07"

@@ -1,0 +1,13 @@
+id: fan_out_collector__produces__multi_variant_generator
+from: fan_out_collector
+to: multi_variant_generator
+relation: produces_input_for
+status: published
+reason: When parallel branches each independently generate a candidate (a headline, a piece of copy, an image brief), the merged result set from fan_out_collector is exactly the labelled variant set multi_variant_generator packages for A/B or multivariate testing.
+severity: low
+notes: Only wire this edge when the parallel branches ARE the variant-generation step. If branches produce raw data records instead, route to data_normalizer (see fan_out_collector__produces__data_normalizer) rather than here.
+conditions:
+  - parallel branches each independently produce a content candidate intended for A/B or multivariate testing
+tested: true
+test_refs:
+  - "route:variant_review_route_v1"

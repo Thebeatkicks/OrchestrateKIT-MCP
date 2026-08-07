@@ -1,0 +1,113 @@
+id: variant_review
+version: "0.1.0"
+status: beta
+title: Parallel Content Variant Generation with Human Review
+summary: >
+  Blueprint for a parallel content-variant pipeline: generate several content
+  candidates in parallel branches, fan them back into one merged variant set,
+  stage the set for human review, and never finalise without an explicit
+  review signal. Beta blueprint: the component chain is the shape the live
+  matcher composes for this goal (probed 2026-08-07, not hand-authored), and
+  validate_playbook_candidate certifies the full structural Definition of
+  Done — but DoD #4 (2-3 real Lab sessions) and #5 (a benchmark prompt) need
+  evidence a stateless MCP session cannot see, so it stops at beta.
+workflow_type: content_marketing
+risk_level: low
+golden_path_route_id: variant_review_route_v1
+stack_id: default_orchestratekit_stack
+
+components:
+  - fan_out_collector
+  - job_queue
+  - retry_policy
+  - multi_variant_generator
+  - review_draft_composer
+  - reviewer_notification
+  - human_approval_gate
+  - audit_log
+
+edges:
+  - fan_out_collector__produces__multi_variant_generator
+  - job_queue__compatible__retry_policy
+  - multi_variant_generator__produces__review_draft_composer
+  - review_draft_composer__produces__human_approval_gate
+  - review_draft_composer__produces__reviewer_notification
+
+best_for:
+  - A/B or multivariate content testing — headlines, subject lines, ad copy, CTAs — generated in parallel and reviewed as a set
+  - a "generate options, let a human pick" pattern where the agent never decides which variant ships
+  - keeping variant generation fast (parallel branches) without skipping human review before anything is finalised
+
+avoid_when:
+  - only one candidate is needed — the fan-out/merge machinery adds setup cost with no value for single-output generation
+  - the variants should be finalised or published automatically — that removes the review step this playbook exists to enforce
+  - the parallel branches produce raw data records rather than content candidates — route those to data_normalizer instead (see fan_out_collector__produces__data_normalizer)
+
+recommended_architecture:
+  pattern: Fan out N generation branches → collect/merge → package as labelled variants → stage for review → notify reviewer (gate, never auto-finalise)
+  why: >
+    Every step up to and including multi_variant_generator is generation —
+    no external effect, nothing shipped. review_draft_composer is the one
+    hard boundary: it writes only to a staging store, never to any
+    publishing channel, and its own registry edges require
+    human_approval_gate and reviewer_notification. That is what makes "never
+    published without an explicit review signal" a structural guarantee
+    rather than a prompt instruction — there is no component on this route
+    capable of publishing at all.
+
+llm_driven_steps:
+  - multi_variant_generator — generate the labelled content variants
+  - review_draft_composer — compose the staged draft for reviewer presentation
+
+deterministic_steps:
+  - fan_out_collector
+  - job_queue
+  - retry_policy
+  - reviewer_notification
+  - human_approval_gate
+  - audit_log
+
+permissions:
+  read:
+    - upstream branch outputs (parallel generation results)
+  write:
+    - draft staging store (not any external publishing channel)
+    - audit log store
+  approval_required_for: []
+
+guardrails:
+  - Surface every partial branch failure or timeout in the merged result — never silently drop a branch from the variant set
+  - Preserve variant/hypothesis-tag labels unchanged across the fan-in
+  - Use an idempotency key per branch task so a retry cannot produce a duplicate variant
+  - Treat review_status literally — nothing downstream may act while it is "pending", only on an explicit approved signal
+  - Bound the queue so a slow branch cannot silently stall every other variant set behind it
+  - Log every run (branch outcomes, variant count, review outcome) to audit_log with a timestamp
+
+failure_modes:
+  - A parallel branch times out or errors and fan_out_collector's merge strategy silently drops it instead of surfacing a partial result
+  - Variant count or hypothesis tags are lost across the fan-in, so the reviewer cannot tell which variant tests which hypothesis
+  - A retry after a transient branch failure produces a duplicate variant instead of a fresh one (no idempotency key on the branch task)
+  - The staged draft's review_status is misread as approved when it is only pending, and downstream steps act on unreviewed content
+  - Queue backlog under job_queue grows unbounded when branches are slower than the intake rate, delaying every variant set
+  - A hypothesis tag collides across variants (duplicate label), so downstream analytics cannot attribute performance correctly
+
+evals:
+  - merge correctness — all_success/any_success/best_of strategies each produce the documented result shape on a fixture set of branch outcomes
+  - partial-failure surfacing — a timed-out or errored branch is visible in the merged result, not silently absent
+  - variant/hypothesis-tag fidelity across the fan-in (labels survive the merge unchanged)
+  - no-finalise-without-review — nothing downstream of review_draft_composer fires while review_status is pending
+  - audit completeness — every run has a record
+
+implementation_steps:
+  - "Step 1: Fan out the desired variant count as parallel generation branches via job_queue, wrapped in retry_policy for transient failures."
+  - "Step 2: Implement fan_out_collector with an explicit merge strategy (all_success / any_success / best_of) and a per-branch timeout."
+  - "Step 3: Implement multi_variant_generator to package the merged branch outputs as labelled variants with hypothesis tags."
+  - "Step 4: Implement review_draft_composer to stage the variant set with review_status=pending — writes only to the staging store."
+  - "Step 5: Post via reviewer_notification that a variant set is ready for review."
+  - "Step 6: Gate any downstream action behind human_approval_gate — nothing finalises on review_status=pending."
+  - "Step 7: Write an audit_log record per run: branch outcomes, variant count, review outcome, timestamp."
+
+sources:
+  - title: "MAR-526 slice 5 live-probe evidence: compose_workflow_route/plan_workflow output for a parallel content-variant + human-review goal (2026-08-07)"
+    source_type: internal_note
+    last_checked: "2026-08-07"
