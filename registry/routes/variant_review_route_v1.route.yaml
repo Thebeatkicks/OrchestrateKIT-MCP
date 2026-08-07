@@ -1,0 +1,74 @@
+id: variant_review_route_v1
+name: Parallel Content Variant Generation with Human Review
+status: beta
+summary: >
+  Golden-path route for a parallel content-variant pipeline: generate several
+  content candidates in parallel branches, fan them back into one merged
+  variant set, stage the set for human review, and never finalise without an
+  explicit review signal. Exactly the shape compose_workflow_route/plan_workflow
+  produce for a natural "generate 3 headline variants for a landing page in
+  parallel, fan the results back together, stage for review, and require my
+  approval before anything ships" goal (live-probed 2026-08-07), not a
+  hand-authored ideal.
+goal_patterns:
+  - generate .* (variants?|a/b) .* (parallel|in parallel) .* (fan|merge|collect) .* (review|approval)
+  - (variant|a/b) .* content .* stage .* review .* approval
+components:
+  - fan_out_collector
+  - job_queue
+  - retry_policy
+  - multi_variant_generator
+  - review_draft_composer
+  - reviewer_notification
+  - human_approval_gate
+  - audit_log
+edges:
+  - fan_out_collector__produces__multi_variant_generator
+  - job_queue__compatible__retry_policy
+  - multi_variant_generator__produces__review_draft_composer
+  - review_draft_composer__produces__human_approval_gate
+  - review_draft_composer__produces__reviewer_notification
+known_playbooks_reused: []
+untested_edges: []
+risk_level: low
+confidence: 0.7
+required_evals:
+  - no variant is finalised or published without review_draft_composer's explicit review signal
+  - a partial branch failure or timeout is surfaced, not silently dropped from the merged variant set
+failure_modes:
+  - A parallel branch times out or errors and fan_out_collector's merge strategy silently drops it instead of surfacing a partial result
+  - Variant count or hypothesis tags are lost across the fan-in, so the reviewer cannot tell which variant tests which hypothesis
+  - A retry after a transient branch failure produces a duplicate variant instead of a fresh one (no idempotency key on the branch task)
+  - The staged draft's review_status is misread as approved when it is only pending, and downstream steps act on unreviewed content
+  - Queue backlog under job_queue grows unbounded when branches are slower than the intake rate, delaying every variant set
+evals:
+  - merge correctness — all_success/any_success/best_of strategies each produce the documented result shape on a fixture set of branch outcomes
+  - partial-failure surfacing — a timed-out or errored branch is visible in the merged result, not silently absent
+  - variant/hypothesis-tag fidelity across the fan-in (labels survive the merge unchanged)
+  - no-finalise-without-review — nothing downstream of review_draft_composer fires while review_status is pending
+  - audit completeness — every run has a record
+notes: >
+  MAR-526 slice 5 (MAR-513 gap-list item 3): fan_out_collector,
+  multi_variant_generator and review_draft_composer all carried live
+  capabilityMatcher vocabulary while backing no route or playbook at all —
+  all three were already independently reachable via their existing
+  KEYWORD_HINTS (parallel/fan out, variant/a-b, review draft/stage for
+  review), so this slice is pure golden-path naming, not a matcher fix.
+  Two new edges — fan_out_collector__produces__multi_variant_generator and
+  multi_variant_generator__produces__review_draft_composer — complete the
+  chain from "N variants generated in parallel" to "reviewer sees them
+  staged, then approves"; review_draft_composer's own produces edges to
+  human_approval_gate and reviewer_notification already existed.
+
+  The bare word "draft" fuzzy-matches email_draft (KEYWORD_HINTS) regardless
+  of context, so goal phrasings using "draft" here compose a spurious
+  email_draft/optional_email_send tail even though nothing about this route
+  ever mentions email — filed as a follow-up task rather than fixed here,
+  since the natural "stage for review" / "compose a draft" hints
+  (deliberately draft-free wording is also available) let this route's own
+  goal compose cleanly without it.
+
+  scope_assessment reaches "large" ("Multi-agent route: a loop or parallel
+  fan-out of workers"), recommending the Linear-project path — an accurate
+  reflection of real setup cost, not a routing bug.
+sources: []

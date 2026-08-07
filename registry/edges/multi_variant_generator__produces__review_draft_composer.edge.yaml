@@ -1,0 +1,12 @@
+id: multi_variant_generator__produces__review_draft_composer
+from: multi_variant_generator
+to: review_draft_composer
+relation: produces_input_for
+status: published
+reason: The labelled variant set from multi_variant_generator is exactly the candidate content review_draft_composer stages for human review — presenting each variant with its hypothesis tag rather than picking one automatically.
+severity: low
+notes: review_draft_composer already declares produces_input_for edges to human_approval_gate and reviewer_notification, so wiring this edge completes the chain from "N variants generated" to "reviewer sees them staged, then approves."
+conditions: []
+tested: true
+test_refs:
+  - "route:variant_review_route_v1"

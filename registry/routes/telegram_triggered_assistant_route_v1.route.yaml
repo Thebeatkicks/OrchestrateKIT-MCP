@@ -1,0 +1,61 @@
+id: telegram_triggered_assistant_route_v1
+name: Telegram-Triggered Assistant — Authorized Command, Gated Reply
+status: beta
+summary: >
+  Golden-path route for a Telegram bot that runs a bounded task on an inbound
+  slash command from an allowed sender and posts the reply back into the
+  same thread only after human approval. Exactly the shape
+  compose_workflow_route/plan_workflow produce for a natural "Telegram bot
+  ... slash command ... only after I approve it" goal (live-probed
+  2026-08-07) — Teams/Telegram parity with chat_triggered_assistant_route_v1's
+  existing Discord shape, using the same leaner subset of the
+  chat_triggered_assistant playbook's own broader component set.
+goal_patterns:
+  - telegram bot .* slash command .* (approve|approval)
+  - responds? to .* slash command .* only after .* approve .* telegram
+components:
+  - chat_trigger
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - telegram_notification
+  - audit_log
+edges:
+  - audit_log__recommended__chat_trigger
+  - audit_log__recommended__telegram_notification
+  - telegram_notification__safer_with__auth_failure_handler
+known_playbooks_reused: []
+untested_edges: []
+risk_level: high
+confidence: 0.7
+required_evals:
+  - authorized sender accepted, unauthorized sender rejected (unit)
+  - approval enforcement — no reply is posted when approval is absent
+failure_modes:
+  - Unauthorized sender triggers a privileged action because the authorization check was skipped or misconfigured
+  - Prompt-injection in the message body steers the agent into an unintended action
+  - Duplicate delivery without an idempotency key causes a double reply
+  - Bot token expiry silently stops inbound events or outbound posts — the bot goes deaf or mute with no error surfaced
+  - Reply posted to the wrong chat because the originating context was lost
+evals:
+  - injection resistance — an instruction embedded in the message body does not expand the agent's allowed actions
+  - idempotency — a duplicated inbound event produces exactly one reply
+  - authorization enforcement — unauthorized sender is rejected before any action
+notes: >
+  MAR-526 slice 5 (MAR-513 gap-list item 3): telegram_notification carried
+  live capabilityMatcher vocabulary while backing no route or playbook at
+  all — Teams/Telegram parity with chat_triggered_assistant_route_v1's
+  existing Discord shape. Live-probed 2026-08-07: the exact
+  chat_triggered_assistant playbook goal wording with "Discord" replaced by
+  "Telegram" composes an identical shape (chat_trigger, schema_validation,
+  human_approval_gate, auth_failure_handler, telegram_notification,
+  audit_log), route_score 70/high confidence — intent_classifier and
+  state_store do not cleanly fire from natural phrasing of this goal, same
+  as the Discord route's own documented gap. All edges reused from the
+  existing registry (audit_log__recommended__telegram_notification and
+  telegram_notification__safer_with__auth_failure_handler already existed) —
+  no new edges needed. Status beta — validate_playbook_candidate's
+  structural ceiling (full DoD; only #4 Lab sessions and #5 benchmark prompt
+  are unverifiable) — which keeps this out of the default-loaded registry,
+  so plan_source stays composed for this goal.
+sources: []

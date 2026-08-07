@@ -873,6 +873,118 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
       "puts it there (probed 2026-08-07), same class as chat_triggered_assistant_route_v1.",
   },
   {
+    name: "variant_review",
+    // MAR-526 slice 5 (MAR-513 gap-list item 3, final slice): fan_out_collector,
+    // multi_variant_generator and review_draft_composer all carried live
+    // capabilityMatcher vocabulary while backing no route or playbook at
+    // all. All three were already independently reachable; the durable
+    // regression gate for variant_review_route_v1 (status: beta — still
+    // outside the default-loaded registry, so plan_source stays composed).
+    goal:
+      "generate 3 headline variants for a landing page in parallel, fan the results back " +
+      "together, stage for review, and require my approval before anything ships",
+    canned_answers: {},
+    coverage_tags: [],
+    expectations: {
+      initial: {
+        plan_source: "composed",
+        playbook_id: null,
+        route_includes: [
+          "fan_out_collector",
+          "multi_variant_generator",
+          "review_draft_composer",
+          "human_approval_gate",
+          "audit_log",
+        ],
+        enforced_approval_gates: ["human_approval_gate"],
+        automation_clearance_level: "L3",
+        clarifying_questions: [],
+        recommended_next_click_id: "generate_linear_project",
+      },
+    },
+    notes:
+      "The goal's explicit 'require my approval' is an approval REQUIREMENT (not a waiver), " +
+      "so the gate is enforced, not advisory. Multi-agent fan-out drives scope_assessment to " +
+      "'large', recommending the Linear-project path (probed 2026-08-07). The bare word " +
+      "'draft' fuzzy-matches email_draft regardless of context, so this goal deliberately " +
+      "uses 'stage for review' rather than 'compose a review draft' to avoid a spurious " +
+      "email_draft/optional_email_send tail — filed as a follow-up task, not fixed here.",
+  },
+  {
+    name: "teams_triggered_assistant",
+    // MAR-526 slice 5: teams_notification carried live capabilityMatcher
+    // vocabulary while backing no route or playbook at all — Teams/Telegram
+    // parity with chat_triggered_assistant_route_v1's existing Discord
+    // shape. The durable regression gate for
+    // teams_triggered_assistant_route_v1 (status: beta — still outside the
+    // default-loaded registry, so plan_source stays composed).
+    goal:
+      "Build a Microsoft Teams bot that responds to a slash command from an allowed team " +
+      "member, classifies it, performs the action, and posts the result in the same " +
+      "thread only after I approve it.",
+    canned_answers: {},
+    coverage_tags: [],
+    expectations: {
+      initial: {
+        plan_source: "composed",
+        playbook_id: null,
+        route_includes: [
+          "chat_trigger",
+          "schema_validation",
+          "human_approval_gate",
+          "auth_failure_handler",
+          "teams_notification",
+          "audit_log",
+        ],
+        route_excludes: ["discord_notification", "slack_notification", "telegram_notification"],
+        enforced_approval_gates: ["human_approval_gate"],
+        automation_clearance_level: "L2",
+        clarifying_questions: [],
+        recommended_next_click_id: "build_in_assistant",
+      },
+    },
+    notes:
+      "Identical shape to chat_triggered_assistant_route_v1's Discord goal with only the " +
+      "platform name swapped (probed 2026-08-07) — intent_classifier and state_store do not " +
+      "cleanly fire from natural phrasing of this goal, same documented gap as the Discord " +
+      "route.",
+  },
+  {
+    name: "telegram_triggered_assistant",
+    // MAR-526 slice 5: telegram_notification, same finding as
+    // teams_triggered_assistant above. The durable regression gate for
+    // telegram_triggered_assistant_route_v1 (status: beta).
+    goal:
+      "Build a Telegram bot that responds to a slash command from an allowed team " +
+      "member, classifies it, performs the action, and posts the result in the same " +
+      "thread only after I approve it.",
+    canned_answers: {},
+    coverage_tags: [],
+    expectations: {
+      initial: {
+        plan_source: "composed",
+        playbook_id: null,
+        route_includes: [
+          "chat_trigger",
+          "schema_validation",
+          "human_approval_gate",
+          "auth_failure_handler",
+          "telegram_notification",
+          "audit_log",
+        ],
+        route_excludes: ["discord_notification", "slack_notification", "teams_notification"],
+        enforced_approval_gates: ["human_approval_gate"],
+        automation_clearance_level: "L2",
+        clarifying_questions: [],
+        recommended_next_click_id: "build_in_assistant",
+      },
+    },
+    notes:
+      "Identical shape to chat_triggered_assistant_route_v1's Discord goal with only the " +
+      "platform name swapped (probed 2026-08-07). This is the last of MAR-526's 5 slices — " +
+      "all 14 gap-list vocabulary components now have a named route or playbook.",
+  },
+  {
     name: "multi_agent_coder_loop",
     goal:
       "Run a coder agent and a reviewer agent in a loop until all tests pass, maximum 5 " +

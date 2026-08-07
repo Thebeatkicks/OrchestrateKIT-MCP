@@ -1,0 +1,110 @@
+id: teams_triggered_assistant
+version: "0.1.0"
+status: beta
+title: Microsoft Teams-Triggered Assistant (Authorized Command, Gated Reply)
+summary: >
+  Blueprint for a Microsoft Teams bot that runs a bounded task on an inbound
+  slash command from an allowed sender and posts the reply back into the
+  same thread only after human approval. Teams/Telegram parity with
+  chat_triggered_assistant's existing Discord shape — the defining concern is
+  AUTHORIZATION: a chat trigger is invoked by a human, so the agent must
+  verify WHO is allowed to invoke it before any action runs, and treat the
+  message body as untrusted input. Beta blueprint: the component chain is
+  the shape the live matcher composes for this goal (probed 2026-08-07, not
+  hand-authored), and validate_playbook_candidate certifies the full
+  structural Definition of Done — but DoD #4 (2-3 real Lab sessions) and #5
+  (a benchmark prompt) need evidence a stateless MCP session cannot see, so
+  it stops at beta.
+workflow_type: chat
+risk_level: high
+golden_path_route_id: teams_triggered_assistant_route_v1
+stack_id: default_orchestratekit_stack
+
+components:
+  - chat_trigger
+  - schema_validation
+  - human_approval_gate
+  - auth_failure_handler
+  - teams_notification
+  - audit_log
+
+edges:
+  - audit_log__recommended__chat_trigger
+  - audit_log__recommended__teams_notification
+  - teams_notification__safer_with__auth_failure_handler
+
+best_for:
+  - a support or ops bot that answers questions in a Microsoft Teams channel
+  - a slash-command agent that runs a bounded task on request and reports back into Teams
+  - a Teams-resident agent where only specific users or roles may trigger actions
+
+avoid_when:
+  - a one-way alert or notification with no inbound message (use teams_notification alone)
+  - an open public bot that anyone in the tenant can trigger into privileged or irreversible actions
+  - fully autonomous posting with no approval gate before the route is validated
+
+recommended_architecture:
+  pattern: Inbound Teams event → authorize sender → validate → do work → approve → reply → audit
+  why: >
+    A chat trigger is the only entrypoint a stranger can invoke directly. The
+    authorization check (allowed user/role/channel) and request-signature
+    verification must happen FIRST, before any downstream step runs. The
+    reply is an irreversible external post to a Teams tenant, so it stays
+    behind human approval until logged sessions justify dropping the gate —
+    teams_notification's own component YAML already requires approval before
+    send, so the gate is a registry fact, not only a policy choice.
+
+llm_driven_steps: []
+
+deterministic_steps:
+  - chat_trigger
+  - schema_validation
+  - human_approval_gate
+  - teams_notification
+  - auth_failure_handler
+  - audit_log
+
+permissions:
+  read:
+    - inbound Teams event (via Graph API subscription or incoming webhook trigger)
+  write:
+    - Teams channel/chat post (via incoming webhook or Graph API, approval-gated)
+  approval_required_for:
+    - Teams message post
+
+guardrails:
+  - Verify the sender is on the allowed user/role/channel list BEFORE any downstream step runs
+  - Verify the request signature/token on every inbound event and reject anything unsigned
+  - Deduplicate on the platform message/event id — Teams retries delivery and will double-trigger without it
+  - The reply is an external write — keep human_approval_gate until the route earns validated status from logged sessions
+  - Log who triggered which action, from which channel, and when — the audit trail is the only record of who asked
+  - Use a Teams incoming webhook or a Graph API token scoped to only the required channel/team
+
+failure_modes:
+  - Unauthorized sender triggers a privileged action because the authorization check was skipped or misconfigured
+  - Prompt-injection in the message body steers the agent into an unintended action
+  - Duplicate delivery without an idempotency key causes a double reply
+  - Bot/webhook credential expiry silently stops inbound events or outbound posts — the bot goes deaf or mute with no error surfaced
+  - Reply posted to the wrong channel/thread because the originating context was lost
+
+evals:
+  - authorization enforcement — unauthorized sender is rejected before any action
+  - injection resistance — an instruction embedded in the message body does not expand the agent's allowed actions
+  - idempotency — a duplicated inbound event produces exactly one reply
+  - approval enforcement — no reply is posted when approval is absent
+  - audit completeness — every triggered action has a record of sender, channel, and timestamp
+
+implementation_steps:
+  - "Step 1: Stand up the inbound listener (Teams Graph API subscription or an incoming webhook trigger on your endpoint). This is YOUR endpoint — MCP servers cover outbound posting, not the inbound side."
+  - "Step 2: On every event, verify the request signature/token and reject anything unsigned. Deduplicate on the message/event id."
+  - "Step 3: Authorize the sender against an allowed user/role/channel list. Reject (and audit) anyone not on it BEFORE any further step."
+  - "Step 4: Run schema_validation on the structured event, then do the bounded work for the request. Keep the agent's tool set fixed."
+  - "Step 5: Surface the proposed reply to human_approval_gate. On approval, post via teams_notification into the originating channel/thread."
+  - "Step 6: Route credential failures (expired/revoked webhook or Graph token) to auth_failure_handler so a dead listener surfaces a named error instead of going silently offline."
+  - "Step 7: Write an audit_log entry for every triggered action — sender id, authorization result, channel/thread, outcome."
+
+sources:
+  - title: Microsoft Teams — Incoming Webhooks
+    url: https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook
+    source_type: official_docs
+    last_checked: "2026-08-07"
