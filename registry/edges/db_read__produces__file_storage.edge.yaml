@@ -1,0 +1,12 @@
+id: db_read__produces__file_storage
+from: db_read
+to: file_storage
+relation: produces_input_for
+status: published
+reason: The row set from the read-only query is exactly the structured data file_storage persists — mirrors db_read__produces__report_generation for a "save it" destination instead of a "notify" one.
+severity: medium
+notes: Use an upsert/idempotency key on the write — a retry after a transient failure must not double-append rows.
+conditions: []
+tested: true
+test_refs:
+  - "route:scheduled_data_export_route_v1"

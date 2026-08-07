@@ -1,0 +1,106 @@
+id: scheduled_data_export
+version: "0.1.0"
+status: beta
+title: Scheduled Data Export to Spreadsheet/CSV (Unattended)
+summary: >
+  Blueprint for an unattended data-export agent: on a schedule, read from a
+  SQL/warehouse source and persist the result to a spreadsheet, CSV file, or
+  another storage destination — the "save it" sibling of
+  scheduled_data_report's "notify" shape. Beta blueprint: the component chain
+  is the shape the live matcher composes for this goal (probed 2026-08-07,
+  not hand-authored), and validate_playbook_candidate certifies the full
+  structural Definition of Done — but DoD #4 (2-3 real Lab sessions) and #5
+  (a benchmark prompt) need evidence a stateless MCP session cannot see, so
+  it stops at beta.
+workflow_type: data-etl
+risk_level: medium
+golden_path_route_id: scheduled_data_export_route_v1
+stack_id: default_orchestratekit_stack
+
+components:
+  - scheduled_trigger
+  - db_read
+  - file_storage
+  - auth_failure_handler
+  - audit_log
+
+edges:
+  - scheduled_trigger__produces__db_read
+  - db_read__produces__file_storage
+  - file_storage__safer_with__auth_failure_handler
+  - audit_log__recommended__file_storage
+
+best_for:
+  - a recurring data export — pull rows from a database on a schedule and append them to a spreadsheet or CSV
+  - keeping an external spreadsheet/Airtable/CSV mirror of a database table current without a human running the export by hand
+  - feeding a downstream tool (BI dashboard, another team's spreadsheet) that only reads flat files or sheets
+
+avoid_when:
+  - the output should be a message rather than stored data — that is scheduled_data_report (the "notify" sibling of this "save it" shape)
+  - the export must be approved before it lands — file_storage has no enforced gate by policy; add human_approval_gate explicitly if that is required
+  - the data is EXTRACTED from PDFs/invoices rather than read from a database — that is pdf_extraction, not db_read
+
+recommended_architecture:
+  pattern: Schedule → read DB → persist to destination (idempotent, credential-resilient, audited)
+  why: >
+    Every step is a read except the final storage write, which lands in a
+    destination the user already owns (their own spreadsheet, CSV, or
+    database) rather than an outbound notification or a third-party system.
+    That is why file_storage carries no enforced approval gate by policy even
+    though the automation_clearance stays L3 (external writes default to
+    non-autonomous) — the write's blast radius is bounded to data the user
+    already controls, and idempotency plus credential resilience are what
+    keep a retry or a scoped-out key from corrupting or silently skipping it.
+
+llm_driven_steps: []
+
+deterministic_steps:
+  - scheduled_trigger
+  - db_read
+  - file_storage
+  - auth_failure_handler
+  - audit_log
+
+permissions:
+  read:
+    - SQL / warehouse source (read-only query scope)
+  write:
+    - storage destination (spreadsheet / CSV / database table / object store)
+    - audit log store
+  approval_required_for: []
+
+guardrails:
+  - Use an upsert/idempotency key on the write — a retry after a transient failure must not double-append rows
+  - Validate the destination write mode (append vs overwrite) before the first run — an overwrite misconfiguration destroys prior rows
+  - Keep read and write credentials scoped separately — a read-only DB key plus a write-only destination key, never a single all-powerful credential
+  - auth_failure_handler must escalate a DB or destination credential failure before the run is marked successful — a silent failure is worse than a visible one
+  - Log every run (query window, row count, destination reference) to audit_log with a timestamp
+  - Reject schema drift between the source row shape and the destination columns rather than silently dropping or misaligning fields
+
+failure_modes:
+  - A retry after a transient DB or storage error double-writes rows because the append is not idempotent
+  - Schema drift between the source row shape and the destination columns silently drops or misaligns fields
+  - An overwrite (rather than append) destroys prior rows when the write mode is misconfigured
+  - The storage credential is scoped to the wrong sheet/table and the write lands in the wrong destination
+  - Scheduled trigger drift or misfire — no export runs and nobody notices without a heartbeat
+  - Large result sets exceed the destination's row/rate limits (e.g. Sheets API quota) and the export silently truncates
+
+evals:
+  - query correctness on a fixture warehouse (row counts + aggregates match expected)
+  - idempotency test — a duplicate scheduled run does not double-write rows to the destination
+  - field-mapping fidelity on a fixture record set (every source field lands in the right column)
+  - overwrite-vs-append correctness on a destination with existing rows
+  - audit completeness — every run has a record
+
+implementation_steps:
+  - "Step 1: Register a scheduled_trigger for the cadence (e.g. daily 8am). Pin the timezone."
+  - "Step 2: Implement db_read with a READ-ONLY query scope. Parameterise the export window; never string-concatenate SQL."
+  - "Step 3: Implement file_storage with an upsert/idempotency key and an explicit append (not overwrite) write mode."
+  - "Step 4: Wrap the DB read and the storage write with auth_failure_handler — a credential failure escalates and the run is NOT marked successful."
+  - "Step 5: Write an audit_log record per run: query window, row count, destination reference, timestamp."
+
+sources:
+  - title: Google Sheets API — Values append
+    url: https://developers.google.com/sheets/api/guides/values#append_values
+    source_type: official_docs
+    last_checked: "2026-08-07"
