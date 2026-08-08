@@ -138,6 +138,62 @@ const DEMAND_PHRASES = [
 ];
 
 /**
+ * MAR-551 — proactive credential lifecycle is not reactive failure recovery.
+ *
+ * "pull invoices from the QuickBooks API on a schedule, **keeping the OAuth
+ * token refreshed**, and email a PDF report" reported `unmatched_demand: []`.
+ * Nothing in that route performs a scheduled pre-expiry refresh;
+ * `auth_failure_handler` is triggered by a FAILURE SIGNAL and says so in its own
+ * registry entry — its declared input is "failure signal from an external
+ * integration step (HTTP 401/403, expired token, missing scope)". It recovers
+ * after a call has already failed. That is a different guarantee from never
+ * letting the call fail, and the difference is exactly what an unattended
+ * nightly job depends on.
+ *
+ * It absorbed the ask anyway: it fuzzy-matched the bare word "token" out of its
+ * `detect_token_expiry` capability, and one claimed word inside a clause clears
+ * the whole clause. So the plan asserted coverage of a capability the registry
+ * does not have — the same overclaim shape MAR-540 records for approval binding,
+ * and the reason this correction is the one must-fix on MAR-551 whether or not a
+ * lifecycle component is ever built.
+ *
+ * The rule is deliberately keyed on the COMPONENT that would satisfy it rather
+ * than on a claim: `PROACTIVE_REFRESH_COMPONENTS` is empty today because nothing
+ * in the registry declares proactive refresh, and populating it is all that a
+ * future component needs to do to make the gap stop being reported. A phrase
+ * check alone would have been dismissed by the same "token" claim that caused
+ * the bug.
+ */
+const PROACTIVE_TOKEN_LIFECYCLE = [
+  "token refreshed",
+  "tokens refreshed",
+  "refresh the token",
+  "refreshing the token",
+  "refresh the oauth token",
+  "refresh the access token",
+  "token refresh",
+  "keep the token",
+  "keeping the token",
+  "keep the oauth token",
+  "keeping the oauth token",
+  "token lifecycle",
+  "before it expires",
+  "before the token expires",
+  "rotate the token",
+  "rotating the token",
+  "credential refresh",
+  "refresh credentials",
+  "refresh the credential",
+];
+
+/**
+ * Components that would genuinely satisfy a proactive-refresh ask. Empty on
+ * purpose: no component in the registry schedules a pre-expiry refresh today.
+ * `auth_failure_handler` is NOT a member — see the note above.
+ */
+const PROACTIVE_REFRESH_COMPONENTS = new Set<string>();
+
+/**
  * MAR-396 — structural action-clause detection, used ONLY for clauses the
  * demand lexicon did not recognise at all.
  *
@@ -246,8 +302,15 @@ function looksLikeUnrecognizedAction(
  * long conjunction chain reports each uncovered step as its own readable phrase
  * ("…trusted sources AND save a digest note into Notion" → the Notion step
  * surfaces whole instead of being truncated off the end of a mega-clause).
+ *
+ * MAR-550: a period followed immediately by a word character is a FILE
+ * EXTENSION, not a sentence end. "load a local .xlsx spreadsheet, validate every
+ * row, …" used to split into the fragment "load a local", which named no
+ * component, matched no claim, and was reported as an uncovered step — a gap the
+ * plan had invented out of a filename. A sentence end ("…every morning. Then
+ * send…") still splits, because the period there is followed by a space.
  */
-const CLAUSE_SPLIT = /[,.;:!?—–]|\bthen\b|\band\b/;
+const CLAUSE_SPLIT = /[,;:!?—–]|\.(?!\w)|\bthen\b|\band\b/;
 
 /**
  * Safety / policy infrastructure the augmenter injects deterministically for
@@ -454,6 +517,20 @@ export function computeCoverage(input: CoverageInput): Coverage {
       clause.length > CLAUSE_MAX_CHARS
         ? `${clause.slice(0, CLAUSE_MAX_CHARS - 1).trimEnd()}…`
         : clause;
+
+    // MAR-551: a proactive credential-lifecycle ask, which no component in the
+    // registry satisfies and which `auth_failure_handler`'s reactive recovery
+    // was silently absorbing through a bare "token" claim. Checked before the
+    // lexicon so that claim cannot dismiss it.
+    if (
+      PROACTIVE_TOKEN_LIFECYCLE.some(
+        (p) => clauseLower.includes(p) && !isNegatedInContext(goalLower, p),
+      ) &&
+      !finalComponentIds.some((id) => PROACTIVE_REFRESH_COMPONENTS.has(id))
+    ) {
+      unmatched_demand.push(shown);
+      continue;
+    }
 
     // MAR-396: the clause carries no lexicon vocabulary. It used to `continue`
     // here — judged "not a demand" — which is how a refund step disappeared

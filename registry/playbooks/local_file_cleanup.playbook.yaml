@@ -1,0 +1,112 @@
+id: local_file_cleanup
+version: "0.1.0"
+status: beta
+title: Attached Spreadsheet Clean-up and Save (Local File In, Storage Out)
+summary: >
+  Blueprint for the "I have a messy file, fix it" shape: read a spreadsheet
+  or CSV the user attached to the run, validate its shape, normalise the
+  rows, and persist the cleaned result to a storage destination. The READ-side
+  sibling of scheduled_data_export — that blueprint's source is a database,
+  this one's is a file on the user's own machine. Beta blueprint: the
+  component chain is the shape the live matcher composes for this goal
+  (probed 2026-08-08, not hand-authored), and validate_playbook_candidate
+  certifies the full structural Definition of Done — but DoD #4 (2-3 real Lab
+  sessions) and #5 (a benchmark prompt) need evidence a stateless MCP session
+  cannot see, so it stops at beta.
+workflow_type: data-etl
+risk_level: medium
+golden_path_route_id: local_file_cleanup_route_v1
+stack_id: default_orchestratekit_stack
+
+components:
+  - local_file_read
+  - schema_validation
+  - data_normalizer
+  - file_storage
+  - auth_failure_handler
+  - audit_log
+
+edges:
+  - local_file_read__produces__schema_validation
+  - local_file_read__produces__data_normalizer
+  - data_normalizer__produces__file_storage
+  - file_storage__safer_with__auth_failure_handler
+  - audit_log__recommended__file_storage
+
+best_for:
+  - cleaning a hand-maintained spreadsheet — inconsistent field names, mixed date formats, numbers stored as text — and saving the corrected result
+  - batch-processing an attached CSV of records and writing the output to a spreadsheet, CSV, or database table
+  - a one-off or repeated import where the source is a file the user hands to the run rather than a system with an API
+
+avoid_when:
+  - the source is a database or warehouse rather than an attached file — that is scheduled_data_export (this blueprint's write-side sibling)
+  - the source is a PDF or scanned document rather than a tabular file — that is pdf_extraction, which parses text blocks and tables out of a document
+  - the file must be edited IN PLACE at the row/cell level — file_storage appends records to a destination and has no in-place cell edit; this blueprint writes a new output rather than mutating the source
+  - the agent is expected to find the file itself by browsing the filesystem — local_file_read reads only the paths the run declares as inputs, by design
+
+recommended_architecture:
+  pattern: Read attached file → validate shape → normalise rows → persist to destination (allow-listed, non-destructive, audited)
+  why: >
+    The only irreversible step is the final write, and the safest default is
+    that it lands somewhere NEW rather than over the file it just read — a
+    hand-maintained spreadsheet is frequently the only copy of the data.
+    Validation before normalisation is what stops a moved header row from
+    being mapped positionally into the wrong fields, which is the failure that
+    corrupts data silently rather than loudly. The read side is scoped by a
+    declared path allow-list rather than by trust: an agent that can read one
+    named file is a different risk class from one that can read the disk.
+
+llm_driven_steps: []
+
+deterministic_steps:
+  - local_file_read
+  - schema_validation
+  - data_normalizer
+  - file_storage
+  - auth_failure_handler
+  - audit_log
+
+permissions:
+  read:
+    - files at paths inside the run's declared input allow-list (never the wider filesystem)
+  write:
+    - storage destination (spreadsheet / CSV / database table / object store)
+    - audit log store
+  approval_required_for: []
+
+guardrails:
+  - Write the cleaned result to a NEW destination by default — overwriting the source file destroys the only copy when the normalisation is wrong
+  - Resolve the real path before checking it against the input allow-list, so a symlink or a `..` segment cannot escape it; an unlisted path is refused, never resolved against the working directory
+  - Validate the header row against the expected columns before normalising — positional mapping after a header shift corrupts data silently
+  - Use an upsert/idempotency key on the write so a retry after a transient failure does not double-append rows
+  - Refuse a file held open by another process rather than reading a partially-flushed copy
+  - Log every run (source path, row count, destination reference, timestamp) to audit_log
+
+failure_modes:
+  - The write overwrites the source file the run just read, so a bad normalisation destroys the only copy of the data
+  - The header row differs from the expected schema and columns are normalised positionally into the wrong fields
+  - A retry after a transient storage error double-writes rows because the append is not idempotent
+  - The file is held open by another application and the read returns a stale or partially-flushed copy without any error
+  - A path outside the declared input allow-list is accepted, turning a scoped file read into a filesystem read
+  - A large file exceeds the model context or memory budget and is silently truncated mid-row
+
+evals:
+  - allow-list refusal — a path outside the declared input roots (including via symlink and `..`) is REFUSED
+  - round-trip fidelity on a fixture .xlsx and .csv — every row and column survives read → validate → normalise → write
+  - idempotency test — a duplicate run does not double-write rows to the destination
+  - header-drift detection — a fixture whose header row moved is rejected rather than mapped positionally
+  - audit completeness — every run records source path, row count, and destination reference
+
+implementation_steps:
+  - "Step 1: Declare the run's input roles and the path allow-list. local_file_read resolves the real path and refuses anything outside it."
+  - "Step 2: Implement schema_validation against the expected header/columns. A moved or renamed header is a hard failure, not a warning."
+  - "Step 3: Implement data_normalizer for canonical field names, date formats, and numeric coercion. Record what it changed."
+  - "Step 4: Implement file_storage with an explicit NEW destination and an upsert/idempotency key. Never default to overwriting the source."
+  - "Step 5: Wrap the destination write with auth_failure_handler — a credential failure escalates and the run is NOT marked successful."
+  - "Step 6: Write an audit_log record per run: source path, row count, destination reference, timestamp."
+
+sources:
+  - title: OpenPyXL — reading and writing .xlsx workbooks
+    url: https://openpyxl.readthedocs.io/en/stable/tutorial.html
+    source_type: official_docs
+    last_checked: "2026-08-08"

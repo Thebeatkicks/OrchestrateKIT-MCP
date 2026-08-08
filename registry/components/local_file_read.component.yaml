@@ -1,0 +1,55 @@
+id: local_file_read
+name: Local File Read
+status: published
+category: input
+summary: >-
+  Reads a tabular file the user supplied for the run — a spreadsheet (.xlsx /
+  .xls / .ods), a CSV, or another attached local file — from a declared path
+  allow-list, and hands its rows to downstream steps. This is the READ half that
+  file_storage is not: file_storage persists records TO a storage destination and
+  declares no read permission at all, so a goal that reads a spreadsheet has no
+  step in file_storage. Reads only the paths the run declares as inputs; it never
+  browses the wider filesystem and never writes. A modified file is written back
+  by a separate, explicitly-selected write step.
+capabilities:
+  - read_spreadsheet
+  - parse_csv_rows
+  - read_attached_file
+  - enumerate_declared_inputs
+inputs:
+  - a file reference drawn from the run's declared input roles (path or handle), plus the allow-list of directories the run may read
+  - optional sheet/tab name and header-row offset for a multi-sheet workbook
+outputs:
+  - the file's rows as structured records, with the resolved source path, sheet name, and row count
+risk_level: medium
+side_effects: []
+permissions:
+  read:
+    - files at paths inside the run's declared input allow-list (never the wider filesystem)
+  write: []
+  approval_required_for: []
+requires: []
+recommended_with:
+  - schema_validation
+  - data_normalizer
+  - audit_log
+avoid_with: []
+failure_modes:
+  - a path outside the declared allow-list is requested and the read resolves it against the working directory instead of refusing — the allow-list must fail closed
+  - a symlink or `..` segment inside an allowed directory escapes the allow-list, so the path check must run on the resolved real path, not the requested one
+  - the file is held open by another application, so the read returns a stale or partially-flushed copy without any error
+  - the header row differs from the expected schema and columns are read positionally into the wrong fields
+  - a large file exceeds the model context or memory budget and is silently truncated mid-row
+evals:
+  - allow-list refusal — a path outside the declared input roots (including via symlink and `..`) is REFUSED, not read
+  - round-trip fidelity on a fixture .xlsx and .csv — every row and column reaches the downstream step unchanged, including empty cells and leading-zero strings
+  - locked-file detection — a file held open by another process is reported as unreadable rather than read as complete
+  - header-drift detection — a fixture whose header row moved is rejected rather than mapped positionally
+tested_in_playbooks: []
+tested_in_routes: []
+sources: []
+
+model_tier: none
+fallback_tier: none
+context_need: moderate
+compression_strategy: chunk
