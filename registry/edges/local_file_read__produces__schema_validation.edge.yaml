@@ -1,0 +1,12 @@
+id: local_file_read__produces__schema_validation
+from: local_file_read
+to: schema_validation
+relation: produces_input_for
+status: published
+reason: Rows read out of a user-supplied file are the least trustworthy input in any route — the file is hand-maintained, so the header can move, columns can be renamed, and a "number" column can be full of text. Validate the shape at the boundary before anything downstream treats the rows as facts.
+severity: medium
+notes: Mirrors db_read__produces__schema_validation, and matters more here — a database enforces a schema, an attached spreadsheet does not.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/edgeValidation.test.ts > edge: local_file_read__produces__schema_validation"

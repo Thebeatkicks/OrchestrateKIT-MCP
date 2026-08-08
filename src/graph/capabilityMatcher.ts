@@ -1,6 +1,7 @@
 import type { Component } from "../registry/componentSchema.js";
 import type { Edge } from "../registry/edgeSchema.js";
 import {
+  containsPhrase,
   hasOwnedCorpusScope,
   neutralizeApprovalGatedProhibitions,
 } from "../lib/constraintSignals.js";
@@ -93,6 +94,11 @@ const COMPONENT_DOMAINS: Record<string, Domain[]> = {
   // below), so the dual membership never fuzzy-bleeds — only its explicit storage
   // hints select it.
   file_storage: ["data_etl", "generic_orchestration"],
+  // MAR-550: local_file_read is file_storage's missing READ half — the attached
+  // spreadsheet/CSV a run is given as input. Same dual membership and the same
+  // HINT_ONLY treatment for the same reason: its tokens ("read", "file", "rows")
+  // are ambient, so only the explicit read-direction signal selects it.
+  local_file_read: ["data_etl", "generic_orchestration"],
   // MAR-254: the data-report spine. db_read is the read-only SQL/warehouse
   // source ("pull the numbers from our Postgres database") and report_generation
   // the document-CREATION direction ("generate a PDF summary report") —
@@ -1283,6 +1289,235 @@ function suppressStripeDataReadForWriteGoal(
   if (!hasStripeWriteIntent(goalLower)) return;
   if (hasStripeReadIntent(goalLower)) return;
   domainAllowed.delete("stripe_data_read");
+}
+
+/**
+ * MAR-550: storage-object direction, the MIRROR of MAR-538/541. Those two fixed
+ * a READ-only component reached by a WRITE goal (`airtable_lookup`, `db_read`,
+ * `stripe_data_read`). `file_storage` is the same class inverted — WRITE-only
+ * (`permissions.read: []`, capabilities are append/write/persist/save/upsert
+ * only) reached by a READ goal, because its bare object-noun KEYWORD_HINTS
+ * (`spreadsheet`, `csv`, `google sheet`, `database table`) carry no direction.
+ * Live-probed on master `f6e486f` — i.e. AFTER the MAR-541 sweep, which scoped
+ * itself to `write: []` components and so never looked at this one:
+ *
+ *   "read a local .xlsx spreadsheet and update specific rows and cells in place"
+ *     → file_storage → reviewer_notification → auth_failure_handler → audit_log
+ *
+ * A goal asking to READ was planned as a WRITE, with no read step in the route.
+ *
+ * Direction is anchored exactly as MAR-538 anchored Airtable — on the
+ * PREPOSITION attaching to the storage object, never on a bare verb anywhere in
+ * the sentence:
+ *
+ *   write = a write verb  AND  `to|into|in (a|an|the|our|…) <storage object>`
+ *   read  = `from (…) <storage object>`  OR  a read verb within ~40 chars before
+ *
+ * The two signals are independent, not a switch: suppression needs a read signal
+ * AND no write signal, so "read the rows from a local CSV and save them to a
+ * sheet" keeps the destination. Only a goal that reads a storage object and
+ * writes to nothing loses `file_storage`.
+ */
+const STORAGE_WRITE_VERBS =
+  /(?<!\w)(write|writes|writing|wrote|save|saves|saving|saved|store|stores|storing|stored|export|exports|exporting|exported|create|creates|creating|created|add|adds|adding|added|append|appends|appending|appended|insert|inserts|inserting|inserted|update|updates|updating|updated|upsert|upserts|upserting|push|pushes|pushing|populate|populates|populating|sync|dump|dumps|dumping|record|records|recording|log|logs|logging)(?!\w)/;
+/**
+ * The nouns `file_storage`'s own KEYWORD_HINTS reach it through. Bare `file` /
+ * `files` are deliberately EXCLUDED from the read side below (see
+ * LOCAL_FILE_OBJECT) but included here, because the write hints that name them
+ * ("save to a file", "write to a file") already carry their own direction and
+ * this set only ever *keeps* file_storage.
+ */
+const STORAGE_OBJECT =
+  "(?:google\\s+)?(spreadsheets?|csvs?|xlsx|xls|ods|excel|workbooks?|sheets?|database\\s+tables?|tables?|files?)";
+const STORAGE_DESTINATION = new RegExp(
+  `(?<!\\w)(?:to|into|in|onto)\\s+(?:a|an|the|our|my|your|their|its|new)?\\s*(?:new\\s+|local\\s+|shared\\s+)?${STORAGE_OBJECT}(?!\\w)`,
+);
+/**
+ * `file_storage`'s own direction-carrying KEYWORD_HINTS, reused verbatim as a
+ * write signal. Those phrases were written to carry direction WITHOUT naming a
+ * destination noun ("save them", "append to"), so a preposition anchor alone
+ * cannot see them — and a goal that says "read the rows from the spreadsheet
+ * and save them" must keep its destination. Anything here means "a write was
+ * asked for", which is all the suppression below needs to know.
+ */
+const STORAGE_WRITE_PHRASES = [
+  "save to a file", "save it to", "save them", "save each", "store them",
+  "store each", "store the records", "save the records", "write to a file",
+  "append to", "log it to", "to a sheet", "into a sheet", "in a sheet",
+];
+
+/**
+ * The gap between the read verb and its object, bounded the same way MAR-538/541
+ * bound theirs (never across a sentence boundary) — with one difference this
+ * issue forced: a period followed immediately by a word character is part of a
+ * FILE EXTENSION, not the end of a sentence. MAR-550's own probe goal is "read a
+ * local **.xlsx** spreadsheet …", and a plain `[^.;!?]` gap could not cross the
+ * dot, so the first cut of this fix silently did nothing on the exact goal that
+ * motivated it.
+ */
+const READ_GAP = "(?:[^.;!?]|\\.(?=\\w))";
+const READ_VERBS =
+  "(read|reads|reading|open|opens|opening|load|loads|loading|parse|parses|parsing|import|imports|importing|ingest|ingests|ingesting|pull|pulls|pulling|fetch|fetches|fetching|scan|scans|scanning|take|takes|taking)";
+function readIntent(objectPattern: string): (goalLower: string) => boolean {
+  const source = new RegExp(
+    `(?<!\\w)from\\s+(?:a|an|the|our|my|your|their|its)?\\s*(?:local\\s+|attached\\s+|uploaded\\s+|shared\\s+)?${objectPattern}(?!\\w)`,
+  );
+  const verbObject = new RegExp(
+    `(?<!\\w)${READ_VERBS}(?!\\w)${READ_GAP}{0,40}?${objectPattern}(?!\\w)`,
+  );
+  return (goalLower) => source.test(goalLower) || verbObject.test(goalLower);
+}
+
+/**
+ * TWO read objects, deliberately different widths, because they answer two
+ * different questions.
+ *
+ * `STORAGE_READ_OBJECT` (wide) decides whether `file_storage` — the WRITE — is
+ * wrong here. It includes `google sheet` and `database table`, because reading
+ * one of those is still not writing to it.
+ *
+ * `LOCAL_FILE_OBJECT` (narrow) decides whether `local_file_read` is RIGHT here,
+ * and it must claim only what that component can actually do: an attached local
+ * file. A Google Sheets read is a SaaS API source with its own credential; no
+ * component in the registry covers it. Such a goal therefore loses `file_storage`
+ * and gains nothing, and the read surfaces in `coverage.unmatched_demand` — the
+ * honest refusal MAR-541 chose for the Stripe write, not a substitution with a
+ * component that would do something else.
+ *
+ * Both exclude bare `file`/`files`/`table` on the read side. Those are ambient
+ * in code, research and document goals ("read the files in the PR", "read the
+ * table of contents"), and `local_file_read` sits in `generic_orchestration` —
+ * always domain-eligible — so a loose object noun would leak a filesystem read
+ * into unrelated plans. A `file`/`document` qualified as local/attached/
+ * uploaded/input names the artifact well enough to count.
+ */
+const QUALIFIED_FILE = "(?:local|attached|uploaded|input|source)\\s+(?:files?|documents?|spreadsheets?)";
+const LOCAL_FILE_OBJECT =
+  `(?:(?<!google\\s)(?:spreadsheets?|csvs?|xlsx|xls|ods|excel|workbooks?)|${QUALIFIED_FILE})`;
+const STORAGE_READ_OBJECT =
+  `(?:(?:google\\s+)?(?:spreadsheets?|csvs?|xlsx|xls|ods|excel|workbooks?|sheets?)|database\\s+tables?|${QUALIFIED_FILE})`;
+
+/** True when the goal writes something INTO a storage object (MAR-550). */
+export function hasStorageWriteIntent(goalLower: string): boolean {
+  if (STORAGE_WRITE_PHRASES.some((p) => goalLower.includes(p))) return true;
+  return STORAGE_WRITE_VERBS.test(goalLower) && STORAGE_DESTINATION.test(goalLower);
+}
+
+/** True when the goal reads something OUT OF any storage object (MAR-550). */
+export const hasStorageReadIntent = readIntent(STORAGE_READ_OBJECT);
+
+/** True when the goal reads something OUT OF a local/attached tabular file (MAR-550). */
+export const hasLocalFileReadIntent = readIntent(LOCAL_FILE_OBJECT);
+
+/**
+ * The specific artifact noun the read matched on ("spreadsheet", "csv", …), so
+ * the `local_file_read` bump token can be named after the word the USER wrote.
+ * `coverage.ts` lists `spreadsheet` and `csv` in DEMAND_NOUNS, so claiming them
+ * by the same word is what stops the read step from reading as an uncovered
+ * demand — the naming discipline MAR-541 made explicit for the db-write token.
+ */
+export function localFileReadObject(goalLower: string): string | null {
+  if (!hasLocalFileReadIntent(goalLower)) return null;
+  for (const noun of ["spreadsheet", "csv", "xlsx", "xls", "ods", "excel", "workbook"]) {
+    if (goalLower.includes(noun)) return noun;
+  }
+  return "file";
+}
+
+/**
+ * A read of a storage object with no write anywhere drops `file_storage`.
+ *
+ * RECORDED LIMIT (MAR-529 discipline — stated, not hidden, and asserted in
+ * `tests/graph/localFileReadDirection.test.ts`): a goal that reads a file and
+ * writes the result BACK to that same file without naming a destination —
+ * "load a spreadsheet from disk, clean the rows, and write the result back" —
+ * has neither a `to|into <object>` phrase nor one of the direction-carrying
+ * write hints, so the write signal is absent and `file_storage` is suppressed
+ * with the rest. Suppression is right on its own terms (`file_storage` appends
+ * records to a destination and has no in-place row/cell edit capability), but
+ * the write-back does NOT then appear in `coverage.unmatched_demand`: the
+ * clause "write the result back" carries the demand VERB "write", and
+ * `audit_log` independently claims that same word, so `clauseIsUncovered` reads
+ * the clause as covered. That is a coverage-lexicon limitation, not something
+ * this fix introduces — verified live, and asserted in the test file so it
+ * cannot be mistaken for a guarantee. Separating "write it back to the file I
+ * read" from "write it to a destination" needs anaphora resolution the lexical
+ * layer does not have.
+ */
+function suppressFileStorageForReadGoal(
+  goalLower: string,
+  domainAllowed: Set<string>,
+): void {
+  if (!hasStorageReadIntent(goalLower)) return;
+  if (hasStorageWriteIntent(goalLower)) return;
+  domainAllowed.delete("file_storage");
+}
+
+/**
+ * MAR-550, the second half of the same probe: the OUTBOUND fetchers leaked onto
+ * a local-file read. "read the rows from a local CSV file and summarise them"
+ * composed `source_retrieval → local_file_read → research_synthesis → …` —
+ * `source_retrieval` scoring on the goal's own words "local" and "file" through
+ * its summary prose, and `data_scraper` doing the same on "open the attached
+ * excel file and extract …". Both declare outbound HTTP as a side effect. A goal
+ * whose named source is a file on the user's own machine must not compose a step
+ * that goes to the public web — this is the same misdirection MAR-525 2b fixed
+ * for the owned-corpus case (`suppressSourceRetrievalForOwnedCorpus` above), one
+ * source-kind over.
+ *
+ * Escape hatch, same design as MAR-525 2b's: a goal that names a web source too
+ * ("read the attached CSV of URLs and scrape each page") keeps both, because a
+ * genuine external-source signal clears the suppression.
+ */
+const WEB_SOURCE_SIGNALS = [
+  "url", "urls", "http", "https", "website", "websites", "web page", "webpage",
+  "web pages", "webpages", "the web", "online", "internet", "public", "search results",
+  "google", "reddit", "linkedin", "competitor", "competitors", "listing", "listings",
+  "crawl", "scrape", "scraping", "site", "sites", "page", "pages", "feed", "feeds",
+];
+function suppressWebFetchersForLocalFileRead(
+  goalLower: string,
+  domainAllowed: Set<string>,
+): void {
+  if (!hasLocalFileReadIntent(goalLower)) return;
+  if (WEB_SOURCE_SIGNALS.some((s) => containsPhrase(goalLower, s))) return;
+  domainAllowed.delete("source_retrieval");
+  domainAllowed.delete("data_scraper");
+}
+
+/**
+ * Ordinary inflectional endings a fuzzy match may carry past the goal token.
+ * Deliberately NOT "y" ("read" → "ready", "part" → "party") and not "e"
+ * ("cell" → "cellar" is blocked by the same omission of "ar"). Kept short and
+ * boring on purpose: every entry here widens the two weakest scoring passes.
+ */
+const INFLECTION_SUFFIXES = [
+  "", "s", "es", "ed", "d", "ing", "er", "ers", "or", "ors", "ion", "ions",
+  "al", "ate", "ates", "ated", "ating", "ment", "ments", "ness",
+];
+
+/** Letters and digits only — `_` and `-` read as word separators here. */
+function isWordChar(ch: string | undefined): boolean {
+  return ch !== undefined && /[a-z0-9]/.test(ch);
+}
+
+/**
+ * True when `token` occurs in `haystack` starting at a word boundary and
+ * finishing either at a word boundary or after an ordinary inflectional ending
+ * (MAR-550 — see the long note at the capability/summary passes).
+ */
+export function matchesWordAligned(haystack: string, token: string): boolean {
+  let from = 0;
+  for (;;) {
+    const at = haystack.indexOf(token, from);
+    if (at === -1) return false;
+    from = at + 1;
+    if (isWordChar(haystack[at - 1])) continue;
+    let end = at + token.length;
+    while (isWordChar(haystack[end])) end += 1;
+    const tail = haystack.slice(at + token.length, end);
+    if (INFLECTION_SUFFIXES.includes(tail)) return true;
+  }
 }
 
 /**
@@ -2513,6 +2748,11 @@ const HINT_ONLY_COMPONENTS = new Set([
   // google sheet / save to a file / store the records …) within the data_etl or
   // generic domain, so establishing the domain alone never injects it.
   "file_storage",
+  // MAR-550: local_file_read, for the same reason as file_storage above and
+  // more so — "read", "file", "rows", "records", "input" are the most ambient
+  // words in any goal, and it is generic_orchestration (always domain-eligible).
+  // Reachable ONLY via the read-direction signal in Pass 1f.
+  "local_file_read",
   // MAR-267: test_runner's capability/summary tokens include bare "diff" /
   // "code", so the fuzzy passes pulled it into READ-ONLY review goals ("review
   // the diff for problems") that never ask to run anything — polluting the
@@ -2731,6 +2971,15 @@ export function matchCapabilities(
   // no Stripe-write component exists — so the write surfaces honestly as
   // coverage.unmatched_demand instead of a silently wrong read.
   suppressStripeDataReadForWriteGoal(goalLower, domainAllowed);
+  // MAR-550: the mirror of the three above. A goal that READS a local
+  // spreadsheet/CSV and writes to no destination drops file_storage — a
+  // WRITE-only component (permissions.read is []) that a bare "spreadsheet"/
+  // "csv" hint otherwise selected for a read. The read step is bumped in Pass
+  // 1f below.
+  suppressFileStorageForReadGoal(goalLower, domainAllowed);
+  // MAR-550: and the outbound fetchers do not belong on a local-file read
+  // either, unless the goal also names a web source of its own.
+  suppressWebFetchersForLocalFileRead(goalLower, domainAllowed);
   // MAR-558: the three direction findings MAR-541's sweep recorded but left
   // unfixed — a document-CREATION goal dropping the PDF parser, a write-only
   // CRM goal dropping the CRM read its LOCATIVE hints pulled in, and a
@@ -2811,6 +3060,46 @@ export function matchCapabilities(
     bump("file_storage", 2, `${dbObject}-write phrase`, "hint");
   }
 
+  // Pass 1f (MAR-550): local-file-as-SOURCE, the mirror of Passes 1d/1e.
+  // local_file_read is HINT_ONLY and has no KEYWORD_HINTS of its own on
+  // purpose: a bare "spreadsheet"/"csv" noun is exactly what carried no
+  // direction and caused this bug family, so the ONLY way in is the read
+  // signal. The token is named after the artifact noun the user actually
+  // wrote so coverage.ts's DEMAND_NOUNS credit the same word.
+  if (domainAllowed.has("local_file_read") && hasLocalFileReadIntent(goalLower)) {
+    const fileObject = localFileReadObject(goalLower) ?? "file";
+    bump("local_file_read", 2, `${fileObject}-read phrase`, "hint");
+  }
+
+  // MAR-550 acceptance bar #3: reviewer_notification's spurious match.
+  //
+  // The probe goal "read a local .xlsx spreadsheet and update specific rows and
+  // cells in place" selected `reviewer_notification` on the tokens `read` and
+  // `specific`. Neither word is in that component's vocabulary: its summary says
+  // an artifact is "**ready** for their review" and that it notifies "a
+  // **specific** human reviewer" — the goal's "read" landed INSIDE "ready", and
+  // "specific" inside a phrase about who is notified, not what is done.
+  // Notifying a reviewer is not reading a file, and the goal never asks for a
+  // review at all.
+  //
+  // The cause is that the capability and summary passes matched a goal token as
+  // a bare SUBSTRING. This file already learned the lesson one layer up — the
+  // identifier pass was moved from substring to exact token equality so
+  // "summary" stopped pulling `pr_summary` onto research goals — and MAR-529
+  // learned it again for goal-constraint phrases ("th·read only"). This is the
+  // same fix for the two remaining substring passes.
+  //
+  // Not exact equality, though: the fuzzy passes earn their keep on inflection
+  // ("invoice" → "invoices", "extract" → "extraction", "monitor" →
+  // "monitoring"), and requiring equality would silently narrow the matcher
+  // everywhere. So a match must START at a word boundary AND the rest of that
+  // word must be an ordinary inflectional ending. "read" inside "ready" fails
+  // both ways it could pass: "y" is not an inflection, and the match does not
+  // end the word.
+  //
+  // `_` counts as a boundary, so a capability id like `write_to_spreadsheet`
+  // still matches the token "spreadsheet".
+
   // Passes 2–4: per-component token matching (gated)
   for (const component of components) {
     if (!domainAllowed.has(component.id)) continue;
@@ -2838,8 +3127,8 @@ export function matchCapabilities(
           break;
         }
       }
-      // Summary match — weak signal
-      if (component.summary.toLowerCase().includes(token)) {
+      // Summary match — weak signal, same word alignment.
+      if (matchesWordAligned(component.summary.toLowerCase(), token)) {
         bump(component.id, 0.5, token, "summary");
       }
     }

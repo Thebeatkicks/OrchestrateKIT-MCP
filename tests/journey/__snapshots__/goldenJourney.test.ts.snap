@@ -26,7 +26,6 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > airt
         "schema_validation",
         "threshold_router",
         "report_generation",
-        "reviewer_notification",
         "auth_failure_handler",
         "human_approval_gate",
         "slack_notification",
@@ -128,7 +127,7 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > comp
     {
       "automation_clearance_level": "L2",
       "clarifying_question_ids": [],
-      "coverage_label": "full",
+      "coverage_label": "partial",
       "enforced_approval_gates": [],
       "kind": "plan",
       "plan_source": "playbook",
