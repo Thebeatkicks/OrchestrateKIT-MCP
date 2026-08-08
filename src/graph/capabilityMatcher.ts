@@ -971,6 +971,14 @@ function suppressEmailDraftForDocumentSource(
   if (!EMAIL_SOURCE_TOKENS.some((t) => goalLower.includes(t))) return;
   if (!DOCUMENT_SOURCE_TOKENS.some((t) => goalLower.includes(t))) return;
   if (EMAIL_CORRESPONDENCE_INTENT.some((t) => goalLower.includes(t))) return;
+  // MAR-558: the token check above finds an email word ANYWHERE. This rule is
+  // about email as a SOURCE ("read invoices from my inbox"), and it was firing
+  // on goals where the only email mention is a DESTINATION — "create a PDF
+  // invoice and email it to them" lost its whole send path and kept an inbox
+  // read, with coverage reporting no gap. The correspondence list above cannot
+  // close this by growing: it is a fixed phrase list, and it already contains
+  // "email them" but not "email it to them". Read the POSITION instead.
+  if (hasEmailDestinationIntent(goalLower) && !hasEmailSourceIntent(goalLower)) return;
   domainAllowed.delete("email_draft");
   // P0-04: the draft SAVE follows the draft. A document-extraction goal with no
   // correspondence intent has nothing to persist to a mailbox, so suppressing
@@ -1510,6 +1518,243 @@ export function matchesWordAligned(haystack: string, token: string): boolean {
     const tail = haystack.slice(at + token.length, end);
     if (INFLECTION_SUFFIXES.includes(tail)) return true;
   }
+}
+
+/**
+ * MAR-558: the three direction findings MAR-541's sweep recorded and did not
+ * fix, plus the one it could not see. All four are the same shape as the three
+ * above, so they share one builder rather than four near-copies of the same
+ * regex pair.
+ *
+ * `directionSignal` returns a predicate for "this goal points VERB at OBJECT",
+ * anchored the way MAR-538 established: the verb must sit within ~40 characters
+ * before the object noun, or the object must carry its own preposition. A bare
+ * verb anywhere in the sentence is exactly what produces these bugs, so it is
+ * never enough on its own.
+ */
+const DIRECTION_GAP = "(?:[^.;!?]|\\.(?=\\w))";
+function directionSignal(verbs: string[], objectPattern: string, prepositions?: string[]) {
+  const verbAlternation = verbs.join("|");
+  const verbNearObject = new RegExp(
+    `(?<!\\w)(?:${verbAlternation})(?!\\w)${DIRECTION_GAP}{0,40}?${objectPattern}(?!\\w)`,
+  );
+  const prepositional =
+    prepositions === undefined
+      ? null
+      : new RegExp(
+          `(?<!\\w)(?:${prepositions.join("|")})\\s+(?:a|an|the|our|my|your|their|its)?\\s*${objectPattern}(?!\\w)`,
+        );
+  return (goalLower: string): boolean =>
+    verbNearObject.test(goalLower) || (prepositional?.test(goalLower) ?? false);
+}
+
+/**
+ * FINDING 1 — `pdf_extraction` on a document-CREATION goal.
+ *
+ * `pdf_extraction` PARSES a document: its capabilities are pdf_parsing /
+ * table_extraction / text_extraction, `permissions.write` is `[]`, and its own
+ * summary says it "parses PDF documents … for downstream processing". Its bare
+ * `pdf` / `invoice` / `receipt` hints carry no direction, so a goal that CREATES
+ * a PDF selected the parser for a document that does not exist yet:
+ *
+ *   "create a PDF invoice for the customer" → pdf_extraction → … → report_generation
+ *
+ * `report_generation` (the creation direction — MAR-254's own comment calls
+ * `pdf_extraction` "the opposite arrow") is correctly present via its
+ * `"create a pdf"` hint, which is why MAR-541 rated this low severity rather
+ * than the silent substitution the Airtable and Stripe cases were. It is still
+ * a parse step nobody asked for, and it drags `data_normalizer` behind it.
+ *
+ * Suppressed only when the goal creates a document and never reads one, so
+ * "generate a summary PDF from the invoices in my inbox" keeps both arrows.
+ */
+const DOCUMENT_OBJECT = "(pdfs?|invoices?|receipts?|reports?|statements?)";
+const hasDocumentCreateIntent = directionSignal(
+  [
+    "create", "creates", "creating", "created", "generate", "generates",
+    "generating", "generated", "produce", "produces", "producing", "produced",
+    "build", "builds", "building", "render", "renders", "rendering", "rendered",
+    "compose", "composes", "composing", "composed", "issue", "issues", "issuing",
+    "write", "writes", "writing", "draw up", "draws up",
+  ],
+  DOCUMENT_OBJECT,
+);
+const hasDocumentParseIntent = directionSignal(
+  [
+    "read", "reads", "reading", "parse", "parses", "parsing", "extract",
+    "extracts", "extracting", "scan", "scans", "scanning", "ingest", "ingests",
+    "ingesting", "import", "imports", "importing", "process", "processes",
+    "processing", "pull", "pulls", "pulling", "match", "matches", "matching",
+    "reconcile", "reconciles", "reconciling", "attached", "incoming",
+  ],
+  DOCUMENT_OBJECT,
+  ["from"],
+);
+
+function suppressPdfExtractionForCreationGoal(
+  goalLower: string,
+  domainAllowed: Set<string>,
+): void {
+  if (!hasDocumentCreateIntent(goalLower)) return;
+  if (hasDocumentParseIntent(goalLower)) return;
+  domainAllowed.delete("pdf_extraction");
+}
+
+/**
+ * FINDING 2 — `crm_record_read` on a write-only CRM goal.
+ *
+ * MAR-526 slice 1 gave `crm_record_read` hints that "name the CRM outright"
+ * because none of its old hints fired on a natural CRM read. That fixed the
+ * read. But half the new hints are LOCATIVE — `"in our crm"`, `"in hubspot"`,
+ * `"in salesforce"`, `"in pipedrive"` say WHERE, not read-vs-write — so a
+ * write-only goal picked up a read step:
+ *
+ *   "log a note in our CRM after the call"
+ *     → crm_record_read → … → crm_note_write → audit_log
+ *
+ * The write is present (MAR-541's reason for the low rating), but the plan
+ * opens with a CRM read and asks the user to provision a read scope the task
+ * does not need. The `from …` hints are untouched: they already carry
+ * direction, which is the whole distinction this issue is about.
+ */
+const CRM_OBJECT = "(crm|hubspot|salesforce|pipedrive)";
+const hasCrmWriteIntent = directionSignal(
+  [
+    "log", "logs", "logging", "logged", "add", "adds", "adding", "added",
+    "create", "creates", "creating", "created", "write", "writes", "writing",
+    "update", "updates", "updating", "updated", "push", "pushes", "pushing",
+    "sync", "syncs", "syncing", "save", "saves", "saving", "saved", "set",
+    "sets", "move", "moves", "moving", "moved", "attach", "attaches",
+  ],
+  CRM_OBJECT,
+);
+/**
+ * Deliberately NOT write verbs, for the reason MAR-538 already wrote down for
+ * Airtable: "record"/"records" and "note"/"notes" are overwhelmingly the NOUN in
+ * a CRM goal ("the records in Pipedrive", "crm records", "a note"). Treating
+ * them as verbs read MAR-526 slice 1's own read fixture — "Look at the records
+ * in Pipedrive and enrich each" — as a write and suppressed the read it exists
+ * to prove. Caught by that fixture before it shipped. The real write phrasings
+ * are all covered by log / add / create / write / update above.
+ */
+const hasCrmReadIntent = directionSignal(
+  [
+    "read", "reads", "reading", "look up", "looks up", "looking up", "look at",
+    "looks at", "looking at", "lookup", "pull", "pulls", "pulling", "fetch",
+    "fetches", "fetching", "list", "lists", "listing", "query", "queries",
+    "querying", "retrieve", "retrieves", "retrieving", "check", "checks",
+    "checking", "find", "finds", "finding", "search", "searches", "searching",
+    "enrich", "enriches", "enriching",
+  ],
+  CRM_OBJECT,
+  ["from"],
+);
+
+function suppressCrmRecordReadForWriteGoal(
+  goalLower: string,
+  domainAllowed: Set<string>,
+): void {
+  if (!hasCrmWriteIntent(goalLower)) return;
+  if (hasCrmReadIntent(goalLower)) return;
+  domainAllowed.delete("crm_record_read");
+}
+
+/**
+ * FINDING 3 — `public_feed_fetch` on a feed-PUBLISHING goal.
+ *
+ * `public_feed_fetch` is MAR-455's anonymous, zero-credential RSS/Atom GET:
+ * `permissions.write` is `[]` and its whole point is `network: read`. Its bare
+ * `rss` hint carries no direction, so a goal that PUBLISHES to a feed selected
+ * the fetcher:
+ *
+ *   "publish our RSS feed update to subscribers"
+ *     → public_feed_fetch → … → external_publish → audit_log
+ *
+ * `external_publish` is correctly present, so again not a silent substitution —
+ * but the plan opens by fetching a feed the goal never asked to read, and
+ * MAR-455's own achievement was that this component means "no credential, read
+ * only". Putting it on a publish goal muddies exactly that guarantee.
+ */
+const FEED_OBJECT = "(rss|atom|feeds?|newsletters?)";
+const hasFeedPublishIntent = directionSignal(
+  [
+    "publish", "publishes", "publishing", "published", "post", "posts",
+    "posting", "posted", "push", "pushes", "pushing", "pushed", "send", "sends",
+    "sending", "sent", "syndicate", "syndicates", "syndicating", "distribute",
+    "distributes", "distributing", "broadcast", "broadcasts", "broadcasting",
+  ],
+  FEED_OBJECT,
+);
+const hasFeedFetchIntent = directionSignal(
+  [
+    "fetch", "fetches", "fetching", "read", "reads", "reading", "pull", "pulls",
+    "pulling", "poll", "polls", "polling", "watch", "watches", "watching",
+    "monitor", "monitors", "monitoring", "subscribe", "subscribes",
+    "subscribing", "check", "checks", "checking", "scan", "scans", "scanning",
+    "track", "tracks", "tracking", "follow", "follows", "following",
+  ],
+  FEED_OBJECT,
+  ["from"],
+);
+
+function suppressPublicFeedFetchForPublishGoal(
+  goalLower: string,
+  domainAllowed: Set<string>,
+): void {
+  if (!hasFeedPublishIntent(goalLower)) return;
+  if (hasFeedFetchIntent(goalLower)) return;
+  domainAllowed.delete("public_feed_fetch");
+}
+
+/**
+ * FINDING 4 — the one MAR-541's sweep could not see, and the only one of the
+ * four that IS a silent substitution.
+ *
+ * The sweep judged the `email` hint safe because it maps to all three of
+ * `email_read` / `email_draft` / `optional_email_send` — read and write fire
+ * together, so no direction concept applies. True of the hint. But a DIFFERENT
+ * rule removes the write half: MAR-302's `suppressEmailDraftForDocumentSource`
+ * drops the drafting/sending path whenever a `data_etl` goal names an email
+ * token AND a document token AND no phrase from a fixed correspondence list.
+ * That list has `"email them"` and not `"email it to them"`. So:
+ *
+ *   "create a PDF invoice for the customer and email it to them"
+ *     → pdf_extraction → email_read → report_generation      coverage: FULL
+ *
+ * A goal asking to SEND was planned with a mailbox READ, no send component
+ * anywhere, and no reported gap — MAR-538's failure shape exactly.
+ *
+ * MAR-302's gate is right about its own case ("read invoices from my inbox and
+ * route to accounting" really does have no correspondence intent). What it
+ * cannot tell is SOURCE from DESTINATION: it fires on the presence of an email
+ * token, wherever it sits. `hasEmailDestinationIntent` reads the position the
+ * same way the rest of this family reads direction, and clears the suppression
+ * when the goal's email mention is outbound. `email_read` is dropped in the
+ * same breath when nothing in the goal names a mailbox as a source, so the send
+ * goal stops carrying an inbox read it never asked for.
+ */
+const EMAIL_DESTINATION_INTENT =
+  /(?<!\w)(email|emails|emailing|emailed|e-mail|send|sends|sending|sent|deliver|delivers|delivering|mail|mails|mailing)(?!\w)[^.;!?]{0,30}?(?<!\w)(it|them|this|that|him|her|me|us|back|out|over|a copy|the (?:pdf|invoice|report|receipt|copy|file|summary|result))(?!\w)/;
+const EMAIL_SOURCE_POSITION =
+  /(?<!\w)(?:from|in|into|via|by|through|across)\s+(?:a|an|the|our|my|your|their|its|shared\s+)?\s*(inbox|mailbox|email|emails|e-mail|gmail)(?!\w)|(?<!\w)(inbox|mailbox|email|emails|gmail)\s+(attachment|attachments|thread|threads|folder|inbox)(?!\w)|(?<!\w)(?:incoming|inbound|new|unread|arriving)\s+(?:\w+\s+){0,2}?(email|emails|e-mail|mail)(?!\w)|(?<!\w)(?:monitor|monitors|monitoring|watch|watches|watching|poll|polls|polling|read|reads|reading|check|checks|checking)(?!\w)[^.;!?]{0,30}?(inbox|mailbox|email|emails|gmail)(?!\w)/;
+
+/** True when the goal's email mention is an outbound delivery (MAR-558). */
+export function hasEmailDestinationIntent(goalLower: string): boolean {
+  return EMAIL_DESTINATION_INTENT.test(goalLower);
+}
+
+/** True when the goal names a mailbox as a SOURCE to read from (MAR-558). */
+export function hasEmailSourceIntent(goalLower: string): boolean {
+  return EMAIL_SOURCE_POSITION.test(goalLower);
+}
+
+function suppressEmailReadForOutboundOnlyGoal(
+  goalLower: string,
+  domainAllowed: Set<string>,
+): void {
+  if (!hasEmailDestinationIntent(goalLower)) return;
+  if (hasEmailSourceIntent(goalLower)) return;
+  domainAllowed.delete("email_read");
 }
 
 /**
@@ -2735,6 +2980,18 @@ export function matchCapabilities(
   // MAR-550: and the outbound fetchers do not belong on a local-file read
   // either, unless the goal also names a web source of its own.
   suppressWebFetchersForLocalFileRead(goalLower, domainAllowed);
+  // MAR-558: the three direction findings MAR-541's sweep recorded but left
+  // unfixed — a document-CREATION goal dropping the PDF parser, a write-only
+  // CRM goal dropping the CRM read its LOCATIVE hints pulled in, and a
+  // feed-PUBLISHING goal dropping the anonymous feed fetcher.
+  suppressPdfExtractionForCreationGoal(goalLower, domainAllowed);
+  suppressCrmRecordReadForWriteGoal(goalLower, domainAllowed);
+  suppressPublicFeedFetchForPublishGoal(goalLower, domainAllowed);
+  // MAR-558: and the fourth, which the sweep could not see — a goal whose only
+  // email mention is outbound must not carry a mailbox read. Runs AFTER
+  // suppressEmailDraftForDocumentSource above, whose gate now defers to the
+  // same source-vs-destination reading, so the send path survives.
+  suppressEmailReadForOutboundOnlyGoal(goalLower, domainAllowed);
   // MAR-303: the "in the loop" idiom (with no real iteration/fan-out signal)
   // drops the loop_controller false-positive on unattended report/monitor goals.
   suppressLoopControllerForIdiom(goalLower, domainAllowed);
