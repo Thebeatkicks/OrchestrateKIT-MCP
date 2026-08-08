@@ -41,6 +41,7 @@ import {
   buildAgentManifest,
   DASH_ENDPOINT_ENV,
   DASH_TOKEN_ENV,
+  type AgentDomPanel,
   type AgentDomTaskInputRole,
   type AgentManifest,
   type ManifestBuildTarget,
@@ -102,6 +103,156 @@ const TaskInputRoleInputShape = z
     max_total_bytes: z.number().int().min(1).optional(),
   })
   .strict();
+
+// ─────────────────── ADR 0008 / MAR-555: the panel declaration ───────────────
+//
+// Mirrors DASH's `$defs.panel` exactly — see
+// tests/fixtures/dash/agent.manifest.v2.schema.json, pinned to orchestratedash
+// `3666459`. `.strict()` throughout, on the `TaskInputRoleInputShape`
+// precedent: DASH's own schema does not forbid unknown keys, but a key DASH
+// will never read is a caller believing it declared something. The emitter's
+// job is to be honest, not permissive.
+//
+// The panel is DATA over a closed vocabulary, and the absences are the
+// argument: no section takes a URL, markup, a path, an image, another agent's
+// name, or any control that asks the user for something. Widening this shape
+// means widening DASH's pinned union first.
+
+/** Bindings name roles, never locations — an alphabet that cannot spell a separator, a traversal, or a URL. */
+const PanelRoleName = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9_]+$/, "an artifact role — lowercase letters, digits, underscore");
+
+const PanelSectionBaseShape = {
+  id: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9_]+$/, "technical vocabulary only — lowercase letters, digits, underscore"),
+  label: z.string().min(1).max(120),
+};
+
+const PanelSectionV1Shape = z.discriminatedUnion("type", [
+  z
+    .object({
+      ...PanelSectionBaseShape,
+      type: z.literal("report"),
+      artifact_role: PanelRoleName,
+    })
+    .strict(),
+  z
+    .object({
+      ...PanelSectionBaseShape,
+      type: z.literal("outputs"),
+      // Absent means every role this agent produced, which is what DASH's
+      // Outputs area already shows — so this one binding is optional by design.
+      artifact_role: PanelRoleName.optional(),
+      max_items: z.number().int().min(1).max(20).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      ...PanelSectionBaseShape,
+      type: z.literal("table"),
+      source_role: PanelRoleName,
+      columns: z
+        .array(
+          z
+            .object({
+              key: z
+                .string()
+                .min(1)
+                .max(64)
+                .regex(/^[a-z0-9_]+$/, "one own property of a row object"),
+              label: z.string().min(1).max(120),
+              kind: z.enum(["text", "number", "timestamp"]),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(8),
+    })
+    .strict(),
+  z
+    .object({
+      ...PanelSectionBaseShape,
+      type: z.literal("metrics"),
+      items: z
+        .array(
+          z
+            .object({
+              id: z
+                .string()
+                .max(64)
+                .regex(/^[a-z0-9_]+$/, "technical vocabulary only"),
+              label: z.string().min(1).max(120),
+              source: z.union([
+                z
+                  .object({
+                    kind: z.literal("artifact_field"),
+                    artifact_role: PanelRoleName,
+                    field: z
+                      .string()
+                      .max(64)
+                      .regex(/^[a-z0-9_]+$/, "one top-level field of the artifact body"),
+                  })
+                  .strict(),
+                z
+                  .object({
+                    kind: z.literal("dash_fact"),
+                    fact: z.enum(["run_count", "last_run_at", "last_run_verdict"]),
+                  })
+                  .strict(),
+              ]),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(8),
+    })
+    .strict(),
+  z
+    .object({
+      ...PanelSectionBaseShape,
+      type: z.literal("note"),
+      text: z.string().min(1).max(400),
+    })
+    .strict(),
+]);
+
+/** A section of a panel version DASH does not know: structure only, open `type`. */
+const PanelSectionOpaqueShape = z
+  .object({
+    id: z.string().min(1).max(64),
+    label: z.string().min(1).max(120),
+    type: z.string().min(1).max(64),
+  })
+  .strict();
+
+// DASH's schema expresses the version split as if/then/else on `panel_version`;
+// zod says the same thing as a union of two closed shapes. Version 1 is checked
+// strictly against the closed enum — a typo'd section type is refused here, the
+// way DASH refuses it at import — and any other version is accepted
+// structurally, so a newer panel travels intact rather than being rejected or,
+// worse, silently downgraded into a v1 shape it was never written in.
+const AgentPanelInputShape = z.union([
+  z
+    .object({
+      panel_version: z.literal(1),
+      title: z.string().min(1).max(120).optional(),
+      sections: z.array(PanelSectionV1Shape).min(1).max(8),
+    })
+    .strict(),
+  z
+    .object({
+      panel_version: z.number().int().min(2),
+      title: z.string().min(1).max(120).optional(),
+      sections: z.array(PanelSectionOpaqueShape).min(1).max(8),
+    })
+    .strict(),
+]);
 
 const SafetyReviewShape = z
   .object({
@@ -361,6 +512,18 @@ export const InputShape = {
       "file against a named role instead of a raw id. See " +
       "tests/fixtures/dash/agent.manifest.v2.schema.json#/$defs/taskInputRole.",
     ),
+  agent_panel: AgentPanelInputShape.optional().describe(
+    "ADR 0008 (MAR-555): the agent's own panel for its DASH workspace, DECLARED rather " +
+    "than programmed — sections over a closed vocabulary (report/outputs/table/metrics/" +
+    "note) that DASH renders with its own components. Absent is the honest default and " +
+    "'agent_dom.panel' is omitted entirely rather than exported as an empty object. " +
+    "NOTHING is derived: every section that shows an agent's output binds to an artifact " +
+    "ROLE, which is a name the agent's runtime gives what it writes — a plan declares " +
+    "none, and 'output_location' is free text naming a destination ('Gmail drafts " +
+    "folder'), not a role. Declare this once the build's artifact roles are known. See " +
+    "docs/ADR-MAR-555-agent-panel-emission.md and " +
+    "tests/fixtures/dash/agent.manifest.v2.schema.json#/$defs/panel.",
+  ),
   // ── MAR-460: public-runner eligibility (fail closed) ──
   runner_posture: z
     .enum(["attended", "unattended", "public"])
@@ -2408,6 +2571,8 @@ export type ExportBuildBriefInput = {
   dash_broker_available?: boolean;
   /** MAR-507 companion: declared input roles, in the plan's own vocabulary. Absent/empty omits agent_dom.task_inputs entirely. */
   task_inputs?: AgentDomTaskInputRole[];
+  /** ADR 0008 / MAR-555: the author's declared panel. Absent omits agent_dom.panel entirely; nothing is derived. */
+  agent_panel?: AgentDomPanel;
   agent_name?: string;
   // ── MAR-460: public-runner eligibility; see src/lib/runnerEligibility.ts ──
   /** Defaults to the strictest posture ('public') — an undeclared posture is not evidence of a narrow one. */
@@ -2600,6 +2765,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     interaction_surface: input.interaction_surface,
     trigger_explanation: input.trigger_explanation,
     task_inputs: input.task_inputs,
+    panel: input.agent_panel,
   });
 
   // MAR-460: assessed for every export, including the ones that supply nothing —
@@ -2884,6 +3050,7 @@ export function registerExportBuildBrief(server: McpServer): void {
           cadence_enabled: input.cadence_enabled,
           dash_broker_available: input.dash_broker_available,
           task_inputs: input.task_inputs as AgentDomTaskInputRole[] | undefined,
+          agent_panel: input.agent_panel as AgentDomPanel | undefined,
           agent_name: input.agent_name,
           llm_provider: input.llm_provider,
         });

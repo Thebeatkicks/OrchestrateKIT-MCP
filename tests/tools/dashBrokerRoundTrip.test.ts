@@ -62,6 +62,10 @@ import {
   dashManifestProvider,
   dashBrokeredConnectionIds,
 } from "../../src/lib/dashBrokerCatalog.js";
+import {
+  PANEL_SECTION_TYPES_V1,
+  type AgentDomPanel,
+} from "../../src/lib/observabilityContract.js";
 
 const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-var-requires */
@@ -170,6 +174,8 @@ type TaskInputRoleFixture = {
 function planAndBrief(opts: {
   dash_broker_available?: boolean;
   task_inputs?: TaskInputRoleFixture[];
+  agent_panel?: AgentDomPanel;
+  output_location?: string;
 }) {
   const plan = planWorkflow({ goal: LEAD_GOAL, must_have_capabilities: [], must_avoid: [] }, registry);
   const wizard = plan.goal_to_product_wizard;
@@ -197,9 +203,10 @@ function planAndBrief(opts: {
     playbook_id: plan.playbook?.id ?? "",
     route_id: plan.playbook?.route_id ?? "",
     build_target: "code",
-    output_location: "HubSpot notes",
+    output_location: opts.output_location ?? "HubSpot notes",
     dash_broker_available: opts.dash_broker_available,
     task_inputs: opts.task_inputs,
+    agent_panel: opts.agent_panel,
     generated_at: "2026-08-06T00:00:00Z",
     llm_provider: "anthropic",
   });
@@ -350,6 +357,158 @@ describe("MAR-507 companion — export_build_brief emits task_inputs against DAS
     // exists to prevent) fails validation here rather than shipping.
     const b = planAndBrief({
       task_inputs: [{ id: "Customer Brief", label: "Customer brief", required: true }],
+    });
+    expect(validateManifest(b.agent_manifest)).toBe(false);
+  });
+});
+
+/**
+ * ADR 0008 slice 4 (MAR-555) — export_build_brief emitting `agent_dom.panel`.
+ *
+ * The panel is a DECLARATION DASH renders with its own trusted components, so
+ * the only thing the MCP can get wrong is the shape and the honesty of the
+ * default. Both are checked here against DASH's pinned contract rather than
+ * the MCP's own idea of it, the same standard the `task_inputs` block above
+ * holds itself to.
+ *
+ * The two panels below are the ones MAR-548's two shipped sample agents would
+ * declare — `ai-agent-news` and `gmail-meeting-assistant`. They are AUTHOR
+ * declarations, which is the whole point of this slice: nothing here is
+ * derived by the emitter, and the absence tests are what pin that.
+ * `digest` and `draft` are the two artifact kinds DASH's own
+ * `describeArtifactRole` (`lib/copy/artifacts.ts`) names today; the rest bind
+ * to roles those builds give their own outputs.
+ */
+describe("MAR-555 — export_build_brief emits agent_dom.panel against DASH's pinned schema", () => {
+  /** MAR-548 sample agent 1: the credential-free AI news scout. The ADR's own worked example. */
+  const NEWS_SCOUT_PANEL: AgentDomPanel = {
+    panel_version: 1,
+    title: "Today's AI news",
+    sections: [{ id: "latest_digest", type: "report", label: "Latest digest", artifact_role: "digest" }],
+  };
+
+  /** MAR-548 sample agent 2: the everything-agent, exercising all five section types at once. */
+  const MEETING_ASSISTANT_PANEL: AgentDomPanel = {
+    panel_version: 1,
+    title: "Meeting assistant",
+    sections: [
+      { id: "latest_draft", type: "report", label: "Latest draft reply", artifact_role: "draft" },
+      { id: "recent_drafts", type: "outputs", label: "Recent drafts", artifact_role: "draft", max_items: 5 },
+      {
+        id: "proposed_times",
+        type: "table",
+        label: "Times it proposed",
+        source_role: "proposed_times",
+        columns: [
+          { key: "starts_at", label: "Starts", kind: "timestamp" },
+          { key: "duration_minutes", label: "Minutes", kind: "number" },
+          { key: "attendee", label: "With", kind: "text" },
+        ],
+      },
+      {
+        id: "activity",
+        type: "metrics",
+        label: "Activity",
+        items: [
+          { id: "runs", label: "Runs", source: { kind: "dash_fact", fact: "run_count" } },
+          { id: "last_run", label: "Last run", source: { kind: "dash_fact", fact: "last_run_at" } },
+          {
+            id: "drafts_written",
+            label: "Drafts written",
+            source: { kind: "artifact_field", artifact_role: "draft", field: "draft_count" },
+          },
+        ],
+      },
+      {
+        id: "sending_note",
+        type: "note",
+        label: "About sending",
+        text: "This agent writes drafts and never sends them. Send is yours.",
+      },
+    ],
+  };
+
+  it("by-value pin: PANEL_SECTION_TYPES_V1 is exactly DASH's closed v1 section enum", () => {
+    // The panel's entire security argument is that what it can make DASH draw
+    // is one closed union readable in a single sitting. A vocabulary this repo
+    // re-derived from the fixture would widen the moment DASH widened it,
+    // silently. This is the review step, and it fails on the fixture re-sync
+    // rather than at somebody's import.
+    const schema = loadFixtureJson("agent.manifest.v2.schema.json") as {
+      $defs: { panelSectionV1: { properties: { type: { enum: string[] } } } };
+    };
+    expect([...PANEL_SECTION_TYPES_V1]).toEqual(schema.$defs.panelSectionV1.properties.type.enum);
+  });
+
+  it("honest absence: a plan that declares no panel omits agent_dom.panel entirely", () => {
+    const b = planAndBrief({});
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect("panel" in b.agent_manifest.agent_dom).toBe(false);
+  });
+
+  it("the recorded decline: an output_location-bearing export still derives no panel", () => {
+    // ADR 0008 PERMITS deriving one `report` section from an output_location.
+    // docs/ADR-MAR-555-agent-panel-emission.md declines it: `report` requires
+    // an `artifact_role`, a role is a name the agent's RUNTIME gives what it
+    // writes, and an output_location is free text naming a destination. This
+    // is the absence twin that keeps the decline a fact rather than a comment
+    // — if somebody wires derivation up later, this test is where they must
+    // argue for it.
+    const b = planAndBrief({ output_location: "HubSpot notes + Gmail drafts" });
+    expect(b.agent_manifest.monitoring.output_location).toBe("HubSpot notes + Gmail drafts");
+    expect("panel" in b.agent_manifest.agent_dom).toBe(false);
+  });
+
+  it("never an empty object: a panel with no sections is refused by DASH's own schema", () => {
+    // Why the emit is conditional rather than defaulted. `{}` is not a
+    // quieter version of absence — `panel_version` and `sections` are both
+    // required, so an emitter that reached for a placeholder would ship a
+    // manifest DASH refuses at import.
+    const b = planAndBrief({});
+    const withEmptyPanel = {
+      ...b.agent_manifest,
+      agent_dom: { ...b.agent_manifest.agent_dom, panel: {} },
+    };
+    expect(validateManifest(withEmptyPanel)).toBe(false);
+  });
+
+  it("MAR-548 sample agent 1 (ai-agent-news): the declared report panel round-trips verbatim", () => {
+    const b = planAndBrief({ agent_panel: NEWS_SCOUT_PANEL });
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect(b.agent_manifest.agent_dom.panel).toEqual(NEWS_SCOUT_PANEL);
+  });
+
+  it("MAR-548 sample agent 2 (gmail-meeting-assistant): all five section types validate at once", () => {
+    const b = planAndBrief({ agent_panel: MEETING_ASSISTANT_PANEL });
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect(b.agent_manifest.agent_dom.panel).toEqual(MEETING_ASSISTANT_PANEL);
+    // Coverage claim asserted rather than assumed: this fixture really does
+    // exercise every member of the closed vocabulary.
+    const declared = new Set(MEETING_ASSISTANT_PANEL.sections.map((s) => s.type));
+    expect([...PANEL_SECTION_TYPES_V1].every((t) => declared.has(t))).toBe(true);
+  });
+
+  it("a newer panel version travels intact and is checked structurally, not against v1's enum", () => {
+    const newer: AgentDomPanel = {
+      panel_version: 2,
+      sections: [{ id: "conversation", type: "conversation", label: "Talk to it" }],
+    };
+    const b = planAndBrief({ agent_panel: newer });
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect(b.agent_manifest.agent_dom.panel).toEqual(newer);
+  });
+
+  it("a section type outside the closed enum fails the pinned schema, not just the zod layer", () => {
+    // `exportBuildBrief` is a plain deterministic function with no zod of its
+    // own — the registerTool wrapper enforces AgentPanelInputShape on a real
+    // call (tests/tools/exportBuildBrief.test.ts). This asserts DASH's own
+    // schema is a second, independent backstop for the same refusal, so a
+    // typo'd type cannot reach an import by slipping past one layer.
+    const b = planAndBrief({
+      agent_panel: {
+        panel_version: 1,
+        sections: [{ id: "chart", type: "chart", label: "Chart" }],
+      } as unknown as AgentDomPanel,
     });
     expect(validateManifest(b.agent_manifest)).toBe(false);
   });

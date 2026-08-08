@@ -5,10 +5,20 @@ semantically exact copies of orchestratedash's contracts. Manifest v1 and run ev
 remain the frozen telemetry-v1/read-only contract. Manifest v2 is the additive
 runner-hostable contract and requires `agent_dom`.
 
-The v2 schema is pinned to orchestratedash commit
-`163f4141b153953e8e08900b31e51953ee5975ed` with semantic SHA-256
-`2e9b3c8ab18a15eaa642c6c0bf4559c36d9d479ec5b065cac3fab1bfd598d12a`.
-Its semantic content is copied exactly rather than recreated as a local approximation.
+The schema files' pinned orchestratedash commit and their semantic SHA-256
+fingerprints live in `contract.lock.json` (`canonical_commit` and
+`schema_semantic_sha256`), which is the single authority for both — restated
+here once, they went stale silently and disagreed with the lock for two
+re-syncs before MAR-555 noticed. Their semantic content is copied exactly
+rather than recreated as a local approximation.
+
+`agent.manifest.v2.schema.json` additionally has a live drift check,
+`pnpm dash:schema:check` (`scripts/check-dash-schema-drift.mjs`), which
+compares it structurally against orchestratedash's working copy whenever that
+repo is checked out beside this one. Copy the canonical file, move the lock's
+`canonical_commit` and the v2 fingerprint, and decide whether the emitter
+should populate anything newly added — all in the same commit, or the check
+fails by design.
 
 **Dual-update discipline** (same rule as `tests/fixtures/matcher-corpus.json`):
 when the DASH contract changes, copy the canonical schema without changing its

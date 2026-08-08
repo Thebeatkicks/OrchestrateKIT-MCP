@@ -275,6 +275,157 @@ describe("export_build_brief — input schema accepts plan_workflow's literal ou
   });
 });
 
+/**
+ * ADR 0008 slice 4 (MAR-555) — the `.strict()` boundary on `agent_panel`.
+ *
+ * `exportBuildBrief()` the function takes the panel on trust; the zod layer
+ * the MCP tool wrapper enforces is the only thing standing between a caller's
+ * typo and a manifest DASH refuses at import. DASH's own schema does not
+ * forbid unknown keys, so every `.strict()` refusal below is a deliberate
+ * narrowing on the `TaskInputRoleInputShape` precedent: a key DASH will never
+ * read is a caller believing it declared something.
+ *
+ * tests/tools/dashBrokerRoundTrip.test.ts holds the other half — the same
+ * refusals re-derived from DASH's pinned schema, so neither layer is the only
+ * one standing.
+ */
+describe("MAR-555 — agent_panel is validated at the tool boundary, not on trust", () => {
+  function parsePanel(agent_panel: unknown) {
+    return InputSchema.safeParse({
+      goal: "x".repeat(10),
+      plan_source: "composed",
+      route_status: "candidate",
+      recommended_route: [{ step: 1, component_id: "email_read" }],
+      safety_review: { status: "pass", risk_score: 0 },
+      automation_clearance: { level: "L0", autonomous_allowed: true, reason: "x" },
+      handoff_targets: ["prompt"],
+      agent_panel,
+    });
+  }
+
+  it("omitting it entirely is valid — absence is the honest default, not a missing field", () => {
+    const parsed = parsePanel(undefined);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.agent_panel).toBeUndefined();
+  });
+
+  it("accepts each of the five v1 section types", () => {
+    const cases: Record<string, unknown> = {
+      report: { id: "d", type: "report", label: "Digest", artifact_role: "digest" },
+      outputs: { id: "o", type: "outputs", label: "Outputs" },
+      table: {
+        id: "t",
+        type: "table",
+        label: "Rows",
+        source_role: "rows",
+        columns: [{ key: "name", label: "Name", kind: "text" }],
+      },
+      metrics: {
+        id: "m",
+        type: "metrics",
+        label: "Activity",
+        items: [{ id: "runs", label: "Runs", source: { kind: "dash_fact", fact: "run_count" } }],
+      },
+      note: { id: "n", type: "note", label: "Note", text: "Nothing is sent." },
+    };
+    for (const [name, section] of Object.entries(cases)) {
+      const parsed = parsePanel({ panel_version: 1, sections: [section] });
+      expect(
+        parsed.success,
+        parsed.success ? "" : `${name}: ${JSON.stringify((parsed as { error: unknown }).error)}`,
+      ).toBe(true);
+    }
+  });
+
+  it("refuses a section type outside the closed v1 vocabulary", () => {
+    // A typo'd type is refused loudly rather than dropped at render — a
+    // half-drawn panel is a guess presented as a fact.
+    expect(
+      parsePanel({ panel_version: 1, sections: [{ id: "c", type: "chart", label: "Chart" }] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("refuses a v1 section that omits the binding its own type requires", () => {
+    expect(
+      parsePanel({ panel_version: 1, sections: [{ id: "d", type: "report", label: "Digest" }] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("refuses an unknown key inside a section, which DASH's own schema would have allowed", () => {
+    expect(
+      parsePanel({
+        panel_version: 1,
+        sections: [
+          { id: "n", type: "note", label: "Note", text: "hi", url: "https://example.com" },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("refuses bindings that could spell a path, a traversal or a URL", () => {
+    for (const role of ["../digest", "digest/latest", "https://x", "Digest"]) {
+      expect(
+        parsePanel({
+          panel_version: 1,
+          sections: [{ id: "d", type: "report", label: "Digest", artifact_role: role }],
+        }).success,
+        role,
+      ).toBe(false);
+    }
+  });
+
+  it("holds every bound the schema declares: 8 sections, 8 columns, a 400-char note", () => {
+    const section = (i: number) => ({ id: `n${i}`, type: "note", label: "N", text: "x" });
+    expect(
+      parsePanel({ panel_version: 1, sections: [1, 2, 3, 4, 5, 6, 7, 8].map(section) }).success,
+    ).toBe(true);
+    expect(
+      parsePanel({ panel_version: 1, sections: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(section) }).success,
+    ).toBe(false);
+    expect(parsePanel({ panel_version: 1, sections: [] }).success).toBe(false);
+    expect(
+      parsePanel({
+        panel_version: 1,
+        sections: [{ id: "n", type: "note", label: "N", text: "x".repeat(400) }],
+      }).success,
+    ).toBe(true);
+    expect(
+      parsePanel({
+        panel_version: 1,
+        sections: [{ id: "n", type: "note", label: "N", text: "x".repeat(401) }],
+      }).success,
+    ).toBe(false);
+    const column = (i: number) => ({ key: `c${i}`, label: "C", kind: "text" });
+    expect(
+      parsePanel({
+        panel_version: 1,
+        sections: [
+          {
+            id: "t",
+            type: "table",
+            label: "Rows",
+            source_role: "rows",
+            columns: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(column),
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("a newer panel version is accepted structurally, and version 1 does not rot into leniency", () => {
+    // The versioning rule, both directions. An unknown version travels intact
+    // so DASH can render it as one stated card; the same opaque section under
+    // `panel_version: 1` is still refused, because that is the version whose
+    // vocabulary is closed.
+    const opaque = { id: "conversation", type: "conversation", label: "Talk to it" };
+    expect(parsePanel({ panel_version: 2, sections: [opaque] }).success).toBe(true);
+    expect(parsePanel({ panel_version: 1, sections: [opaque] }).success).toBe(false);
+    expect(parsePanel({ panel_version: 0, sections: [opaque] }).success).toBe(false);
+  });
+});
+
 describe("MAR-460 — the exported brief shows the runner-eligibility decision and its evidence", () => {
   const RUNNER_GOAL =
     "Build a local agent that watches my Gmail for meeting requests continuously. " +
