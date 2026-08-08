@@ -107,6 +107,70 @@ export type AgentDomTaskInputRole = {
   max_total_bytes?: number;
 };
 
+/**
+ * ADR 0008 (MAR-552/555): the closed version-1 panel section vocabulary,
+ * pinned BY VALUE against DASH's `$defs.panelSectionV1.properties.type.enum`.
+ *
+ * Pinned rather than derived because the whole security argument for the panel
+ * is that "what a panel can make DASH draw is one closed union, readable in a
+ * single sitting" — a vocabulary this repo re-derived from whatever the fixture
+ * happened to say would widen silently when DASH widened it, which is exactly
+ * the review step the by-value pin exists to force. `panelSectionVocabulary`
+ * in tests/tools/dashBrokerRoundTrip.test.ts asserts the two still agree.
+ */
+export const PANEL_SECTION_TYPES_V1 = [
+  "report",
+  "outputs",
+  "table",
+  "metrics",
+  "note",
+] as const;
+export type AgentDomPanelSectionType = (typeof PANEL_SECTION_TYPES_V1)[number];
+
+/** Column kinds a `table` section may declare. A value of another kind renders as absent in DASH, never coerced. */
+export type AgentDomPanelColumnKind = "text" | "number" | "timestamp";
+/** The closed set of facts DASH itself observes, as opposed to numbers the agent reports about itself. */
+export type AgentDomPanelDashFact = "run_count" | "last_run_at" | "last_run_verdict";
+
+export type AgentDomPanelMetricSource =
+  | { kind: "artifact_field"; artifact_role: string; field: string }
+  | { kind: "dash_fact"; fact: AgentDomPanelDashFact };
+
+type PanelSectionBase = { id: string; label: string };
+
+/**
+ * One section of a `panel_version: 1` panel — mirrors DASH's `$defs.panelSectionV1`
+ * discriminated on `type`, exactly as DASH's own reader narrows it.
+ */
+export type AgentDomPanelSectionV1 =
+  | (PanelSectionBase & { type: "report"; artifact_role: string })
+  | (PanelSectionBase & { type: "outputs"; artifact_role?: string; max_items?: number })
+  | (PanelSectionBase & {
+      type: "table";
+      source_role: string;
+      columns: { key: string; label: string; kind: AgentDomPanelColumnKind }[];
+    })
+  | (PanelSectionBase & {
+      type: "metrics";
+      items: { id: string; label: string; source: AgentDomPanelMetricSource }[];
+    })
+  | (PanelSectionBase & { type: "note"; text: string });
+
+/** A section of a panel version DASH does not know: structure only, open `type`. */
+export type AgentDomPanelSectionOpaque = PanelSectionBase & { type: string };
+
+/**
+ * ADR 0008: the agent's own panel — a DECLARATION DASH renders with its own
+ * trusted components, never code. Mirrors DASH's `$defs.panel` (see
+ * tests/fixtures/dash/agent.manifest.v2.schema.json), including its
+ * version split: `panel_version: 1` carries the closed section vocabulary,
+ * any other version carries structurally-checked opaque sections that DASH
+ * renders as one stated "newer format" card rather than partially.
+ */
+export type AgentDomPanel =
+  | { panel_version: 1; title?: string; sections: AgentDomPanelSectionV1[] }
+  | { panel_version: number; title?: string; sections: AgentDomPanelSectionOpaque[] };
+
 /** A route step as seen by the manifest builder (plan_workflow's RouteStep subset). */
 export type ManifestRouteStep = {
   step: number;
@@ -633,6 +697,20 @@ export type AgentManifest = {
      * local-file-selection step yet).
      */
     task_inputs?: AgentDomTaskInputRole[];
+    /**
+     * ADR 0008 (MAR-555): the author's declared panel. Omitted — never an
+     * empty object — when nothing declared one, the exact rule `task_inputs`
+     * ships with: absence means "this agent declares no panel", and must
+     * never be read as "render something anyway".
+     *
+     * The emitter does NOT derive one. See
+     * docs/ADR-MAR-555-agent-panel-emission.md for why the derivation ADR 0008
+     * permits ("an output_location-bearing route gets a single report
+     * section") is declined on this side: every v1 section that renders an
+     * agent's output binds to an artifact ROLE, and a plan declares no
+     * artifact roles.
+     */
+    panel?: AgentDomPanel;
     control: {
       supported: boolean;
       command_version: 1;
@@ -707,6 +785,13 @@ export function buildAgentManifest(input: {
    * agent takes no files" reading (tests/fixtures/dash/agent.manifest.v2.schema.json#/$defs/taskInputRole).
    */
   task_inputs?: AgentDomTaskInputRole[];
+  /**
+   * ADR 0008 (MAR-555): the author's declared panel, passed through verbatim.
+   * Absent is the honest default and omits `agent_dom.panel` entirely; there
+   * is no derivation, because nothing in a plan names an artifact role for a
+   * section to bind to (docs/ADR-MAR-555-agent-panel-emission.md).
+   */
+  panel?: AgentDomPanel;
 }): AgentManifest {
   const agentName =
     input.agent_name?.trim() || agentSlug(input.playbook_id, input.goal);
@@ -817,6 +902,11 @@ export function buildAgentManifest(input: {
       ...(input.task_inputs && input.task_inputs.length > 0
         ? { task_inputs: input.task_inputs }
         : {}),
+      // ADR 0008: conditional, never `{}` — DASH reads an empty object as a
+      // panel that declared no sections, which its own schema refuses
+      // (`sections` is required, minItems 1). Absence is the only honest way
+      // to say "no panel".
+      ...(input.panel ? { panel: input.panel } : {}),
       control: {
         supported,
         command_version: 1,

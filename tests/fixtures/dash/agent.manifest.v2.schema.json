@@ -116,6 +116,9 @@
           "description": "What files this agent accepts as a task, declared per role (MAR-434). Optional, and absent means the agent takes no files — which is every agent shipped before this block existed, so absence must never be read as an unrestricted agent. The declaration is what the runner narrows its own ceilings down to; it can never widen them, so a manifest asking for a 4 GiB input gets the runner's limit and a refusal, not 4 GiB. See runner/workspace.ts effectiveLimits.",
           "items": { "$ref": "#/$defs/taskInputRole" }
         },
+        "panel": {
+          "$ref": "#/$defs/panel"
+        },
         "control": {
           "type": "object",
           "required": ["supported", "command_version", "commands"],
@@ -203,6 +206,182 @@
           "description": "Across every file in this role. Lowered to the runner's ceiling, never raised past it."
         }
       }
+    },
+    "panel": {
+      "type": "object",
+      "description": "The agent's own panel, declared rather than programmed (ADR 0008, MAR-552).\n\nA panel is **data over a closed vocabulary** that DASH renders with its own trusted components. Agent-authored code never executes in DASH's renderer, and this block is not an escape hatch from that: what a panel can make DASH draw is one closed union, readable in `$defs.panelSectionV1` in a single sitting.\n\nThe absences are the argument. **No component takes a URL. No component takes markup. No component takes a path. No component takes an image. No component names another agent. No component asks the user for anything, and no event vocabulary exists.** Widening any of those means widening a pinned union in a reviewed commit, which is the by-value-pin discipline doing its job.\n\nOptional, and **omitted when undeclared — never an empty object**, the exact rule `task_inputs` shipped with. Absence means the author declared no panel; it must never be read as \"render something anyway\".",
+      "required": ["panel_version", "sections"],
+      "properties": {
+        "panel_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Which vocabulary the sections are written in. Version 1 is the closed five-component set below. See the if/then/else: a version DASH knows is checked strictly, a version it does not know is accepted structurally and rendered as one stated card."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "What the author calls this panel. Rendered as a text node inside a region DASH itself heads, so it reads as the author's words and cannot be mistaken for a DASH verdict. Held to lib/copy/identifiers.ts."
+        },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "description": "In render order. Bounded here rather than defended against in the renderer: a spec that cannot describe an unbounded render is better than a renderer that has to survive one."
+        }
+      },
+      "if": { "properties": { "panel_version": { "const": 1 } } },
+      "then": {
+        "properties": {
+          "sections": { "type": "array", "items": { "$ref": "#/$defs/panelSectionV1" } }
+        }
+      },
+      "else": {
+        "properties": {
+          "sections": { "type": "array", "items": { "$ref": "#/$defs/panelSectionOpaque" } }
+        }
+      }
+    },
+    "panelSectionV1": {
+      "type": "object",
+      "description": "One section of a version 1 panel. The `type` enum is closed on purpose: a typo'd type is refused at import, loudly, rather than silently dropped at render — a half-drawn panel is a guess rendered as a fact.\n\nEach branch of the oneOf below is discriminated by `type`, so a section matches exactly one shape and the renderer can narrow on the same field the author wrote.",
+      "required": ["id", "type", "label"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9_]+$",
+          "description": "Technical vocabulary, e.g. `latest_digest`. Travels so a section can be addressed; never rendered, the same split `taskInputRole.id` and `permissionGrant.id` already make."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "What a person reads at the head of the section. Held to lib/copy/identifiers.ts."
+        },
+        "type": {
+          "enum": ["report", "outputs", "table", "metrics", "note"],
+          "description": "The closed vocabulary, complete in this one array. `report` is the newest artifact of a role; `outputs` is the artifact cards filtered by role; `table` is rows from the newest JSON artifact of a role; `metrics` is labelled values from an artifact field or from a fact DASH itself observes; `note` is a bounded block of the author's own copy."
+        }
+      },
+      "oneOf": [
+        {
+          "description": "report — the newest artifact of the named role, rendered through the artifact-card and digest machinery the run detail page already uses, receipt included.",
+          "properties": {
+            "type": { "const": "report" },
+            "artifact_role": { "$ref": "#/$defs/roleName" }
+          },
+          "required": ["artifact_role"]
+        },
+        {
+          "description": "outputs — the existing Outputs area, placeable and scopeable by the author. An absent `artifact_role` means every role this agent produced, which is what the Outputs area already shows.",
+          "properties": {
+            "type": { "const": "outputs" },
+            "artifact_role": { "$ref": "#/$defs/roleName" },
+            "max_items": { "type": "integer", "minimum": 1, "maximum": 20 }
+          }
+        },
+        {
+          "description": "table — rows from the newest JSON artifact of `source_role` whose body is an array of objects. A cell is an own-property lookup by `key`, rendered per `kind`; a value that is not the declared kind renders as absent, never coerced. There is deliberately no path or expression syntax: a path language is an interpreter, and interpreters grow.",
+          "properties": {
+            "type": { "const": "table" },
+            "source_role": { "$ref": "#/$defs/roleName" },
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "required": ["key", "label", "kind"],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[a-z0-9_]+$",
+                    "description": "One own property of a row object. An alphabet that cannot spell a separator, a traversal or a URL."
+                  },
+                  "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+                  "kind": {
+                    "enum": ["text", "number", "timestamp"],
+                    "description": "How the cell is rendered. A value of a different kind renders as absent rather than being coerced, because a coerced cell is DASH asserting something the agent did not say."
+                  }
+                }
+              }
+            }
+          },
+          "required": ["source_role", "columns"]
+        },
+        {
+          "description": "metrics — labelled values from either a top-level field of a JSON artifact or from the closed set of facts DASH itself observes. The two sources render differently attributed: an artifact field is *the agent's report*, a dash fact is *DASH's record*. Collapsing that distinction would let an agent's own number wear DASH's voice — it is `stated_at`/`received_at`'s split, applied to a number.",
+          "properties": {
+            "type": { "const": "metrics" },
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "required": ["id", "label", "source"],
+                "properties": {
+                  "id": { "type": "string", "pattern": "^[a-z0-9_]+$", "maxLength": 64 },
+                  "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+                  "source": {
+                    "oneOf": [
+                      {
+                        "description": "The agent's own report: one top-level field of the newest JSON artifact of this role.",
+                        "type": "object",
+                        "required": ["kind", "artifact_role", "field"],
+                        "properties": {
+                          "kind": { "const": "artifact_field" },
+                          "artifact_role": { "$ref": "#/$defs/roleName" },
+                          "field": { "type": "string", "pattern": "^[a-z0-9_]+$", "maxLength": 64 }
+                        }
+                      },
+                      {
+                        "description": "DASH's own record. A closed set, each member already computed for an existing view — nothing here asks DASH to derive something new on an agent's behalf.",
+                        "type": "object",
+                        "required": ["kind", "fact"],
+                        "properties": {
+                          "kind": { "const": "dash_fact" },
+                          "fact": { "enum": ["run_count", "last_run_at", "last_run_verdict"] }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": ["items"]
+        },
+        {
+          "description": "note — a bounded block of author copy, with the same standing as the manifest's `goal`: the author's words, rendered as the author's words, inside a region DASH heads as the author's own panel. An author can still be wrong in a note; the mitigation is attribution, not censorship, and DASH's verdict surfaces render outside the panel where no section can imitate them.",
+          "properties": {
+            "type": { "const": "note" },
+            "text": { "type": "string", "minLength": 1, "maxLength": 400 }
+          },
+          "required": ["text"]
+        }
+      ]
+    },
+    "panelSectionOpaque": {
+      "type": "object",
+      "description": "A section of a panel version DASH does not know (ADR 0008).\n\nChecked for structure only, so the document is accepted rather than rejected — the contract's additive-versioning rule, which lib/contracts.ts states as \"DASH ignores what it does not understand rather than rejecting the document\". DASH renders such a panel as **one stated card** saying the author declared it in a newer format, never section by section: a partially drawn panel is a guess presented as a fact.\n\n`type` is an open string here precisely because the closed enum belongs to version 1 and must not rot into leniency to accommodate a version that has not been designed yet.",
+      "required": ["id", "type", "label"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "type": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "roleName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9_]+$",
+      "description": "An artifact role, e.g. `digest`. Bindings name roles and never locations — MAR-507's rule (\"the renderer names a kind of file and never a file\") applied to data binding. The alphabet cannot spell a separator, a traversal or a URL, and the binding carries no agent, so a panel resolves roles against *this* agent's runs and cannot reach another's."
     },
     "permissions": {
       "type": "object",
