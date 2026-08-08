@@ -3654,7 +3654,7 @@ exports[`MAR-249 — export_build_brief output schema > compact structuredConten
     "provenance": {
       "generated_at": "[volatile]",
       "generated_by": "orchestratekit-mcp export_build_brief",
-      "registry_fingerprint": "64951e7771604e93",
+      "registry_fingerprint": "6d3bf1e426d555c8",
     },
     "safety_contract": {
       "automation_clearance": "L3",
@@ -4435,7 +4435,7 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
     "provenance": {
       "generated_at": "[volatile]",
       "generated_by": "orchestratekit-mcp export_build_brief",
-      "registry_fingerprint": "64951e7771604e93",
+      "registry_fingerprint": "6d3bf1e426d555c8",
     },
     "safety_contract": {
       "automation_clearance": "L3",
@@ -4864,12 +4864,12 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
       "target": "code",
     },
     "contract": "orchestratekit.plan_passport.v1",
-    "contract_id": "plan_passport:a1faab740fafb215",
+    "contract_id": "plan_passport:ca097be12e414564",
     "goal": "read emails, detect leads and write a note to the CRM for each lead",
     "lab_import": {
       "agent_name": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac",
       "artifact": "plan_passport",
-      "contract_id": "plan_passport:a1faab740fafb215",
+      "contract_id": "plan_passport:ca097be12e414564",
       "evidence_status": "planned",
       "route_components": [
         "email_read",
@@ -4890,7 +4890,7 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
       "read_only": false,
       "unattended": false,
     },
-    "registry_fingerprint": "64951e7771604e93",
+    "registry_fingerprint": "6d3bf1e426d555c8",
     "required_connections": [
       {
         "env": "GMAIL_CLIENT_ID",
@@ -5506,7 +5506,7 @@ exports[`MAR-249 — export_build_brief output schema > runtime structuredConten
     "provenance": {
       "generated_at": "[volatile]",
       "generated_by": "orchestratekit-mcp export_build_brief",
-      "registry_fingerprint": "64951e7771604e93",
+      "registry_fingerprint": "6d3bf1e426d555c8",
     },
     "safety_contract": {
       "automation_clearance": "L3",

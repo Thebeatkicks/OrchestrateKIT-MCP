@@ -1,0 +1,73 @@
+id: scheduled_extraction_to_storage_route_v1
+name: Scheduled Web Extraction to a Stored Destination
+status: beta
+summary: >
+  Golden-path route for a recurring web-extraction agent that actually lands
+  its data somewhere: on a cadence, scrape the source, normalise and
+  deduplicate the rows, validate the shape, and persist the result to a
+  spreadsheet, CSV, or other storage destination. Exactly the shape
+  plan_workflow composes for "every morning scrape the listings, normalise
+  and deduplicate the rows, validate them, and save them to a Google Sheet"
+  (live-probed 2026-08-08), not a hand-authored ideal.
+goal_patterns:
+  - (scrape|crawl|track|monitor|collect|gather) .* (listings?|ads?|records?|rows?|prices?) .* (save|store|append|export|write) .* (sheet|spreadsheet|csv|file)
+  - (every|each) (morning|day|night|hour|week) .* (scrape|crawl|extract) .* (spreadsheet|csv|google sheet)
+components:
+  - scheduled_trigger
+  - data_scraper
+  - data_normalizer
+  - deduplication
+  - schema_validation
+  - file_storage
+  - auth_failure_handler
+  - audit_log
+edges:
+  - scheduled_trigger__produces__data_scraper
+  - data_scraper__produces__data_normalizer
+  - data_normalizer__produces__deduplication
+  - deduplication__produces__schema_validation
+  - schema_validation__produces__file_storage
+  - file_storage__safer_with__auth_failure_handler
+  - audit_log__recommended__file_storage
+  - data_scraper__avoid__external_publish
+known_playbooks_reused:
+  - data_extraction_enrichment
+untested_edges: []
+risk_level: medium
+confidence: 0.72
+required_evals:
+  - idempotency — a duplicated scheduled run does not double-append rows to the destination
+  - the scraped data does not pipeline to an external publish (data_scraper__avoid__external_publish holds)
+  - each stored row still carries the source URL data_scraper emitted for it
+failure_modes:
+  - Scraper blocked by rate limiting or anti-bot measures returns a partial dataset and the run stores it as if complete
+  - The source URL data_scraper emits is dropped by normalisation or by the destination column mapping, so no stored row can be traced back
+  - A retry after a transient failure double-writes rows because the append is not idempotent
+  - Deduplication identity-key collision drops legitimate records before they reach the destination
+  - Schema drift between the extracted row shape and the destination columns silently misaligns fields
+  - Scheduled trigger drift or misfire — no extraction runs and nobody notices without a heartbeat
+evals:
+  - extraction fidelity on a fixture source (row count and field values match expected)
+  - idempotency test — a duplicate scheduled run does not double-write rows
+  - provenance test — the source URL for each row survives normalise → dedupe → validate → store
+  - deduplication identity-key correctness on a fixture with near-duplicate records
+  - audit completeness — every run records source, row count, and destination reference
+notes: >
+  MAR-549 acceptance bar #2. `data_extraction_route_v1` /
+  `data_extraction_enrichment` compose data_scraper → data_normalizer →
+  deduplication → schema_validation and STOP: no named route or playbook
+  reached a persisted destination, even though the edge
+  `schema_validation__produces__file_storage` already existed and was used by
+  nothing. This route is that edge's first named home.
+
+  On provenance: `data_scraper`'s own declared output is "list of raw extracted
+  records WITH SOURCE URL and scrape timestamp", so the source link exists at
+  the moment of extraction. Nothing downstream declares that it survives, which
+  is why "a source link on every row" is a guardrail and an eval here rather
+  than a claim — and why a composed plan for that goal correctly reports the ask
+  as unmatched demand instead of assuming it.
+
+  No `human_approval_gate`: the only write is `file_storage`, which is not in
+  safetyAugmenter.ts's ALWAYS_REQUIRES_GATE — matching the live planner
+  (`enforced_approval_gates: []` for this goal) rather than a curated ideal.
+sources: []
