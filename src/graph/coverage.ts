@@ -119,6 +119,67 @@ const DEMAND_PHRASES = [
 ];
 
 /**
+ * MAR-540 acceptance bar #1 — the approval-provenance overclaim.
+ *
+ * A goal can state the concern as plainly as a user ever will:
+ *
+ *   "…require my approval before it sends, WITH AN AUDIT TRAIL PROVING WHAT I
+ *    APPROVED IS EXACTLY WHAT RAN"
+ *
+ * and get back `approval: enforced`, `unmatched_demand: []`. Re-probed on master
+ * `f6e486f` (2026-08-08): MAR-541's Stripe fix removed one instance of this —
+ * the gate that guarded an action missing from the route entirely — but the
+ * drift ask itself still vanishes on every phrasing that does not name Stripe.
+ *
+ * Nothing in the 66 components binds an approval to a payload.
+ * `human_approval_gate`'s declared output is an `approved | rejected | timeout`
+ * DECISION with no identity attached to what was decided; `audit_log` takes the
+ * EXECUTED payload with no reference to an approved one. No consumer can compare
+ * them. Both components' prose reads as though they cover drift —
+ * "requires explicit human approval before ANY irreversible action", "records
+ * EVERY sensitive or external action" — and neither does.
+ *
+ * The clause was absorbed rather than heard: "approve"/"approved" is a
+ * DEMAND_VERB that `human_approval_gate`'s own hint claims, and one claimed word
+ * clears the clause. So the ask disappeared into the very component whose
+ * insufficiency it was describing.
+ *
+ * Keyed on the COMPONENT that would satisfy it, not on the phrase claim — the
+ * MAR-551 pattern. `APPROVAL_BINDING_COMPONENTS` is empty because nothing in the
+ * registry produces an approval identity; a future component joining it is all
+ * that is needed to make this stop reporting. Until then the honest answer is
+ * that the plan does not carry the guarantee, and silence is the one answer that
+ * is definitely wrong.
+ */
+const APPROVAL_BINDING_PHRASES = [
+  "exactly what ran",
+  "exactly what was",
+  "exactly what got",
+  "exactly what executed",
+  "exactly what i approved",
+  "what i approved is exactly",
+  "proving what i approved",
+  "prove what i approved",
+  "prove that what i approved",
+  "matches what i approved",
+  "match what i approved",
+  "no drift between",
+  "drift between approved",
+  "drift between what",
+  "cannot be changed after i approve",
+  "unchanged after approval",
+  "tamper-proof approval",
+];
+
+/**
+ * Components that would genuinely bind an approval to the executed action.
+ * Empty on purpose: no component in the registry produces or requires an
+ * approval identity (a payload digest or approval token). `human_approval_gate`
+ * is NOT a member — see the note above.
+ */
+const APPROVAL_BINDING_COMPONENTS = new Set<string>();
+
+/**
  * MAR-396 — structural action-clause detection, used ONLY for clauses the
  * demand lexicon did not recognise at all.
  *
@@ -404,6 +465,19 @@ export function computeCoverage(input: CoverageInput): Coverage {
       clause.length > CLAUSE_MAX_CHARS
         ? `${clause.slice(0, CLAUSE_MAX_CHARS - 1).trimEnd()}…`
         : clause;
+
+    // MAR-540 bar #1: an approval-provenance ask, which no component in the
+    // registry satisfies and which `human_approval_gate`'s own "approve" claim
+    // was absorbing. Checked before the lexicon so that claim cannot dismiss it.
+    if (
+      APPROVAL_BINDING_PHRASES.some(
+        (p) => clauseLower.includes(p) && !isNegatedInContext(goalLower, p),
+      ) &&
+      !finalComponentIds.some((id) => APPROVAL_BINDING_COMPONENTS.has(id))
+    ) {
+      unmatched_demand.push(shown);
+      continue;
+    }
 
     // MAR-396: the clause carries no lexicon vocabulary. It used to `continue`
     // here — judged "not a demand" — which is how a refund step disappeared

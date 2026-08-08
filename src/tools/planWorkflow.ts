@@ -4500,6 +4500,7 @@ function buildCompactStatusHeader(
   coverage: Coverage,
   constraintCoverage: ConstraintCoverage,
   scope: ScopeAssessment,
+  routeComponentIds: string[],
 ): string {
   const routeIcon =
     routeStatus === "validated" ? "✅" : routeStatus === "blocked_candidate" ? "❌" : "⚠️";
@@ -4513,9 +4514,26 @@ function buildCompactStatusHeader(
           }`
         : "Full coverage"
       : `${titleCaseStatus(coverage.coverage_label)} coverage`;
+  // MAR-540 bar #1 + #4: an enforced gate sitting in front of an external write
+  // guarantees that a human SAW something, not that what they saw is what runs.
+  // Nothing in the registry binds an approval to a payload — `human_approval_gate`
+  // emits an `approved | rejected | timeout` decision with no identity attached,
+  // and `audit_log` records the executed payload with no reference to an approved
+  // one — so "Approval enforced" alone claims a guarantee no fixture backs.
+  //
+  // Qualified on the DEFAULT path, not only when the goal asks: bar #4 exists
+  // because a goal that never says the word "approval" reaches the same gate and
+  // deserves the same honesty. Same shape as the MAR-250 rule three lines above,
+  // where "Full coverage" is qualified rather than deleted when a constraint gap
+  // is present — the plan keeps its chip and stops overstating it.
+  const gateGuardsAWrite =
+    enforcedGates.includes("human_approval_gate") &&
+    routeComponentIds.some((id) => ALWAYS_REQUIRES_GATE.has(id));
   const approval =
     enforcedGates.length > 0
-      ? "Approval enforced"
+      ? gateGuardsAWrite
+        ? "Approval enforced (unbound)"
+        : "Approval enforced"
       : approvalAdvisory
       ? "Approval advisory"
       : safety.approval_gates_required.length > 0
@@ -5245,6 +5263,15 @@ function buildGuidedPlanMarkdown(
         guardedActions.length > 0
           ? `Keep the approval gate before ${formatHumanList(guardedActions)}`
           : `Keep the human approval gate before any irreversible action`;
+      // MAR-540 bar #1/#4: say what the gate does NOT guarantee, on every gated
+      // plan rather than only when the goal asks. The gate proves a human saw
+      // something; nothing in the registry proves that what they saw is what
+      // runs. The "(unbound)" chip in the compact header is this sentence's
+      // short form, and a chip with no explanation anywhere is not honesty.
+      if (guardedActions.length > 0) {
+        cardSafeguard +=
+          "; the gate is not bound to the payload — re-check the request at execution time, because nothing here proves what you approved is what runs";
+      }
       if (explicitlyDraftOnly(goal) && cardRouteIds.has("email_draft")) {
         cardSafeguard += "; keep the reply draft-only and leave sending disabled";
       } else if (cardRouteIds.has("optional_email_send")) {
@@ -6073,6 +6100,7 @@ export function planWorkflow(
           coverage,
           constraint_coverage,
           scope_assessment,
+          routeComponentIds,
         )
       : buildStatusHeader(
     route_status,
