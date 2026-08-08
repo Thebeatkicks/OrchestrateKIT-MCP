@@ -227,8 +227,15 @@ function looksLikeUnrecognizedAction(
  * long conjunction chain reports each uncovered step as its own readable phrase
  * ("…trusted sources AND save a digest note into Notion" → the Notion step
  * surfaces whole instead of being truncated off the end of a mega-clause).
+ *
+ * MAR-550: a period followed immediately by a word character is a FILE
+ * EXTENSION, not a sentence end. "load a local .xlsx spreadsheet, validate every
+ * row, …" used to split into the fragment "load a local", which named no
+ * component, matched no claim, and was reported as an uncovered step — a gap the
+ * plan had invented out of a filename. A sentence end ("…every morning. Then
+ * send…") still splits, because the period there is followed by a space.
  */
-const CLAUSE_SPLIT = /[,.;:!?—–]|\bthen\b|\band\b/;
+const CLAUSE_SPLIT = /[,;:!?—–]|\.(?!\w)|\bthen\b|\band\b/;
 
 /**
  * Safety / policy infrastructure the augmenter injects deterministically for

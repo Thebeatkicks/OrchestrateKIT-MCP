@@ -1,0 +1,61 @@
+id: local_file_cleanup_route_v1
+name: Attached Spreadsheet Clean-up and Save (Local File In, Storage Out)
+status: beta
+summary: >
+  Golden-path route for the "I have a messy file, fix it" shape: read a
+  spreadsheet or CSV the user attached to the run, validate its shape,
+  normalise the rows, and persist the cleaned result to a storage
+  destination. The READ-side sibling of scheduled_data_export_route_v1 —
+  that route's source is a database, this one's is a file on the user's own
+  machine. Exactly the shape plan_workflow composes for "load a local .xlsx
+  spreadsheet, validate and normalise every row, and save the result to a new
+  spreadsheet" (live-probed 2026-08-08), not a hand-authored ideal.
+goal_patterns:
+  - (read|load|open|parse|take) .* (attached|local|uploaded) .* (spreadsheet|csv|xlsx|excel|file) .* (save|store|export|append|write) .* (spreadsheet|csv|sheet|file)
+  - (read|load|open) .* (spreadsheet|csv|xlsx) .* (clean|normalis|normaliz|validate) .* (save|store|export)
+components:
+  - local_file_read
+  - schema_validation
+  - data_normalizer
+  - file_storage
+  - auth_failure_handler
+  - audit_log
+edges:
+  - local_file_read__produces__schema_validation
+  - local_file_read__produces__data_normalizer
+  - data_normalizer__produces__file_storage
+  - file_storage__safer_with__auth_failure_handler
+  - audit_log__recommended__file_storage
+known_playbooks_reused: []
+untested_edges: []
+risk_level: medium
+confidence: 0.7
+required_evals:
+  - the read refuses a path outside the run's declared input allow-list rather than resolving it against the working directory
+  - the cleaned output lands in a NEW destination by default — the source file is never overwritten in place without an explicit instruction to do so
+failure_modes:
+  - The write overwrites the source file the run just read, so a bad normalisation destroys the only copy of the data
+  - The header row differs from the expected schema and columns are normalised positionally into the wrong fields
+  - A retry after a transient storage error double-writes rows because the append is not idempotent
+  - The file is held open by another application and the read returns a stale or partially-flushed copy without any error
+  - A path outside the declared input allow-list is accepted, turning a scoped file read into a filesystem read
+evals:
+  - allow-list refusal — a path outside the declared input roots (including via symlink and `..`) is REFUSED
+  - round-trip fidelity on a fixture .xlsx and .csv — every row and column survives read → validate → normalise → write
+  - idempotency test — a duplicate run does not double-write rows to the destination
+  - header-drift detection — a fixture whose header row moved is rejected rather than mapped positionally
+  - audit completeness — every run records source path, row count, and destination reference
+notes: >
+  MAR-550: `file_storage` is WRITE-only (`permissions.read: []`) but its bare
+  object-noun hints ("spreadsheet", "csv") carried no direction, so a goal
+  that READ a spreadsheet was planned as a write with no read step in the
+  route at all — the mirror of the MAR-538/541 bug family. The direction fix
+  needed somewhere honest for the read to go, and nothing in the registry
+  read a local file: `pdf_extraction` is the document arrow, `db_read` the SQL
+  one. `local_file_read` fills that gap, and this route is its named golden
+  path so it does not become a fifteenth instance of MAR-513 gap-list item 3
+  (live matcher vocabulary, no backing route). No `human_approval_gate`:
+  the only write is `file_storage`, which is not in safetyAugmenter.ts's
+  ALWAYS_REQUIRES_GATE — matching the live planner, which returns
+  `enforced_approval_gates: []` for this goal, rather than a curated ideal.
+sources: []
