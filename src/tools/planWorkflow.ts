@@ -365,6 +365,35 @@ function hasScheduledDataReportSignal(goal: string): boolean {
 }
 
 /**
+ * content_approval_pipeline boundary (MAR-550). The playbook's identity is
+ * content → approval → **external publish**: its golden route ends in
+ * `external_publish`, and every goal the suite promotes it on says so outright
+ * ("approve and publish", "publish to the blog", "publish externally only after
+ * approval").
+ *
+ * "Take a blog post, generate 3 social media variants, have a human approve
+ * them, then notify the team" says the opposite — the delivery is a NOTIFICATION
+ * to the user's own team, and the playbook would answer it with
+ * `design_brief_generation` (visuals nobody asked for) plus an outbound publish.
+ * It was held out of the playbook only by the precision floor, and only because
+ * `reviewer_notification` was scoring on the letters of "app·rove·r" and
+ * "human"; when MAR-550 stopped that spurious summary match, the goal's
+ * precision rose past 0.72 and the over-match appeared. The noise was load-
+ * bearing, which is not a property to preserve — so the boundary is stated
+ * explicitly here instead, exactly as MAR-142/265/266/267 stated theirs.
+ *
+ * "post" is deliberately absent: it is a NOUN at least as often as a verb in
+ * this domain ("a blog post", "social media post"), the same reason MAR-396 kept
+ * "issue" out of its own verb lexicon.
+ */
+const CONTENT_PUBLISH_SIGNAL =
+  /\bpublish(es|ed|ing)?\b|\bpublication\b|\bgo(es)? live\b|\bpush(es|ed|ing)? (it |them |the \w+ )?live\b/;
+
+function hasContentPublishSignal(goal: string): boolean {
+  return CONTENT_PUBLISH_SIGNAL.test(goal.toLowerCase());
+}
+
+/**
  * Per-playbook goal-signal gate (MAR-142 pattern, generalized in MAR-265):
  * a playbook listed here only fires when the goal carries at least one of its
  * strong domain tokens, regardless of recall/precision scores. Playbooks not
@@ -372,6 +401,8 @@ function hasScheduledDataReportSignal(goal: string): boolean {
  */
 function playbookSignalGatePassed(playbookId: string, goal: string): boolean {
   switch (playbookId) {
+    case "content_approval_pipeline":
+      return hasContentPublishSignal(goal);
     case "email_calendar_assistant":
       return hasEmailCalendarSignal(goal);
     case "email_lead_to_crm":

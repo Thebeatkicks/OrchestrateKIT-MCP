@@ -1,0 +1,12 @@
+id: local_file_read__produces__data_normalizer
+from: local_file_read
+to: data_normalizer
+relation: produces_input_for
+status: published
+reason: Rows out of a hand-maintained spreadsheet arrive with inconsistent field names, mixed date formats, stray whitespace, and numbers stored as text. Normalise to canonical fields and types before storing them or handing them to an LLM step.
+severity: high
+notes: Mirrors pdf_extraction__produces__data_normalizer — the same "messy real-world document" problem, arriving through a different door. Do not pass raw file rows straight to a storage write.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/edgeValidation.test.ts > edge: local_file_read__produces__data_normalizer"

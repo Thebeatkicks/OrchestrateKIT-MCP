@@ -90,10 +90,19 @@ describe("an unbound gate says so, even when the goal never asks (MAR-540 bar #4
 // ── Absence twins ───────────────────────────────────────────────────────────
 
 describe("plans with no gated write are untouched (MAR-540 absence fixtures)", () => {
-  it("a read-only PR review keeps its unqualified header", () => {
+  it("a read-only scheduled report keeps its unqualified header", () => {
+    // This twin originally used a PR-review goal ("review the diff, notify
+    // reviewers, never edit or commit code"). Between this branch's cut and its
+    // merge, the MAR-550/558/549 batch changed that goal's composition: it now
+    // carries reviewer_notification (an outbound step) and the augmenter gates
+    // it, so it stopped being a no-gate plan. Whether that gate is correct is
+    // its own question, filed separately — this fixture's job is only to pin
+    // that a plan with NO gate gains neither the qualification nor the gap, so
+    // it now uses a goal that composes with no outbound step at all
+    // (scheduled_trigger → db_read → loop_controller → state_store).
     const r = plan(
-      "When a pull request opens on GitHub, review the diff for bugs and risky changes, " +
-        "notify reviewers with a summary, and never edit or commit code.",
+      "every morning read yesterday's signup rows from our postgres database " +
+        "and store a short summary in the state store",
     );
     expect(r.enforced_approval_gates).toEqual([]);
     expect(r.summary_markdown).toContain("No approval needed");
