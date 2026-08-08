@@ -1,0 +1,27 @@
+id: human_approval_gate__produces__audit_log
+from: human_approval_gate
+to: audit_log
+relation: produces_input_for
+status: published
+reason: The gate's decision is itself an auditable event — who approved, when, and what they were shown — and it must reach the audit log as its own record, separate from the record of the action that followed. Without it the log has an executed payload and no approval to compare it against.
+severity: medium
+notes: >
+  MAR-540 bar #3, first half. Of 163 edges, human_approval_gate had ZERO
+  outgoing edges — thirteen pointed at it, none left it — so in graph terms the
+  gate's decision flowed nowhere. Its own component YAML has declared
+  `recommended_with: audit_log` since it was written; that relation existed in
+  the component file and NOT in the graph, which is how route composition could
+  place gate, write and audit in sequence and relate none of them. Sequence is
+  not provenance.
+
+  This edge states the first half of the relation: the decision is recorded.
+  It does NOT state the second half — that the executing write CONSUMES the
+  approval rather than merely following it — because no component produces an
+  approval identity to consume. That edge cannot be written honestly until the
+  binding component in docs/ADR-MAR-540-approval-provenance.md exists, and
+  writing it early would assert in the graph exactly the guarantee this issue
+  exists to stop asserting.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/approvalProvenance.test.ts > human_approval_gate no longer has zero outgoing edges"
