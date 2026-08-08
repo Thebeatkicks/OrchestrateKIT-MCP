@@ -1,0 +1,121 @@
+id: scheduled_extraction_to_storage
+version: "0.1.0"
+status: beta
+title: Scheduled Web Extraction to a Stored Destination
+summary: >
+  Blueprint for a recurring web-extraction agent that actually lands its data
+  somewhere: on a cadence, scrape the source, normalise and deduplicate the
+  rows, validate the shape, and persist the result to a spreadsheet, CSV, or
+  other storage destination. The missing tail of data_extraction_enrichment,
+  which stops at validation. Beta blueprint: the component chain is the shape
+  the live matcher composes for this goal (probed 2026-08-08, not
+  hand-authored), and validate_playbook_candidate certifies the full
+  structural Definition of Done — but DoD #4 (2-3 real Lab sessions) and #5
+  (a benchmark prompt) need evidence a stateless MCP session cannot see, so
+  it stops at beta.
+workflow_type: data-etl
+risk_level: medium
+golden_path_route_id: scheduled_extraction_to_storage_route_v1
+stack_id: default_orchestratekit_stack
+
+components:
+  - scheduled_trigger
+  - data_scraper
+  - data_normalizer
+  - deduplication
+  - schema_validation
+  - file_storage
+  - auth_failure_handler
+  - audit_log
+
+edges:
+  - scheduled_trigger__produces__data_scraper
+  - data_scraper__produces__data_normalizer
+  - data_normalizer__produces__deduplication
+  - deduplication__produces__schema_validation
+  - schema_validation__produces__file_storage
+  - file_storage__safer_with__auth_failure_handler
+  - audit_log__recommended__file_storage
+  - data_scraper__avoid__external_publish
+
+best_for:
+  - collecting listings, ads, or public records on a schedule and keeping a spreadsheet or CSV of them current
+  - a lead or inventory list built from public sources that a human reads in a sheet rather than in an app
+  - any extraction goal whose answer to "and then where does it go?" is "a file I can open", not "a notification"
+
+avoid_when:
+  - the extracted data should be published externally rather than stored — the route carries data_scraper__avoid__external_publish for a reason, and scraped content pipelined straight to a publish surface is the failure that edge exists to prevent
+  - the source is a page whose CHANGES matter rather than whose rows do — that is competitor_price_monitor, built on page_monitor
+  - the source is a database rather than the public web — that is scheduled_data_export
+  - anti-detection or ToS-circumvention is required to reach the source — explicitly out of scope, and two signal-intake questions asking for exactly that were independently declined
+
+recommended_architecture:
+  pattern: Schedule → scrape → normalise → deduplicate → validate → persist (idempotent, provenance-preserving, audited)
+  why: >
+    Extraction without a destination is where most of these agents quietly
+    fail: the pipeline runs, the rows are validated, and nothing can be
+    opened afterwards. The ordering matters as much as the membership —
+    deduplicate before validating, so identity collisions surface as dropped
+    records rather than as validation noise, and validate before writing, so
+    schema drift is caught at the boundary instead of misaligning columns in
+    the destination. Every step is a read except the final write, which lands
+    in storage the user already owns.
+
+llm_driven_steps: []
+
+deterministic_steps:
+  - scheduled_trigger
+  - data_scraper
+  - data_normalizer
+  - deduplication
+  - schema_validation
+  - file_storage
+  - auth_failure_handler
+  - audit_log
+
+permissions:
+  read:
+    - external URLs (public web pages or APIs)
+  write:
+    - storage destination (spreadsheet / CSV / database table / object store)
+    - audit log store
+  approval_required_for: []
+
+guardrails:
+  - Carry the source URL data_scraper emits through normalisation, deduplication and validation into a destination column — "where did this row come from" is the most-asked question of any extracted dataset, and nothing recovers it after the write
+  - Use an upsert/idempotency key on the write — a retry after a transient failure must not double-append rows
+  - Respect robots.txt and the source's terms; anti-detection and rate-limit evasion are out of scope for this blueprint
+  - Rate-limit the scraper and back off on 429/503 rather than retrying tight — a partial dataset stored as if complete is worse than a failed run
+  - Reject schema drift between the extracted row shape and the destination columns rather than silently misaligning fields
+  - Never pipeline scraped content directly to an external publish surface (data_scraper__avoid__external_publish)
+  - Log every run (source, row count, destination reference, timestamp) to audit_log
+
+failure_modes:
+  - Scraper blocked by rate limiting or anti-bot measures returns a partial dataset and the run stores it as if complete
+  - The source URL data_scraper emits is dropped by normalisation or by the destination column mapping, so no stored row can be traced back
+  - A retry after a transient failure double-writes rows because the append is not idempotent
+  - Deduplication identity-key collision drops legitimate records before they reach the destination
+  - Schema drift between the extracted row shape and the destination columns silently misaligns fields
+  - Scheduled trigger drift or misfire — no extraction runs and nobody notices without a heartbeat
+
+evals:
+  - extraction fidelity on a fixture source (row count and field values match expected)
+  - idempotency test — a duplicate scheduled run does not double-write rows
+  - provenance test — the source URL for each row survives normalise → dedupe → validate → store
+  - deduplication identity-key correctness on a fixture with near-duplicate records
+  - audit completeness — every run records source, row count, and destination reference
+
+implementation_steps:
+  - "Step 1: Register a scheduled_trigger for the cadence. Pin the timezone."
+  - "Step 2: Implement data_scraper with rate limiting and 429/503 backoff. Keep the source URL and fetch timestamp on every record from the start — retrofitting provenance is not possible after the write."
+  - "Step 3: Implement data_normalizer for canonical field names and types. Carry the source URL through unchanged; do not let it be dropped as an unmapped field."
+  - "Step 4: Implement deduplication with an explicit identity key. Log what it dropped."
+  - "Step 5: Implement schema_validation against the destination's expected columns, including the source-URL column."
+  - "Step 6: Implement file_storage with an upsert/idempotency key and an explicit append (not overwrite) write mode."
+  - "Step 7: Wrap the scrape and the write with auth_failure_handler, and write an audit_log record per run."
+
+sources:
+  - title: Google Sheets API — Values append
+    url: https://developers.google.com/sheets/api/guides/values#append_values
+    source_type: official_docs
+    last_checked: "2026-08-08"

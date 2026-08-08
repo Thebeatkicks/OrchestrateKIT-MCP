@@ -106,6 +106,16 @@ const DEMAND_NOUNS = new Set([
   // said out loud rather than routed around.
   "refund", "refunds", "payment", "payments", "payout", "payouts",
   "chargeback", "chargebacks", "disbursement",
+  // MAR-549: provenance. "…write the leads to a spreadsheet WITH A SOURCE LINK
+  // ON EVERY ROW" produced `unmatched_demand: []` on a route that records no
+  // source link anywhere — the requirement did not merely go unsatisfied, it was
+  // never registered as demand at all. Neither "source" (only the plural
+  // "sources" was listed) nor "link" nor "attribution" nor "provenance" was
+  // vocabulary, and the clause "with a source link on every row" opens with the
+  // determiner "a", which the MAR-396 shape detector rejects as a verb — so both
+  // paths to being heard were closed. A demand signal that vanishes can never be
+  // prioritised, which is worse than one that is reported and unmet.
+  "attribution", "provenance",
 ]);
 
 /** Multi-word demand phrases checked before single tokens. */
@@ -116,6 +126,15 @@ const DEMAND_PHRASES = [
   "pr opens",
   "code review",
   "risky changes",
+  // MAR-549: the phrasings people actually use for row-level provenance. Kept as
+  // PHRASES rather than adding a bare "source"/"link" noun, which would fire on
+  // "sources", "linked", "linkedin" and every research goal in the corpus.
+  "source link",
+  "source links",
+  "source url",
+  "source urls",
+  "where it came from",
+  "where the data came from",
 ];
 
 /**
@@ -268,6 +287,31 @@ function isClaimed(item: string, claimedTokens: Set<string>): boolean {
 }
 
 /**
+ * MAR-549: claiming a multi-word artifact needs more than one of its words.
+ *
+ * `isClaimed`'s containment rule is right for inflection ("emails" claimed by
+ * "email") and wrong for a compound name: `data_normalizer` fuzzy-matched the
+ * bare word "source" from its own summary prose, and that single word claimed
+ * the whole phrase "source link" — so "write the leads to a spreadsheet **with a
+ * source link on every row**" reported no gap on a route that records no source
+ * link. Adding the phrase to the demand lexicon alone would not have been
+ * enough; it would have been heard and then immediately dismissed.
+ *
+ * A phrase is claimed when a claimed token contains it outright, or when a
+ * claimed token that is ITSELF multi-word sits inside it — so `file_storage`'s
+ * "google sheet" hint still claims "google sheets", while a lone "source" does
+ * not claim "source link".
+ */
+function isPhraseClaimed(phrase: string, claimedTokens: Set<string>): boolean {
+  if (claimedTokens.has(phrase)) return true;
+  for (const t of claimedTokens) {
+    if (t.includes(phrase)) return true;
+    if (phrase.includes(t) && tokenizeWords(t).length >= 2) return true;
+  }
+  return false;
+}
+
+/**
  * Nouns anchor the verdict: when a clause names demand-noun UNITS, it is
  * uncovered iff ANY unit is unclaimed. A clause with only demand verbs is
  * uncovered iff ALL of them are unclaimed — verbs are too generic for a single
@@ -286,7 +330,13 @@ function clauseIsUncovered(
   claimedTokens: Set<string>,
 ): boolean {
   if (nounUnits.length > 0) {
-    return nounUnits.some((unit) => unit.every((n) => !isClaimed(n, claimedTokens)));
+    return nounUnits.some((unit) =>
+      unit.every((n) =>
+        // A multi-word unit member came from DEMAND_PHRASES; it needs the
+        // stricter claim (MAR-549), so one word of it cannot dismiss the whole.
+        n.includes(" ") ? !isPhraseClaimed(n, claimedTokens) : !isClaimed(n, claimedTokens),
+      ),
+    );
   }
   if (verbs.length > 0) {
     return verbs.every((v) => !isClaimed(v, claimedTokens));

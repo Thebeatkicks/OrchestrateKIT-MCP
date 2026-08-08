@@ -412,6 +412,50 @@ const DOMAIN_KEYWORDS: Record<Exclude<Domain, "generic_orchestration">, string[]
 const WEAK_RESEARCH_KEYWORDS = ["summarize", "summarise"];
 
 /**
+ * MAR-549: the two halves of the "track a watchable thing" shape (see the
+ * classifier above). The gap between verb and object is bounded so the verb has
+ * to be governing the object, not merely sharing a sentence with it.
+ *
+ * `ad`/`ads` are matched whole-word on purpose — a bare substring fires on
+ * "add", "address", "already", which is the MAR-529 lesson on a two-letter
+ * token where it hurts most.
+ */
+// "scan"/"scans"/"scanning" are deliberately absent: `codebase_scan` owns that
+// verb, and "scan a codebase, plan changes" reached the monitoring domain
+// through it and put a web-page monitor (with a Firecrawl connection) on a
+// code-review plan. Caught by the MAR-117 credential-advisory fixture, which
+// asserts a code-only plan needs no credentials at all.
+const TRACK_VERBS =
+  "(?:track|tracks|tracking|tracked|monitor|monitors|monitoring|monitored|watch|watches|watching|follow|follows|following|collect|collects|collecting|gather|gathers|gathering|keep an eye on|keep tabs on)";
+const LISTING_OBJECTS =
+  "(?:listings?|ads?|adverts?|advertisements?|postings?|classifieds?|marketplaces?|job\\s+posts?|new\\s+items?|inventory|vacancies|openings)";
+// Deliberately NOT bare "competitor(s)": a competitor is a subject, not a thing
+// that changes, and including it made "track competitor ad listings" — a
+// collection goal — also compose the page-change monitor. The watchable is the
+// price or the page, and "track competitor prices" still matches through
+// "prices" with the competitor sitting inside the gap.
+// Bare "changes" is deliberately absent too — "plan changes", "risky changes",
+// "review the changes" are code vocabulary, and MAR-266 already covers genuine
+// change-watching through the "for changes" / "change detection" phrases.
+const WATCHABLE_OBJECTS = "(?:prices?|pricing|product\\s+pages?|stock|availability)";
+const EXTRACTION_TRACK_SIGNAL = new RegExp(
+  `(?<!\\w)${TRACK_VERBS}(?!\\w)[^.;!?]{0,30}?(?<!\\w)${LISTING_OBJECTS}(?!\\w)`,
+);
+const MONITORING_TRACK_SIGNAL = new RegExp(
+  `(?<!\\w)${TRACK_VERBS}(?!\\w)[^.;!?]{0,30}?(?<!\\w)${WATCHABLE_OBJECTS}(?!\\w)`,
+);
+
+/** True when the goal asks to collect listing-shaped records off the web (MAR-549). */
+export function hasExtractionTrackSignal(goalLower: string): boolean {
+  return EXTRACTION_TRACK_SIGNAL.test(goalLower);
+}
+
+/** True when the goal asks to watch a page/price for change (MAR-549). */
+export function hasMonitoringTrackSignal(goalLower: string): boolean {
+  return MONITORING_TRACK_SIGNAL.test(goalLower);
+}
+
+/**
  * MAR-251: handoff-to-code-agent phrasing is not code work by itself. "Trigger
  * Claude Code" / "create Linear issues" describes a downstream orchestration
  * handoff; it should not establish the code_agent domain unless the workflow
@@ -1508,6 +1552,31 @@ export function classifyGoalDomains(goal: string): Set<Domain> {
     }
   }
 
+  // MAR-549: the "track/monitor a watchable thing" shape. DOMAIN_KEYWORDS is a
+  // phrase list, and the natural way people state a recurring web-extraction
+  // goal — "track competitor ad listings", "monitor marketplace listings" — is a
+  // verb the list does not carry applied to an object it cannot enumerate.
+  // MAR-266 hit the same wall for price watching and answered it with the
+  // phrases "price change"/"price drop"; that works for two phrasings and not
+  // for the shape. Live-probed on master f6e486f:
+  //
+  //   "track competitor ad listings on a schedule and write new ones to a
+  //    Google Sheet"      → file_storage → job_queue → auth_failure_handler
+  //   "track competitor prices across their product pages every morning"
+  //                       → scheduled_trigger → state_store
+  //
+  // Neither established a domain, so `data_scraper` (data_etl, HINT_ONLY) and
+  // `page_monitor` (monitoring, HINT_ONLY) were both unreachable — the second
+  // goal composed no extraction AND no monitor, and `page_monitor`'s own
+  // "product page" hint could not fire for want of the domain.
+  //
+  // Split by what the object IS, not by the verb: a LISTING/AD is a record to
+  // collect (extraction, data_etl), a PRICE/PAGE is a thing to watch for change
+  // (monitoring). Both anchor verb-near-object rather than on a bare "track",
+  // which is ambient ("track the approval status", "keep track of the run").
+  if (EXTRACTION_TRACK_SIGNAL.test(goalLower)) domains.add("data_etl");
+  if (MONITORING_TRACK_SIGNAL.test(goalLower)) domains.add("monitoring");
+
   if (domains.has("code_agent") && isCodeHandoffOnly(goalLower)) {
     domains.delete("code_agent");
   }
@@ -2552,6 +2621,33 @@ export function matchCapabilities(
   if (domainAllowed.has("file_storage") && hasDbWriteIntent(goalLower)) {
     const dbObject = dbWriteDestinationObject(goalLower) ?? "database";
     bump("file_storage", 2, `${dbObject}-write phrase`, "hint");
+  }
+
+  // Pass 1f (MAR-549): "track/monitor these listings" reaches data_scraper.
+  // It is HINT_ONLY and reachable only through `scrape`/`crawl`/`extract` — the
+  // words that name the ACCESS PATTERN — so an ordinary goal that names the
+  // OUTCOME ("track competitor ad listings") composed a plan with no extraction
+  // step at all. Establishing the domain above is necessary but not sufficient:
+  // without this bump the goal reaches an eligible-but-unselected component.
+  //
+  // The token is the goal's OWN matched words ("track competitor ad listings"),
+  // not a synthetic label — MAR-541's naming discipline. A label would leave
+  // `coverage.ts`'s DEMAND_NOUNS unable to credit "competitor", and the clause
+  // would have been reported as an uncovered step by the very plan that now
+  // covers it.
+  const trackListings = goalLower.match(EXTRACTION_TRACK_SIGNAL)?.[0];
+  if (domainAllowed.has("data_scraper") && trackListings !== undefined) {
+    bump("data_scraper", 2, trackListings, "hint");
+  }
+
+  // Pass 1g (MAR-549): the watch half of the same shape. "track competitor
+  // prices across their product pages every morning" composed
+  // `scheduled_trigger → state_store` — no monitor at all — because the
+  // monitoring domain was never established, so page_monitor's own "product
+  // page" hint could not fire. Same own-words token, same reason.
+  const trackWatchable = goalLower.match(MONITORING_TRACK_SIGNAL)?.[0];
+  if (domainAllowed.has("page_monitor") && trackWatchable !== undefined) {
+    bump("page_monitor", 2, trackWatchable, "hint");
   }
 
   // Passes 2–4: per-component token matching (gated)

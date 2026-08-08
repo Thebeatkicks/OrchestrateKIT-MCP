@@ -34,7 +34,7 @@ export const MIN_PLAYBOOKS = 12;
  * intentionally changed and re-released — recompute via
  * `contentFingerprint(readRawEntries())`.
  */
-export const EXPECTED_RELEASE_FINGERPRINT = "168c66fd2bbea296";
+export const EXPECTED_RELEASE_FINGERPRINT = "c3370c8de6407c6e";
 
 /**
  * MAR-99: server-level instructions sent to AI clients on connect.
