@@ -28,10 +28,11 @@ stack_id: default_orchestratekit_stack
 # route carried a drafting/sending/scraping path the goal never asked for and
 # scored below the playbook precision floor.
 #
-# The accounting-system write is deliberately NOT in the component set: no
-# accounting_write component exists, MAR-135 does not track one, and inventing
-# one ad hoc destabilizes precision elsewhere (the MAR-265 lesson). It is
-# documented as the integration wired at the gate's output (see steps).
+# MAR-581 now provides an accounting_write component, but this fixed playbook
+# deliberately keeps its original read-and-handoff boundary: the validated goal
+# says never post to the ledger automatically. A goal that explicitly asks to
+# create a Xero/QuickBooks transaction after approval should use a composed route
+# containing accounting_write instead of silently changing this playbook's scope.
 components:
   - email_read
   - pdf_extraction
@@ -135,7 +136,7 @@ implementation_steps:
   - "Step 5: Implement threshold_router to grade discrepancy severity against the configured bound. Carry the severity into the gate copy so the reviewer sees why an invoice was flagged."
   - "Step 6: Post reviewer_notification for flagged discrepancies (notification-class egress only — it never sends the invoice anywhere)."
   - "Step 7: Route EVERY invoice through human_approval_gate — mandatory, including clean PO matches. Approve means 'cleared to hand to accounting', and the approval is recorded."
-  - "Step 8: On approval, hand the validated record to the operator's ACCOUNTING-SYSTEM INTEGRATION. This integration is out of scope for the registry graph (no accounting_write component) — implement it as an outbound call the operator wires and credentials separately, so the agent never holds ledger-write access."
+  - "Step 8: On approval, hand the validated record to the operator's ACCOUNTING-SYSTEM INTEGRATION. MAR-581's accounting_write component exists for goals that explicitly request a gated Xero/QuickBooks write, but it is deliberately outside this read-and-handoff playbook because this pattern never posts to the ledger automatically."
   - "Step 9: Write an audit_log record for every extraction, PO-match result, discrepancy grade, and approval (invoice id, vendor, PO id, decision, actor, timestamp)."
 
 sources:

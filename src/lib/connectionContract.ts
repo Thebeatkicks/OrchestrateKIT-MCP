@@ -225,6 +225,11 @@ const COMPONENT_CONNECTIONS: Record<string, ConnectionSpec> = {
   // connection the user never chose.
   chat_trigger: { connection_id: "slack", label: "Slack", grants: "Receive messages and commands" },
   crm_note_write: { connection_id: "hubspot", label: "HubSpot", grants: "Write contacts and notes" },
+  accounting_write: {
+    connection_id: "accounting_system",
+    label: "Accounting system (Xero / QuickBooks Online)",
+    grants: "Create approved accounting transactions",
+  },
   crm_record_read: { connection_id: "hubspot", label: "HubSpot", grants: "Read contacts and deals" },
   deal_stage_update: { connection_id: "hubspot", label: "HubSpot", grants: "Advance deal stages" },
 };
@@ -329,6 +334,27 @@ function mcpServerPath(label: string, mcp: McpServerInfo): AcquisitionPath | nul
 }
 
 function rawOauthPath(label: string, authModel: string): AcquisitionPath {
+  // MAR-581: the generic accounting component cannot know whether the build
+  // chose Xero or QuickBooks Online, and those providers have different OAuth
+  // apps/endpoints. Claiming the generated connect script can mint a neutral
+  // token would be fake completeness. Keep the real advanced path, but require
+  // the provider choice + adapter before any credential flow is offered.
+  if (authModel.startsWith("Provider-specific OAuth2 adapter")) {
+    return {
+      kind: "raw_oauth",
+      rank: 3,
+      label: `${label} provider adapter`,
+      ownership_location: "agent",
+      availability: "advanced",
+      how:
+        "Choose Xero or QuickBooks Online in the build, implement that provider's OAuth2 adapter, " +
+        "then authorize the exact accounting organisation through the adapter's consent flow.",
+      reuse:
+        "Serves this agent and the selected accounting organisation only; another provider or agent authorizes again.",
+      caveat:
+        "scripts/connect.mjs cannot mint a provider-neutral accounting credential. The adapter must own token refresh, tenant selection and least-privilege write scopes.",
+    };
+  }
   return {
     kind: "raw_oauth",
     rank: 3,

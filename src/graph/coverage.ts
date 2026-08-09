@@ -92,6 +92,7 @@ const DEMAND_NOUNS = new Set([
   // registry-covered systems (claimed when their component matches)
   "email", "emails", "inbox", "slack", "discord", "telegram", "notion",
   "airtable", "stripe", "pdf", "spreadsheet", "csv", "crm", "calendar",
+  "transaction", "transactions", "ledger",
   "github", "webhook", "invoice", "invoices", "uptime", "logs", "metric",
   "sources", "competitor", "competitors", "price", "prices",
   // known-unknown systems/artifacts — not in the registry today; an unclaimed
@@ -133,6 +134,12 @@ const DEMAND_PHRASES = [
   "source links",
   "source url",
   "source urls",
+  // MAR-581: bookkeeping writes commonly promise a durable reference back to
+  // the receipt/source item. The accounting_write component can carry this
+  // reference in its write confirmation + audit evidence, so its direction
+  // signal claims the exact phrase when present.
+  "evidence link",
+  "evidence links",
   "where it came from",
   "where the data came from",
 ];

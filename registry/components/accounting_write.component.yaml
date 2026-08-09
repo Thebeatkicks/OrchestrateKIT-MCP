@@ -1,0 +1,70 @@
+id: accounting_write
+name: Accounting Transaction Write
+status: published
+category: integration
+summary: >-
+  Creates a transaction, journal entry, bill, invoice, credit note, or payment
+  record in an accounting system such as Xero or QuickBooks Online. This is a
+  consequential external write: it is deterministic, requires a human approval
+  gate, revalidates the proposed payload immediately before the API call, and
+  must preserve an idempotency key plus a source-evidence reference. Provider
+  adapters and OAuth grants are configured separately.
+capabilities:
+  - create_accounting_transaction
+  - write_journal_entry
+  - record_bill_invoice_or_payment
+  - revalidate_transaction_before_write
+  - preserve_source_evidence_reference
+  - enforce_idempotent_accounting_write
+inputs:
+  - proposed transaction with provider, tenant/organisation, account or ledger codes, amount, currency, date, tax treatment, counterparty, and source-evidence reference
+  - explicit human approval decision plus the proposed-payload identity supplied by the runtime
+  - provider-specific OAuth adapter and least-privilege accounting-write scopes
+  - stable idempotency key derived from the source event and intended accounting action
+outputs:
+  - provider write confirmation with accounting transaction ID, tenant/organisation, timestamp, idempotency key, source-evidence reference, and executed-payload digest
+risk_level: high
+side_effects:
+  - creates or updates a financial record in an external accounting system; the entry can affect books, tax reports, reconciliation, and downstream automations
+permissions:
+  read: []
+  write:
+    - accounting transactions in the selected Xero or QuickBooks Online organisation
+  approval_required_for:
+    - every accounting-system write action
+requires:
+  - human_approval_gate
+recommended_with:
+  - schema_validation
+  - deduplication
+  - audit_log
+  - auth_failure_handler
+avoid_with: []
+failure_modes:
+  - the executed payload differs from what the reviewer saw because the runtime did not bind approval to a payload identity
+  - retry after an ambiguous timeout creates a duplicate transaction when the provider adapter does not enforce the stable idempotency key
+  - transaction is written to the wrong tenant, organisation, account code, tax code, or currency
+  - source-evidence reference is omitted, leaving the accounting entry impossible to trace back to the receipt or upstream item
+  - expired or under-scoped OAuth grant fails after approval and the workflow silently loses the approved write
+evals:
+  - rejection test - zero provider API calls when human approval is absent, rejected, expired, or refers to a different payload identity
+  - revalidation test - a payload changed after review is rejected before the accounting API call
+  - idempotency test - replaying the same source event never creates a second accounting transaction
+  - tenant and account resolution test - writes land only in the explicitly configured organisation and ledger account
+  - evidence-chain test - every provider transaction ID resolves to the source item and the executed-payload digest in audit evidence
+tested_in_playbooks: []
+tested_in_routes: []
+sources:
+  - title: Xero OAuth 2.0 scopes
+    url: https://developer.xero.com/documentation/guides/oauth2/scopes/
+    source_type: official_docs
+    last_checked: "2026-08-10"
+  - title: QuickBooks Online OAuth scopes
+    url: https://developer.intuit.com/app/developer/qbo/docs/learn/scopes
+    source_type: official_docs
+    last_checked: "2026-08-10"
+
+model_tier: none
+fallback_tier: none
+context_need: minimal
+compression_strategy: none
