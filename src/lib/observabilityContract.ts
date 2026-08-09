@@ -19,6 +19,7 @@
 import type { CredentialRequirement } from "./connectContract.js";
 import type { ConnectionRequirement } from "./connectionContract.js";
 import { dashManifestProvider } from "./dashBrokerCatalog.js";
+import { McpToolError } from "./errors.js";
 import type {
   PlacementAxis,
   RuntimeOption,
@@ -170,6 +171,66 @@ export type AgentDomPanelSectionOpaque = PanelSectionBase & { type: string };
 export type AgentDomPanel =
   | { panel_version: 1; title?: string; sections: AgentDomPanelSectionV1[] }
   | { panel_version: number; title?: string; sections: AgentDomPanelSectionOpaque[] };
+
+/**
+ * MAR-569: the closed version-1 connector-kind vocabulary, pinned BY VALUE
+ * against DASH's `$defs.connectionRequirementV1.properties.connector_kind.enum`
+ * — the same discipline `PANEL_SECTION_TYPES_V1` uses and for the same reason:
+ * a vocabulary re-derived from whatever the fixture happens to say would widen
+ * silently when DASH widened it.
+ *
+ * Two members, not the three the issue as filed named. `mcp_server` was
+ * dropped on Henrik's 2026-08-08 ruling (MAR-569 comment thread): MAR-498's
+ * wizard connects an SSH deploy host, not an MCP server, and DASH has no
+ * MCP-server connect flow anywhere — shipping the kind would have been a dead
+ * Connect button on day one, the exact failure the closed enum exists to
+ * prevent. `connectionRequirementsVocabulary` in
+ * tests/tools/dashBrokerRoundTrip.test.ts asserts the two still agree.
+ */
+export const CONNECTOR_KINDS_V1 = ["google_oauth_broker", "api_key"] as const;
+export type AgentDomConnectorKindV1 = (typeof CONNECTOR_KINDS_V1)[number];
+
+/**
+ * One thing that needs connecting, in a version 1 declaration — mirrors DASH's
+ * `$defs.connectionRequirementV1`. `connection_id` is required (not optional):
+ * both v1 kinds act on a declared connection, so DASH's resolution layer can
+ * rely on the link without a cast.
+ *
+ * **The trap this type exists to keep visible:** `connection_id` must name an
+ * id this same export's `agent_dom.connections[]` actually declares, or DASH
+ * resolves the line to `connection_not_declared` and draws no Connect button —
+ * a manifest disagreeing with itself. `buildAgentManifest` refuses to emit a
+ * requirement whose `connection_id` fails that join; see
+ * `validateConnectionRequirementsJoin` below.
+ */
+export type AgentDomConnectionRequirementV1 = {
+  id: string;
+  name: string;
+  connector_kind: AgentDomConnectorKindV1;
+  connection_id: string;
+  operations?: string[];
+  optional?: boolean;
+  why?: string;
+};
+
+/** A requirement from a declaration version DASH does not know: structure only, open `connector_kind`. */
+export type AgentDomConnectionRequirementOpaque = {
+  id: string;
+  name: string;
+  connector_kind: string;
+};
+
+/**
+ * MAR-569: what this agent needs connected, and which flow DASH launches to
+ * connect it — mirrors DASH's `$defs.connectionRequirements`, including its
+ * version split: `requirements_version: 1` carries the closed connector-kind
+ * vocabulary, any other version carries structurally-checked opaque
+ * requirements DASH draws as one stated "newer format" card rather than a
+ * button per line.
+ */
+export type AgentDomConnectionRequirements =
+  | { requirements_version: 1; requirements: AgentDomConnectionRequirementV1[] }
+  | { requirements_version: number; requirements: AgentDomConnectionRequirementOpaque[] };
 
 /** A route step as seen by the manifest builder (plan_workflow's RouteStep subset). */
 export type ManifestRouteStep = {
@@ -711,6 +772,15 @@ export type AgentManifest = {
      * artifact roles.
      */
     panel?: AgentDomPanel;
+    /**
+     * MAR-569: what this agent needs connected, and which flow DASH launches
+     * to connect it. Omitted — never an empty object — when the plan declares
+     * nothing, the same rule `panel`/`task_inputs` ship with: absence means
+     * "the author declared nothing here", and must never be read as "this
+     * agent needs nothing connected" — `agent_dom.connections` is still the
+     * inventory of what it reaches.
+     */
+    connection_requirements?: AgentDomConnectionRequirements;
     control: {
       supported: boolean;
       command_version: 1;
@@ -736,6 +806,44 @@ export function agentSlug(playbookId: string, goal: string): string {
     .replace(/^-|-$/g, "")
     .slice(0, 60);
   return slug || "agent";
+}
+
+/**
+ * MAR-569's trap, enforced rather than merely documented: a v1
+ * `connection_requirements` entry whose `connection_id` names no id in this
+ * same export's `agent_dom.connections[]` is a manifest disagreeing with
+ * itself — DASH resolves the line to `connection_not_declared` and draws no
+ * Connect button, silently. Refusing loudly here, at build time, is cheaper
+ * than a user reading a dead button as their own mistake, and it is the
+ * refuse-rather-than-drop idiom this repo already uses for a typo'd
+ * `connector_kind` at DASH's own import doors.
+ *
+ * Structure-only opaque requirements (any `requirements_version` other than
+ * 1) are exempt: they name no rule from before they existed to be checked
+ * against, the same reasoning `checkRequirementOpaque` uses on DASH's side.
+ */
+export function validateConnectionRequirementsJoin(
+  connectionRequirements: AgentDomConnectionRequirements | undefined,
+  declaredConnectionIds: readonly string[],
+): void {
+  if (!connectionRequirements || connectionRequirements.requirements_version !== 1) return;
+  // TS cannot narrow the union on this check alone — the opaque branch's
+  // `requirements_version: number` is not a literal, so it stays assignable
+  // to `1` at the type level even though the runtime check above excludes it.
+  const requirements = connectionRequirements.requirements as AgentDomConnectionRequirementV1[];
+  const declared = new Set(declaredConnectionIds);
+  const undeclared = requirements
+    .map((requirement) => requirement.connection_id)
+    .filter((connectionId) => !declared.has(connectionId));
+  if (undeclared.length > 0) {
+    throw new McpToolError(
+      `connection_requirements names connection_id(s) not present in agent_dom.connections: ` +
+        `${[...new Set(undeclared)].join(", ")}. Each requirement's connection_id must match ` +
+        `an id this export already declares in agent_dom.connections, or DASH draws no Connect ` +
+        `button for it.`,
+      "connection_requirement_unlinked",
+    );
+  }
 }
 
 /**
@@ -792,6 +900,12 @@ export function buildAgentManifest(input: {
    * section to bind to (docs/ADR-MAR-555-agent-panel-emission.md).
    */
   panel?: AgentDomPanel;
+  /**
+   * MAR-569: the author's declared connection requirements, passed through
+   * verbatim after the join check below. Absent is the honest default and
+   * omits `agent_dom.connection_requirements` entirely.
+   */
+  connection_requirements?: AgentDomConnectionRequirements;
 }): AgentManifest {
   const agentName =
     input.agent_name?.trim() || agentSlug(input.playbook_id, input.goal);
@@ -825,6 +939,10 @@ export function buildAgentManifest(input: {
     `${agentName}-interaction`,
   );
   const connections = input.connections ?? [];
+  validateConnectionRequirementsJoin(
+    input.connection_requirements,
+    connections.map((connection) => connection.connection_id),
+  );
 
   return {
     manifest_version: MANIFEST_VERSION,
@@ -907,6 +1025,12 @@ export function buildAgentManifest(input: {
       // (`sections` is required, minItems 1). Absence is the only honest way
       // to say "no panel".
       ...(input.panel ? { panel: input.panel } : {}),
+      // MAR-569: conditional, never `{}` for the same reason `panel` is —
+      // DASH's schema requires `requirements` with minItems 1, and absence is
+      // the only honest way to say "this agent declared no requirements".
+      ...(input.connection_requirements
+        ? { connection_requirements: input.connection_requirements }
+        : {}),
       control: {
         supported,
         command_version: 1,

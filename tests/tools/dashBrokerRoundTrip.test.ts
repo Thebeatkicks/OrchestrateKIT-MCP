@@ -63,7 +63,9 @@ import {
   dashBrokeredConnectionIds,
 } from "../../src/lib/dashBrokerCatalog.js";
 import {
+  CONNECTOR_KINDS_V1,
   PANEL_SECTION_TYPES_V1,
+  type AgentDomConnectionRequirements,
   type AgentDomPanel,
 } from "../../src/lib/observabilityContract.js";
 
@@ -175,6 +177,7 @@ function planAndBrief(opts: {
   dash_broker_available?: boolean;
   task_inputs?: TaskInputRoleFixture[];
   agent_panel?: AgentDomPanel;
+  connection_requirements?: AgentDomConnectionRequirements;
   output_location?: string;
 }) {
   const plan = planWorkflow({ goal: LEAD_GOAL, must_have_capabilities: [], must_avoid: [] }, registry);
@@ -207,6 +210,7 @@ function planAndBrief(opts: {
     dash_broker_available: opts.dash_broker_available,
     task_inputs: opts.task_inputs,
     agent_panel: opts.agent_panel,
+    connection_requirements: opts.connection_requirements,
     generated_at: "2026-08-06T00:00:00Z",
     llm_provider: "anthropic",
   });
@@ -510,6 +514,133 @@ describe("MAR-555 — export_build_brief emits agent_dom.panel against DASH's pi
         sections: [{ id: "chart", type: "chart", label: "Chart" }],
       } as unknown as AgentDomPanel,
     });
+    expect(validateManifest(b.agent_manifest)).toBe(false);
+  });
+});
+
+/**
+ * MAR-569 — export_build_brief emitting `agent_dom.connection_requirements`.
+ *
+ * The one thing this block exists to prove is the trap the MAR-569 coordinator
+ * named: a v1 requirement's `connection_id` must match an id this same
+ * export's `agent_dom.connections[]` ACTUALLY declares, or DASH resolves the
+ * line to `connection_not_declared` and draws no Connect button. Every join
+ * assertion below reads `b.agent_manifest.agent_dom.connections` from a real
+ * `exportBuildBrief` call over `LEAD_GOAL` — never a hand-written fixture list
+ * of connection ids — so a future change to what the route connects (adding,
+ * renaming, or dropping a connection) cannot leave this test silently
+ * checking a join that no longer describes reality.
+ */
+describe("MAR-569 — export_build_brief emits agent_dom.connection_requirements against DASH's pinned schema", () => {
+  it("by-value pin: CONNECTOR_KINDS_V1 is exactly DASH's closed v1 connector_kind enum", () => {
+    const schema = loadFixtureJson("agent.manifest.v2.schema.json") as {
+      $defs: { connectionRequirementV1: { properties: { connector_kind: { enum: string[] } } } };
+    };
+    expect([...CONNECTOR_KINDS_V1]).toEqual(schema.$defs.connectionRequirementV1.properties.connector_kind.enum);
+  });
+
+  it("honest absence: a plan that declares no connection requirements omits agent_dom.connection_requirements entirely", () => {
+    const b = planAndBrief({});
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect("connection_requirements" in b.agent_manifest.agent_dom).toBe(false);
+  });
+
+  it("never an empty object: DASH's own schema refuses requirements_version with no requirements array member", () => {
+    const b = planAndBrief({});
+    const withEmpty = {
+      ...b.agent_manifest,
+      agent_dom: { ...b.agent_manifest.agent_dom, connection_requirements: {} },
+    };
+    expect(validateManifest(withEmpty)).toBe(false);
+  });
+
+  it("THE TRAP, positive form: every requirement's connection_id is found among the REAL emitted agent_dom.connections[].id, not a fixture list", () => {
+    const b = planAndBrief({});
+    const emittedConnectionIds = b.agent_manifest.agent_dom.connections.map((c) => c.id);
+    expect(emittedConnectionIds, "LEAD_GOAL must actually emit a gmail connection for this suite to mean anything").toContain("gmail");
+
+    const requirements: AgentDomConnectionRequirements = {
+      requirements_version: 1,
+      requirements: [
+        {
+          id: "gmail_signin",
+          name: "Your Gmail",
+          connector_kind: "google_oauth_broker",
+          connection_id: "gmail",
+        },
+      ],
+    };
+    const withRequirements = planAndBrief({ connection_requirements: requirements });
+    expect(validateManifest(withRequirements.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect(withRequirements.agent_manifest.agent_dom.connection_requirements).toEqual(requirements);
+    // The join, asserted against this call's OWN emitted output.
+    const liveIds = new Set(withRequirements.agent_manifest.agent_dom.connections.map((c) => c.id));
+    for (const requirement of requirements.requirements) {
+      expect(liveIds.has(requirement.connection_id), requirement.connection_id).toBe(true);
+    }
+  });
+
+  it("THE TRAP, negative form: a connection_id absent from the real emitted agent_dom.connections is refused, not silently exported", () => {
+    const b = planAndBrief({});
+    const emittedConnectionIds = new Set(b.agent_manifest.agent_dom.connections.map((c) => c.id));
+    expect(emittedConnectionIds.has("notion"), "the fixture goal must not coincidentally connect notion").toBe(false);
+
+    const requirements: AgentDomConnectionRequirements = {
+      requirements_version: 1,
+      requirements: [
+        { id: "notion_signin", name: "A Notion workspace", connector_kind: "api_key", connection_id: "notion" },
+      ],
+    };
+    expect(() => planAndBrief({ connection_requirements: requirements })).toThrow(/connection_requirements/);
+  });
+
+  it("a requirement naming a real connection (hubspot) under the api_key kind round-trips and validates", () => {
+    const requirements: AgentDomConnectionRequirements = {
+      requirements_version: 1,
+      requirements: [
+        {
+          id: "hubspot_key",
+          name: "Your HubSpot API key",
+          connector_kind: "api_key",
+          connection_id: "hubspot",
+          operations: ["hubspot.notes.write"],
+          optional: false,
+          why: "Writes a note to the CRM for each detected lead.",
+        },
+      ],
+    };
+    const b = planAndBrief({ connection_requirements: requirements });
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect(b.agent_manifest.agent_dom.connection_requirements).toEqual(requirements);
+  });
+
+  it("a newer requirements_version travels intact and is checked structurally, not against v1's enum", () => {
+    const newer: AgentDomConnectionRequirements = {
+      requirements_version: 2,
+      requirements: [{ id: "notion_signin", name: "A Notion workspace", connector_kind: "mcp_server" }],
+    };
+    // Deliberately references an id ("notion_signin", not a connection_id) DASH
+    // never joins against for a non-v1 declaration — the opaque branch carries
+    // no requirements to place buttons beside at all, so the join guard is a
+    // v1-only rule and must not fire here.
+    const b = planAndBrief({ connection_requirements: newer });
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect(b.agent_manifest.agent_dom.connection_requirements).toEqual(newer);
+  });
+
+  it("a connector_kind outside the closed v1 enum fails the pinned schema, not just the zod layer", () => {
+    // exportBuildBrief is a plain deterministic function with no zod of its
+    // own — the registerTool wrapper enforces the closed enum on a real call
+    // (tests/tools/exportBuildBrief.test.ts). This asserts DASH's own schema
+    // is a second, independent backstop for the same refusal, on the exact
+    // kind Henrik ruled out (MAR-569 comment thread): mcp_server under v1.
+    const requirements = {
+      requirements_version: 1,
+      requirements: [
+        { id: "host_connect", name: "A deploy host", connector_kind: "mcp_server", connection_id: "gmail" },
+      ],
+    } as unknown as AgentDomConnectionRequirements;
+    const b = planAndBrief({ connection_requirements: requirements });
     expect(validateManifest(b.agent_manifest)).toBe(false);
   });
 });

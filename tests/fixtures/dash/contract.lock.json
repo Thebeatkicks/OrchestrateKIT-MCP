@@ -2,10 +2,10 @@
   "contract": "orchestratedash.telemetry",
   "version": 1,
   "canonical_repository": "https://github.com/orchestratemcp/orchestratedash",
-  "canonical_commit": "3666459a4fb20b5cc3f50656612fbf718259ba25",
+  "canonical_commit": "ffa74fda56aeaa0911a4be15e1d1a5edf02adab8",
   "schema_semantic_sha256": {
     "agent.manifest.schema.json": "a3406def79f04067b06f7c75180df5b7b36cc7a2cbe877782fccf5ad00b747e5",
-    "agent.manifest.v2.schema.json": "bbd683e71e427df1ee41c120727aaaca7d72a407920f7d07d126c49b0aab98de",
+    "agent.manifest.v2.schema.json": "6e04094d08fe2f637b7e46ec29a3d1b75f21af58a1b5a051d524b2f9689d64c6",
     "run-event.schema.json": "890a64f290a09d5a94d4d8aff51acd28281511c370c48a334763867517e371a3",
     "broker-profiles.json": "073a9eba90c2ff0e9d19d5eed6645bc36f6f10a2bf2c732e14ff26bae5f1bbb0"
   }

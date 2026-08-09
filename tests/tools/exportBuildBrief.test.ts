@@ -426,6 +426,227 @@ describe("MAR-555 — agent_panel is validated at the tool boundary, not on trus
   });
 });
 
+/**
+ * MAR-569 — the `.strict()` boundary on `connection_requirements`.
+ *
+ * Same split as `agent_panel` (MAR-555): this file holds the zod-layer
+ * refusals, tests/tools/dashBrokerRoundTrip.test.ts re-derives the same
+ * refusals against DASH's pinned schema so neither layer is the only one
+ * standing. What this file cannot check is the cross-field join — whether a
+ * requirement's connection_id actually names a connection this export
+ * declares — because zod validates this field in isolation from its sibling
+ * `recommended_route`; that check lives in
+ * src/lib/observabilityContract.ts#validateConnectionRequirementsJoin and is
+ * proven against real emitted output in dashBrokerRoundTrip.test.ts's
+ * "THE TRAP" cases.
+ */
+describe("MAR-569 — connection_requirements is validated at the tool boundary, not on trust", () => {
+  function parseConnectionRequirements(connection_requirements: unknown) {
+    return InputSchema.safeParse({
+      goal: "x".repeat(10),
+      plan_source: "composed",
+      route_status: "candidate",
+      recommended_route: [{ step: 1, component_id: "email_read" }],
+      safety_review: { status: "pass", risk_score: 0 },
+      automation_clearance: { level: "L0", autonomous_allowed: true, reason: "x" },
+      handoff_targets: ["prompt"],
+      connection_requirements,
+    });
+  }
+
+  it("omitting it entirely is valid — absence is the honest default, not a missing field", () => {
+    const parsed = parseConnectionRequirements(undefined);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.connection_requirements).toBeUndefined();
+  });
+
+  it("accepts a minimal v1 requirement (id, name, connector_kind, connection_id only)", () => {
+    const parsed = parseConnectionRequirements({
+      requirements_version: 1,
+      requirements: [{ id: "gmail_signin", name: "Your Gmail", connector_kind: "google_oauth_broker", connection_id: "gmail" }],
+    });
+    expect(parsed.success, parsed.success ? "" : JSON.stringify((parsed as { error: unknown }).error)).toBe(true);
+  });
+
+  it("accepts both closed v1 connector kinds, and every optional member together", () => {
+    for (const connector_kind of ["google_oauth_broker", "api_key"] as const) {
+      const parsed = parseConnectionRequirements({
+        requirements_version: 1,
+        requirements: [
+          {
+            id: "req",
+            name: "A thing",
+            connector_kind,
+            connection_id: "gmail",
+            operations: ["gmail.search", "gmail.draft.create"],
+            optional: true,
+            why: "So the agent can search and draft.",
+          },
+        ],
+      });
+      expect(parsed.success, connector_kind).toBe(true);
+    }
+  });
+
+  it("refuses a connector_kind outside the closed v1 vocabulary — mcp_server was deliberately dropped", () => {
+    // The exact kind Henrik ruled out (MAR-569 comment thread): MAR-498's
+    // wizard connects an SSH deploy host, not an MCP server, and DASH has no
+    // MCP-server connect flow. A typo'd (or aspirational) kind is refused
+    // loudly rather than drawn as a dead Connect button.
+    expect(
+      parseConnectionRequirements({
+        requirements_version: 1,
+        requirements: [{ id: "r", name: "A host", connector_kind: "mcp_server", connection_id: "gmail" }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("refuses a requirement missing connection_id — both v1 kinds act on a declared connection", () => {
+    expect(
+      parseConnectionRequirements({
+        requirements_version: 1,
+        requirements: [{ id: "r", name: "Your Gmail", connector_kind: "google_oauth_broker" }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("refuses an id outside technical vocabulary — uppercase, spaces, or punctuation", () => {
+    for (const id of ["Gmail", "gmail signin", "gmail-signin", ""]) {
+      expect(
+        parseConnectionRequirements({
+          requirements_version: 1,
+          requirements: [{ id, name: "Your Gmail", connector_kind: "google_oauth_broker", connection_id: "gmail" }],
+        }).success,
+        JSON.stringify(id),
+      ).toBe(false);
+    }
+  });
+
+  it("refuses an unknown key, including every credential-shaped member name a value would go under", () => {
+    // DASH's own reader (lib/connection-spec.ts) repeats this guard rather
+    // than trusting Ajv's propertyNames error; the .strict() zod boundary here
+    // forbids ANY unknown key, which is a strictly stronger guarantee that
+    // subsumes DASH's named list (value/secret/password/token/access_token/
+    // refresh_token/client_secret/api_key/credential_value) without restating it.
+    for (const member of ["value", "secret", "token", "api_key", "url"]) {
+      expect(
+        parseConnectionRequirements({
+          requirements_version: 1,
+          requirements: [
+            {
+              id: "r",
+              name: "Your Gmail",
+              connector_kind: "google_oauth_broker",
+              connection_id: "gmail",
+              [member]: "x",
+            },
+          ],
+        }).success,
+        member,
+      ).toBe(false);
+    }
+  });
+
+  it("refuses operations that repeat an entry, or an operation id outside its own pattern", () => {
+    expect(
+      parseConnectionRequirements({
+        requirements_version: 1,
+        requirements: [
+          {
+            id: "r",
+            name: "Your Gmail",
+            connector_kind: "google_oauth_broker",
+            connection_id: "gmail",
+            operations: ["gmail.search", "gmail.search"],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      parseConnectionRequirements({
+        requirements_version: 1,
+        requirements: [
+          {
+            id: "r",
+            name: "Your Gmail",
+            connector_kind: "google_oauth_broker",
+            connection_id: "gmail",
+            operations: ["Gmail.Search"],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("holds every bound the schema declares: 12 requirements, 12 operations, a 400-char why", () => {
+    const requirement = (i: number) => ({
+      id: `r${i}`,
+      name: "A thing",
+      connector_kind: "google_oauth_broker" as const,
+      connection_id: "gmail",
+    });
+    expect(
+      parseConnectionRequirements({
+        requirements_version: 1,
+        requirements: Array.from({ length: 12 }, (_, i) => requirement(i)),
+      }).success,
+    ).toBe(true);
+    expect(
+      parseConnectionRequirements({
+        requirements_version: 1,
+        requirements: Array.from({ length: 13 }, (_, i) => requirement(i)),
+      }).success,
+    ).toBe(false);
+    expect(parseConnectionRequirements({ requirements_version: 1, requirements: [] }).success).toBe(false);
+
+    const ops12 = Array.from({ length: 12 }, (_, i) => `op${i}`);
+    const ops13 = Array.from({ length: 13 }, (_, i) => `op${i}`);
+    expect(
+      parseConnectionRequirements({
+        requirements_version: 1,
+        requirements: [{ ...requirement(0), operations: ops12 }],
+      }).success,
+    ).toBe(true);
+    expect(
+      parseConnectionRequirements({
+        requirements_version: 1,
+        requirements: [{ ...requirement(0), operations: ops13 }],
+      }).success,
+    ).toBe(false);
+
+    expect(
+      parseConnectionRequirements({
+        requirements_version: 1,
+        requirements: [{ ...requirement(0), why: "x".repeat(400) }],
+      }).success,
+    ).toBe(true);
+    expect(
+      parseConnectionRequirements({
+        requirements_version: 1,
+        requirements: [{ ...requirement(0), why: "x".repeat(401) }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("a newer requirements_version is accepted structurally, and version 1 does not rot into leniency", () => {
+    // The versioning rule, both directions — the same one AgentPanelInputShape
+    // enforces for panel_version. An opaque requirement (open connector_kind,
+    // no connection_id) travels intact under any version other than 1; the
+    // same shape under requirements_version: 1 is refused, because that is the
+    // version whose vocabulary and connection-link rule are closed.
+    const opaque = { id: "notion_signin", name: "A Notion workspace", connector_kind: "mcp_server" };
+    expect(
+      parseConnectionRequirements({ requirements_version: 2, requirements: [opaque] }).success,
+    ).toBe(true);
+    expect(
+      parseConnectionRequirements({ requirements_version: 1, requirements: [opaque] }).success,
+    ).toBe(false);
+    expect(
+      parseConnectionRequirements({ requirements_version: 0, requirements: [opaque] }).success,
+    ).toBe(false);
+  });
+});
+
 describe("MAR-460 — the exported brief shows the runner-eligibility decision and its evidence", () => {
   const RUNNER_GOAL =
     "Build a local agent that watches my Gmail for meeting requests continuously. " +
