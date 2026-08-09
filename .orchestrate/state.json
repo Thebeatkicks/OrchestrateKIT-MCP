@@ -363,7 +363,8 @@
     {
       "id": "MAR-578",
       "lifecycle": "planned",
-      "linear_status": "In Progress",
+      "linear_status": "In Review",
+      "commit": "d57bd03",
       "proof": {
         "command": "pnpm verify",
         "exact_goal_command": "pnpm exec vitest run tests/tools/dashBrokerRoundTrip.test.ts tests/tools/exportBuildBrief.test.ts"
