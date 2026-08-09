@@ -39,8 +39,10 @@ import {
 import {
   agentSlug,
   buildAgentManifest,
+  CONNECTOR_KINDS_V1,
   DASH_ENDPOINT_ENV,
   DASH_TOKEN_ENV,
+  type AgentDomConnectionRequirements,
   type AgentDomPanel,
   type AgentDomTaskInputRole,
   type AgentManifest,
@@ -250,6 +252,80 @@ const AgentPanelInputShape = z.union([
       panel_version: z.number().int().min(2),
       title: z.string().min(1).max(120).optional(),
       sections: z.array(PanelSectionOpaqueShape).min(1).max(8),
+    })
+    .strict(),
+]);
+
+// ─────────────────── MAR-569: the connection-requirements declaration ───────
+//
+// Mirrors DASH's `$defs.connectionRequirements` exactly — see
+// tests/fixtures/dash/agent.manifest.v2.schema.json, pinned to orchestratedash
+// per contract.lock.json. `.strict()` throughout, same reason `agent_panel`
+// ships that way: DASH's own schema does not forbid unknown keys, so the
+// `.strict()` refusal is a deliberate widening of what this boundary catches —
+// a caller believing it declared something DASH would never read.
+//
+// Unlike the panel, DERIVATION here is honest and expected rather than
+// declined: the plan already knows its connections (`connection_contract` /
+// `agent_dom.connections`), so a caller building this input has real facts to
+// build it from, not a guess. What stays enforced at this boundary either way
+// is the trap MAR-569's coordinator named: `connection_id` must match an id
+// this same export's `agent_dom.connections[]` declares — checked in
+// `src/lib/observabilityContract.ts#validateConnectionRequirementsJoin`
+// against the ACTUAL emitted connections, not against this shape alone, since
+// zod validates one field's structure and cannot see a sibling array.
+
+const ConnectionRequirementV1Shape = z
+  .object({
+    id: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[a-z0-9_]+$/, "technical vocabulary only — lowercase letters, digits, underscore"),
+    name: z.string().min(1).max(120),
+    connector_kind: z.enum(CONNECTOR_KINDS_V1),
+    connection_id: z.string().min(1).max(64),
+    operations: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[a-z0-9_]+(\.[a-z0-9_]+)*$/, "an operation id, e.g. gmail.search"),
+      )
+      .max(12)
+      .refine((ops) => new Set(ops).size === ops.length, "operations must not repeat an entry")
+      .optional(),
+    optional: z.boolean().optional(),
+    why: z.string().min(1).max(400).optional(),
+  })
+  .strict();
+
+/** A requirement from a declaration version DASH does not know: structure only, open `connector_kind`. */
+const ConnectionRequirementOpaqueShape = z
+  .object({
+    id: z.string().min(1).max(64),
+    name: z.string().min(1).max(120),
+    connector_kind: z.string().min(1).max(64),
+  })
+  .strict();
+
+// The if/then/else DASH's schema states as `requirements_version === 1`, said
+// as a union the same way `AgentPanelInputShape` says `panel_version`'s split:
+// version 1 is checked strictly against the closed connector-kind enum, and
+// any other version is accepted structurally so a newer declaration travels
+// intact rather than being rejected or silently downgraded.
+const ConnectionRequirementsInputShape = z.union([
+  z
+    .object({
+      requirements_version: z.literal(1),
+      requirements: z.array(ConnectionRequirementV1Shape).min(1).max(12),
+    })
+    .strict(),
+  z
+    .object({
+      requirements_version: z.number().int().min(2),
+      requirements: z.array(ConnectionRequirementOpaqueShape).min(1).max(12),
     })
     .strict(),
 ]);
@@ -523,6 +599,18 @@ export const InputShape = {
     "folder'), not a role. Declare this once the build's artifact roles are known. See " +
     "docs/ADR-MAR-555-agent-panel-emission.md and " +
     "tests/fixtures/dash/agent.manifest.v2.schema.json#/$defs/panel.",
+  ),
+  connection_requirements: ConnectionRequirementsInputShape.optional().describe(
+    "MAR-569: what this agent needs connected, and which flow DASH launches to connect it — " +
+    "sections over a closed connector_kind vocabulary (google_oauth_broker/api_key; " +
+    "'mcp_server' was deliberately dropped, see docs). Absent is the honest default and " +
+    "'agent_dom.connection_requirements' is omitted entirely rather than exported as an " +
+    "empty object. Unlike agent_panel, derivation from the plan's already-known connection " +
+    "facts (connection_contract / what_you_need) is expected, not declined. Every " +
+    "requirements_version:1 entry's connection_id MUST name an id this same export's " +
+    "agent_dom.connections[] already declares — export_build_brief refuses the call " +
+    "otherwise, since an unlinked id draws no Connect button in DASH. See " +
+    "tests/fixtures/dash/agent.manifest.v2.schema.json#/$defs/connectionRequirements.",
   ),
   // ── MAR-460: public-runner eligibility (fail closed) ──
   runner_posture: z
@@ -2573,6 +2661,8 @@ export type ExportBuildBriefInput = {
   task_inputs?: AgentDomTaskInputRole[];
   /** ADR 0008 / MAR-555: the author's declared panel. Absent omits agent_dom.panel entirely; nothing is derived. */
   agent_panel?: AgentDomPanel;
+  /** MAR-569: what this agent needs connected. Absent omits agent_dom.connection_requirements entirely. */
+  connection_requirements?: AgentDomConnectionRequirements;
   agent_name?: string;
   // ── MAR-460: public-runner eligibility; see src/lib/runnerEligibility.ts ──
   /** Defaults to the strictest posture ('public') — an undeclared posture is not evidence of a narrow one. */
@@ -2766,6 +2856,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     trigger_explanation: input.trigger_explanation,
     task_inputs: input.task_inputs,
     panel: input.agent_panel,
+    connection_requirements: input.connection_requirements,
   });
 
   // MAR-460: assessed for every export, including the ones that supply nothing —
@@ -3051,6 +3142,7 @@ export function registerExportBuildBrief(server: McpServer): void {
           dash_broker_available: input.dash_broker_available,
           task_inputs: input.task_inputs as AgentDomTaskInputRole[] | undefined,
           agent_panel: input.agent_panel as AgentDomPanel | undefined,
+          connection_requirements: input.connection_requirements as AgentDomConnectionRequirements | undefined,
           agent_name: input.agent_name,
           llm_provider: input.llm_provider,
         });
