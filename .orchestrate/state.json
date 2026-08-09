@@ -374,12 +374,14 @@
     {
       "id": "MAR-581",
       "lifecycle": "planned",
-      "linear_status": "In Progress",
+      "linear_status": "In Review",
+      "commit": "ec5b14a",
+      "pr": 181,
       "proof": {
         "command": "pnpm verify",
         "exact_goal_command": "pnpm exec vitest run tests/graph/accountingWriteDirection.test.ts"
       },
-      "note": "IMPLEMENTED 2026-08-10, draft PR pending. Added published deterministic accounting_write plus tested gate/validation/auth/audit edges. Direction-safe matcher requires write verb + accounting object + Xero/QuickBooks/accounting-system context, with paired read/preview absence fixtures. Exact MAR-581 goal now routes retry_policy -> data_normalizer -> deduplication -> schema_validation -> reviewer_notification -> human_approval_gate -> auth_failure_handler -> accounting_write -> audit_log, unmatched_demand [], and the Layer-1 card says Approval enforced (unbound) with MAR-540's payload-identity caveat. Provider-neutral connection contract lists alternative official provider scopes and requires a selected adapter rather than claiming scripts/connect.mjs can mint a neutral token. invoice_intake_po_match keeps its explicit no-auto-post read-and-handoff boundary. Registry fingerprint 7b1edec52c349c78; benchmark 02209a02c51f7bc5. pnpm verify green including sibling-DASH schema parity: 99 files / 2687 tests. Lifecycle stays planned until an ancestor commit lands on master; no installed provider write was performed, so proven is not claimed."
+      "note": "IMPLEMENTED 2026-08-10 in ec5b14a; draft PR #181 targets master. Added published deterministic accounting_write plus tested gate/validation/auth/audit edges. Direction-safe matcher requires write verb + accounting object + Xero/QuickBooks/accounting-system context, with paired read/preview absence fixtures. Exact MAR-581 goal now routes retry_policy -> data_normalizer -> deduplication -> schema_validation -> reviewer_notification -> human_approval_gate -> auth_failure_handler -> accounting_write -> audit_log, unmatched_demand [], and the Layer-1 card says Approval enforced (unbound) with MAR-540's payload-identity caveat. Provider-neutral connection contract lists alternative official provider scopes and requires a selected adapter rather than claiming scripts/connect.mjs can mint a neutral token. invoice_intake_po_match keeps its explicit no-auto-post read-and-handoff boundary. Registry fingerprint 7b1edec52c349c78; benchmark 02209a02c51f7bc5. pnpm verify green including sibling-DASH schema parity: 99 files / 2687 tests. Linear evidence comment 2c1450b8-8079-4af7-bf10-107776db274e records before/after and proof. Lifecycle stays planned until an ancestor commit lands on master; no installed provider write was performed, so proven is not claimed."
     }
   ]
 }
