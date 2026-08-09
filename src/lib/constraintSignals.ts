@@ -139,6 +139,27 @@ export const APPROVAL_REQUIRED_SIGNALS = [
   // that must happen before an action — an ENFORCED gate, not a prohibition.
   "until approved",
   "human approves",
+  // MAR-580: explicit authorization/sign-off requirements outrank an
+  // unattended waiver exactly like explicit approval wording. Keep these as
+  // enumerated whole-word phrases; bare technical "authorization" belongs to
+  // connection/authentication and is intentionally not a constraint signal.
+  "must authorize",
+  "must be authorized",
+  "must authorise",
+  "must be authorised",
+  "require authorization",
+  "requires authorization",
+  "require authorisation",
+  "requires authorisation",
+  "human authorization",
+  "human authorisation",
+  "must sign off",
+  "must be signed off",
+  "requires sign-off",
+  "requires sign off",
+  "sign-off before",
+  "sign off before",
+  "signed off before",
 ];
 
 /**
