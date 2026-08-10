@@ -49,6 +49,12 @@ export const MANIFEST_GENERATED_BY = "orchestratekit-mcp export_build_brief";
 
 export type ManifestRisk = "low" | "medium" | "high" | "critical";
 export type ManifestTier = "none" | "small" | "standard" | "frontier";
+/**
+ * MAR-583: stable, provider-neutral model choices a runtime can resolve later.
+ * Model names age; these capability/cost levels are the portable declaration.
+ */
+export const DEFAULT_MODEL_LEVELS = ["cheap", "standard", "frontier"] as const;
+export type ManifestDefaultModelLevel = (typeof DEFAULT_MODEL_LEVELS)[number];
 export type ManifestClearance = "L0" | "L1" | "L2" | "L3" | "L4";
 export type ManifestBuildTarget = "cowork" | "cursor" | "chatgpt_gpt" | "code";
 export type AgentDomRuntimeClass =
@@ -251,6 +257,19 @@ function coerceRisk(r?: string): ManifestRisk {
 }
 function coerceTier(t?: string): ManifestTier {
   return t === "small" || t === "standard" || t === "frontier" ? t : "none";
+}
+
+function defaultModelLevel(tier: ManifestTier): ManifestDefaultModelLevel | undefined {
+  switch (tier) {
+    case "small":
+      return "cheap";
+    case "standard":
+      return "standard";
+    case "frontier":
+      return "frontier";
+    case "none":
+      return undefined;
+  }
 }
 
 function stableId(value: string, fallback: string): string {
@@ -695,6 +714,11 @@ export type AgentManifest = {
     component_id: string;
     risk_level: ManifestRisk;
     model_tier: ManifestTier;
+    /**
+     * MAR-583: emitted only for AI-needing steps. This remains a level, never
+     * a provider or model name; deterministic steps omit the property.
+     */
+    default_model_level?: ManifestDefaultModelLevel;
   }[];
   safety_contract: {
     automation_clearance: ManifestClearance;
@@ -954,12 +978,20 @@ export function buildAgentManifest(input: {
       route_id: input.route_id,
       build_target: input.build_target,
     },
-    planned_route: plannedRouteSteps.map((s, index) => ({
-      step: index + 1,
-      component_id: s.component_id,
-      risk_level: coerceRisk(s.risk_level),
-      model_tier: coerceTier(s.model_tier),
-    })),
+    planned_route: plannedRouteSteps.map((s, index) => {
+      const modelTier = coerceTier(s.model_tier);
+      const modelLevel = defaultModelLevel(modelTier);
+      return {
+        step: index + 1,
+        component_id: s.component_id,
+        risk_level: coerceRisk(s.risk_level),
+        model_tier: modelTier,
+        // MAR-583: same honest-absence pattern as agent_dom.panel and
+        // connection_requirements. There is no "none" model level: a step
+        // that needs no AI declares nothing, rather than looking configurable.
+        ...(modelLevel ? { default_model_level: modelLevel } : {}),
+      };
+    }),
     safety_contract: {
       automation_clearance: input.automation_clearance,
       enforced_approval_gates: input.enforced_approval_gates,
