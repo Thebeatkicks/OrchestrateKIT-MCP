@@ -95,7 +95,7 @@ const DEMAND_NOUNS = new Set([
   "airtable", "stripe", "pdf", "spreadsheet", "csv", "crm", "calendar",
   "transaction", "transactions", "ledger",
   "github", "webhook", "invoice", "invoices", "uptime", "logs", "metric",
-  "sources", "competitor", "competitors", "price", "prices",
+  "sources", "feed", "feeds", "competitor", "competitors", "price", "prices",
   // known-unknown systems/artifacts — not in the registry today; an unclaimed
   // hit here is exactly the gap the user must hear about
   "postgres", "postgresql", "mysql", "sqlite", "sql", "database", "warehouse",
@@ -123,6 +123,7 @@ const DEMAND_NOUNS = new Set([
 /** Multi-word demand phrases checked before single tokens. */
 const DEMAND_PHRASES = [
   "google drive",
+  "google sheet",
   "google sheets",
   "pull request",
   "pr opens",

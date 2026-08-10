@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "project": "OrchestrateKit MCP",
-  "updated_at": "2026-08-10T07:05:00Z",
-  "current_wave": "Overnight MCP queue: MAR-580 -> MAR-581 -> MAR-583",
+  "updated_at": "2026-08-10T15:36:00Z",
+  "current_wave": "MAR-596 emitter + planner; F14 held pending MAR-593 coordinator relay",
   "authority": {
     "implementation": "Git",
     "intent": "Linear",
@@ -405,6 +405,18 @@
         "exact_goal_command": "pnpm exec vitest run tests/tools/observabilityManifest.test.ts"
       },
       "note": "IMPLEMENTED 2026-08-10 as commit 9058a20; draft PR #182 targets master and remains unmerged. export_build_brief now emits planned_route[].default_model_level on every AI-needing step, derived deterministically from the registry-backed model_tier: small -> cheap, standard -> standard, frontier -> frontier; model_tier none omits the property entirely. DEFAULT_MODEL_LEVELS is pinned by value to cheap/standard/frontier, and tests assert all three mappings plus honest absence and the absence of provider/model names. Existing model_tier remains for backward compatibility and MAR-299 cost attribution. DASH master 0a023585f6e3a82b550a933fd26697ac6fd16170 does not yet type the additive field, but planned_route.items is open to additive properties, so the emitted manifest validates without claiming DASH consumes it. The pinned fixture was structurally re-synced against that exact DASH commit; semantic content and v2 fingerprint remain 6e04094d..., while contract.lock.json canonical_commit advances in the same implementation commit. docs/ADR-MAR-583-default-model-levels.md records the cross-repo decision and the explicit dependency: DASH must add the typed schema field, UI selection, deploy propagation, and run-row recording before those behaviors can be claimed. Registry untouched; fingerprint stays a59ee01fa6e99a1a. Portfolio-wide pnpm verify green including dash:schema:check: 98 files / 2665 passed / 0 failed."
+    },
+    {
+      "id": "MAR-596",
+      "lifecycle": "planned",
+      "linear_status": "In Review",
+      "commit": "8385b98",
+      "pr": "https://github.com/orchestratemcp/OrchestrateKIT-MCP/pull/183",
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/graph/mar596AttendedRun.test.ts tests/tools/observabilityManifest.test.ts"
+      },
+      "note": "IMPLEMENTED 2026-08-10 in 8385b98; draft PR #183 targets master and remains unmerged. F1: the preposition 'out' no longer selects fan_out_collector, intent_classifier, job_queue, or threshold_router, and bare 'write' no longer selects audit_log; explicit fan-out/audit intent remains reachable. The scheduled public-feed route keeps its audit trail through a narrow component-pair policy rather than prose matching. F2: the exact attended goal 'summarise today's support emails into a few bullet points' retains research_synthesis with a non-none model tier. F3: provider nouns in read-only prose no longer count as external-write evidence; the exact plan is L0/autonomous with no safety failure or phantom approval blocker. F4/F5/F7/F10: one real export emits default_model_level frontier, agent.display_name, a DASH-facts-only default agent_dom.panel, and a joined Gmail agent_dom.connection_requirements declaration derived only from an actionable dash_managed connection. The MCP-owned DASH v2 fixture is pinned to clean DASH master 04dc3469402b9a31fff9097ef651986966a975ae with semantic hash ce174cc6b8e568be86b1ad27615b73cd80b0b61f027477402a2f675a63993b56. F14 remains held: MAR-593 was re-read after proof, is still Backlog, and has no coordinator relay/comment defining the fleet-level model-provider connection shape; no guessed provider connection and no orchestratedash changes. docs/ADR-MAR-596-populated-agent-dom-defaults.md records the decision and evidence boundary. pnpm verify green: 101 files / 2708 tests plus live sibling-DASH schema parity, typecheck, registry lint, benchmark, and release trust. Linear evidence comment 11680a3b-7a59-4def-ab2d-b478c8d5895c. Lifecycle stays planned until merge; no installed-DASH runtime proof is claimed."
     }
   ]
 }

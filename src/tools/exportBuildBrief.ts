@@ -591,22 +591,20 @@ export const InputShape = {
   agent_panel: AgentPanelInputShape.optional().describe(
     "ADR 0008 (MAR-555): the agent's own panel for its DASH workspace, DECLARED rather " +
     "than programmed — sections over a closed vocabulary (report/outputs/table/metrics/" +
-    "note) that DASH renders with its own components. Absent is the honest default and " +
-    "'agent_dom.panel' is omitted entirely rather than exported as an empty object. " +
-    "NOTHING is derived: every section that shows an agent's output binds to an artifact " +
-    "ROLE, which is a name the agent's runtime gives what it writes — a plan declares " +
-    "none, and 'output_location' is free text naming a destination ('Gmail drafts " +
-    "folder'), not a role. Declare this once the build's artifact roles are known. See " +
+    "note) that DASH renders with its own components. When absent, MAR-596 emits a safe " +
+    "one-section default containing only DASH-observed run facts (count/time/verdict). " +
+    "That default binds no artifact role and makes no claim about where the agent writes " +
+    "output; an explicit author panel replaces it verbatim. See " +
     "docs/ADR-MAR-555-agent-panel-emission.md and " +
     "tests/fixtures/dash/agent.manifest.v2.schema.json#/$defs/panel.",
   ),
   connection_requirements: ConnectionRequirementsInputShape.optional().describe(
     "MAR-569: what this agent needs connected, and which flow DASH launches to connect it — " +
     "sections over a closed connector_kind vocabulary (google_oauth_broker/api_key; " +
-    "'mcp_server' was deliberately dropped, see docs). Absent is the honest default and " +
-    "'agent_dom.connection_requirements' is omitted entirely rather than exported as an " +
-    "empty object. Unlike agent_panel, derivation from the plan's already-known connection " +
-    "facts (connection_contract / what_you_need) is expected, not declined. Every " +
+    "'mcp_server' was deliberately dropped, see docs). When absent, MAR-596 derives " +
+    "requirements only for agent_dom.connections entries already marked dash_managed and " +
+    "backed by one of those real connector flows; other inventory entries remain omitted " +
+    "instead of receiving a decorative button. Every " +
     "requirements_version:1 entry's connection_id MUST name an id this same export's " +
     "agent_dom.connections[] already declares — export_build_brief refuses the call " +
     "otherwise, since an unlinked id draws no Connect button in DASH. See " +
@@ -2659,9 +2657,9 @@ export type ExportBuildBriefInput = {
   dash_broker_available?: boolean;
   /** MAR-507 companion: declared input roles, in the plan's own vocabulary. Absent/empty omits agent_dom.task_inputs entirely. */
   task_inputs?: AgentDomTaskInputRole[];
-  /** ADR 0008 / MAR-555: the author's declared panel. Absent omits agent_dom.panel entirely; nothing is derived. */
+  /** ADR 0008 / MAR-596: explicit author panel override; absent emits a DASH-facts-only run-history panel. */
   agent_panel?: AgentDomPanel;
-  /** MAR-569: what this agent needs connected. Absent omits agent_dom.connection_requirements entirely. */
+  /** MAR-569 / MAR-596: explicit requirements override; absent derives only actionable DASH-managed flows. */
   connection_requirements?: AgentDomConnectionRequirements;
   agent_name?: string;
   // ── MAR-460: public-runner eligibility; see src/lib/runnerEligibility.ts ──

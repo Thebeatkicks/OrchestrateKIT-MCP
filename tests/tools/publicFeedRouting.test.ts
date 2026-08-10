@@ -62,10 +62,17 @@ describe("MAR-455 exact public-feed planner and export proof", () => {
     expect(plan.goal_fidelity.looks_like_paraphrase).toBe(false);
     expect(ids).toContain("public_feed_fetch");
     expect(ids).toContain("scheduled_trigger");
+    // MAR-596: this is injected for the scheduled public-feed component pair,
+    // not because the bare prose verb "write" fuzzily matches audit_log.
+    expect(ids).toContain("audit_log");
     expect(ids).not.toContain("page_monitor");
     expect(ids).not.toContain("data_scraper");
     expect(ids).not.toContain("source_retrieval");
     expect(ids).not.toContain("external_publish");
+    expect(plan.coverage.unmatched_demand).toEqual([
+      "write me a daily digest file on my computer",
+    ]);
+    expect(plan.coverage.coverage_label).toBe("partial");
     expect(plan.what_you_need).toEqual([]);
     expect(plan.connection_contract).toEqual([]);
     expect(plan.summary_markdown).not.toContain("Firecrawl");

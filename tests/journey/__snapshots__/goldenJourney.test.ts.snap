@@ -1532,7 +1532,7 @@ exports[`MAR-387 — golden journey (mechanical client, always picks ⭐) > vagu
     {
       "automation_clearance_level": "L3",
       "clarifying_question_ids": [],
-      "coverage_label": "partial",
+      "coverage_label": "poor",
       "enforced_approval_gates": [
         "human_approval_gate",
       ],

@@ -618,6 +618,48 @@ function agentDomConnections(input: {
   });
 }
 
+function connectionRequirementId(connectionId: string): string {
+  const base = connectionId
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "connection";
+  return `${base}_connection`.slice(0, 64).replace(/_+$/g, "");
+}
+
+/**
+ * Derive only requirements DASH can actually connect. The inventory's
+ * `dash_managed` ownership is the proof that a DASH flow is actionable; an
+ * agent-managed or external credential stays inventory-only rather than
+ * receiving a decorative Connect button (MAR-596/F5).
+ */
+function derivedConnectionRequirements(
+  connections: AgentDomConnection[],
+): AgentDomConnectionRequirements | undefined {
+  const requirements: AgentDomConnectionRequirementV1[] = [];
+  for (const connection of connections) {
+    if (connection.ownership !== "dash_managed") continue;
+    const hasOAuth = connection.fields.some((field) => field.kind === "oauth_reauthorization");
+    const hasSecret = connection.fields.some((field) => field.kind === "secret");
+    const connectorKind: AgentDomConnectorKindV1 | null =
+      hasOAuth && connection.provider.startsWith("google-")
+        ? "google_oauth_broker"
+        : hasSecret
+          ? "api_key"
+          : null;
+    if (!connectorKind) continue;
+    requirements.push({
+      id: connectionRequirementId(connection.id),
+      name: `Your ${connection.label}`,
+      connector_kind: connectorKind,
+      connection_id: connection.id,
+      why: connection.purpose,
+    });
+  }
+  return requirements.length > 0
+    ? { requirements_version: 1, requirements }
+    : undefined;
+}
+
 function surfaceLocation(
   axis: PlacementAxis | undefined,
   fallback: string,
@@ -692,6 +734,7 @@ export type AgentManifest = {
   manifest_version: typeof MANIFEST_VERSION;
   agent: {
     name: string;
+    display_name: string;
     goal: string;
     plan_source: "playbook" | "composed";
     playbook_id: string;
@@ -783,17 +826,10 @@ export type AgentManifest = {
      */
     task_inputs?: AgentDomTaskInputRole[];
     /**
-     * ADR 0008 (MAR-555): the author's declared panel. Omitted — never an
-     * empty object — when nothing declared one, the exact rule `task_inputs`
-     * ships with: absence means "this agent declares no panel", and must
-     * never be read as "render something anyway".
-     *
-     * The emitter does NOT derive one. See
-     * docs/ADR-MAR-555-agent-panel-emission.md for why the derivation ADR 0008
-     * permits ("an output_location-bearing route gets a single report
-     * section") is declined on this side: every v1 section that renders an
-     * agent's output binds to an artifact ROLE, and a plan declares no
-     * artifact roles.
+     * ADR 0008 / MAR-596: an explicit author panel wins. Otherwise the exporter
+     * emits one closed-vocabulary metrics section sourced only from DASH facts
+     * (run count/time/verdict). The default binds no artifact role and therefore
+     * makes no claim about output the runtime did not declare.
      */
     panel?: AgentDomPanel;
     /**
@@ -830,6 +866,51 @@ export function agentSlug(playbookId: string, goal: string): string {
     .replace(/^-|-$/g, "")
     .slice(0, 60);
   return slug || "agent";
+}
+
+/** Human-readable counterpart to the stable machine slug used by DASH. */
+export function agentDisplayName(agentName: string): string {
+  const words = agentName
+    .trim()
+    .split(/[-_\s]+/)
+    .filter(Boolean);
+  if (words.length === 0) return "Agent";
+  const acronyms = new Set(["ai", "api", "crm", "csv", "llm", "mcp", "pdf", "pr", "rss", "sms", "sql"]);
+  return words
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      if (acronyms.has(lower)) return lower.toUpperCase();
+      return index === 0 ? lower[0]!.toUpperCase() + lower.slice(1) : lower;
+    })
+    .join(" ");
+}
+
+/**
+ * Safe default panel for every exported agent. All values are DASH-observed
+ * facts, so the emitter does not invent an artifact role or imply that a route
+ * writes output into DASH (the reason MAR-555 declined a report default).
+ */
+export function defaultAgentPanel(displayName: string): AgentDomPanel {
+  return {
+    panel_version: 1,
+    title: displayName,
+    sections: [
+      {
+        id: "run_history",
+        type: "metrics",
+        label: "Run history",
+        items: [
+          { id: "run_count", label: "Runs", source: { kind: "dash_fact", fact: "run_count" } },
+          { id: "last_run_at", label: "Last run", source: { kind: "dash_fact", fact: "last_run_at" } },
+          {
+            id: "last_run_verdict",
+            label: "Last verdict",
+            source: { kind: "dash_fact", fact: "last_run_verdict" },
+          },
+        ],
+      },
+    ],
+  };
 }
 
 /**
@@ -918,16 +999,14 @@ export function buildAgentManifest(input: {
    */
   task_inputs?: AgentDomTaskInputRole[];
   /**
-   * ADR 0008 (MAR-555): the author's declared panel, passed through verbatim.
-   * Absent is the honest default and omits `agent_dom.panel` entirely; there
-   * is no derivation, because nothing in a plan names an artifact role for a
-   * section to bind to (docs/ADR-MAR-555-agent-panel-emission.md).
+   * ADR 0008: an explicit author panel, passed through verbatim. When absent,
+   * MAR-596 emits a DASH-facts-only metrics panel with no artifact binding.
    */
   panel?: AgentDomPanel;
   /**
-   * MAR-569: the author's declared connection requirements, passed through
-   * verbatim after the join check below. Absent is the honest default and
-   * omits `agent_dom.connection_requirements` entirely.
+   * MAR-569: an explicit connection-requirements declaration, passed through
+   * verbatim after the join check. When absent, MAR-596 derives requirements
+   * only for DASH-managed inventory entries whose connector flow is known.
    */
   connection_requirements?: AgentDomConnectionRequirements;
 }): AgentManifest {
@@ -963,15 +1042,26 @@ export function buildAgentManifest(input: {
     `${agentName}-interaction`,
   );
   const connections = input.connections ?? [];
+  const domConnections = agentDomConnections({
+    connections,
+    credentials: input.credential_requirements ?? [],
+    routeSteps: input.route_steps,
+    runtimeKind,
+  });
+  const connectionRequirements =
+    input.connection_requirements ?? derivedConnectionRequirements(domConnections);
   validateConnectionRequirementsJoin(
-    input.connection_requirements,
-    connections.map((connection) => connection.connection_id),
+    connectionRequirements,
+    domConnections.map((connection) => connection.id),
   );
+  const displayName = agentDisplayName(agentName);
+  const panel = input.panel ?? defaultAgentPanel(displayName);
 
   return {
     manifest_version: MANIFEST_VERSION,
     agent: {
       name: agentName,
+      display_name: displayName,
       goal: input.goal,
       plan_source: input.plan_source,
       playbook_id: input.playbook_id,
@@ -1043,25 +1133,18 @@ export function buildAgentManifest(input: {
         control: controlLocation ? [controlLocation] : [],
         interaction: interactionLocation ? [interactionLocation] : [],
       },
-      connections: agentDomConnections({
-        connections,
-        credentials: input.credential_requirements ?? [],
-        routeSteps: input.route_steps,
-        runtimeKind,
-      }),
+      connections: domConnections,
       ...(input.task_inputs && input.task_inputs.length > 0
         ? { task_inputs: input.task_inputs }
         : {}),
-      // ADR 0008: conditional, never `{}` — DASH reads an empty object as a
-      // panel that declared no sections, which its own schema refuses
-      // (`sections` is required, minItems 1). Absence is the only honest way
-      // to say "no panel".
-      ...(input.panel ? { panel: input.panel } : {}),
-      // MAR-569: conditional, never `{}` for the same reason `panel` is —
-      // DASH's schema requires `requirements` with minItems 1, and absence is
-      // the only honest way to say "this agent declared no requirements".
-      ...(input.connection_requirements
-        ? { connection_requirements: input.connection_requirements }
+      // ADR 0008 / MAR-596: always a valid declaration, never `{}`. An author
+      // panel wins; otherwise this is the DASH-facts-only default above.
+      panel,
+      // MAR-569 / MAR-596: explicit declarations win. Derived requirements are
+      // emitted only for actionable DASH connector flows; no requirements still
+      // means honest absence, never `{}`.
+      ...(connectionRequirements
+        ? { connection_requirements: connectionRequirements }
         : {}),
       control: {
         supported,

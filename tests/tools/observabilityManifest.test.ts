@@ -62,6 +62,7 @@ function planAndBrief(
     trigger_explanation?: TriggerExplanation;
     cadence_enabled?: boolean;
     dash_broker_available?: boolean;
+    agent_name?: string;
   } = {},
 ) {
   const plan = planWorkflow({ goal, must_have_capabilities: [], must_avoid: [] }, registry);
@@ -93,6 +94,7 @@ function planAndBrief(
     output_location: opts.output_location ?? "",
     cadence_enabled: opts.cadence_enabled,
     dash_broker_available: opts.dash_broker_available,
+    agent_name: opts.agent_name,
     generated_at: "2026-07-05T00:00:00Z", // deterministic for assertions
     llm_provider: "anthropic",
   });
@@ -436,6 +438,75 @@ describe("MAR-296 — manifest content is deterministic + registry-grounded", ()
   it("echoes output_location into monitoring", () => {
     const b = planAndBrief(LEAD_GOAL, { output_location: "HubSpot notes + Gmail drafts" });
     expect(b.agent_manifest.monitoring.output_location).toBe("HubSpot notes + Gmail drafts");
+  });
+});
+
+describe("MAR-596 — the attended-run manifest fields are populated", () => {
+  it("feeds DASH's model, requirements, display-name, and panel readers in one export", () => {
+    const b = planAndBrief("summarise today's support emails into a few bullet points", {
+      agent_name: "support-mail-digest",
+      build_target: "cursor",
+      output_location: "DASH Runs and reports",
+      dash_broker_available: true,
+      runtime_requirements: LOCAL_RUNNER_REQUIREMENTS,
+      runtime_recommendation: LOCAL_RUNNER_RUNTIME,
+      control_surface: DASH_CONTROL_SURFACE,
+      interaction_surface: DASH_INTERACTION_SURFACE,
+      trigger_explanation: MANUAL_RUNNER_TRIGGER,
+    });
+
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect(b.agent_manifest.agent).toMatchObject({
+      name: "support-mail-digest",
+      display_name: "Support mail digest",
+    });
+    expect(
+      b.agent_manifest.planned_route.find(
+        (step) => step.component_id === "research_synthesis",
+      ),
+    ).toMatchObject({ model_tier: "frontier", default_model_level: "frontier" });
+    expect(b.agent_manifest.agent_dom.panel).toEqual({
+      panel_version: 1,
+      title: "Support mail digest",
+      sections: [
+        {
+          id: "run_history",
+          type: "metrics",
+          label: "Run history",
+          items: [
+            { id: "run_count", label: "Runs", source: { kind: "dash_fact", fact: "run_count" } },
+            { id: "last_run_at", label: "Last run", source: { kind: "dash_fact", fact: "last_run_at" } },
+            {
+              id: "last_run_verdict",
+              label: "Last verdict",
+              source: { kind: "dash_fact", fact: "last_run_verdict" },
+            },
+          ],
+        },
+      ],
+    });
+
+    const requirements = b.agent_manifest.agent_dom.connection_requirements;
+    expect(requirements).toEqual({
+      requirements_version: 1,
+      requirements: [
+        {
+          id: "gmail_connection",
+          name: "Your Gmail",
+          connector_kind: "google_oauth_broker",
+          connection_id: "gmail",
+          why: "Read your inbox",
+        },
+      ],
+    });
+    const connectionIds = new Set(
+      b.agent_manifest.agent_dom.connections.map((connection) => connection.id),
+    );
+    for (const requirement of requirements?.requirements ?? []) {
+      if ("connection_id" in requirement && typeof requirement.connection_id === "string") {
+        expect(connectionIds.has(requirement.connection_id)).toBe(true);
+      }
+    }
   });
 });
 

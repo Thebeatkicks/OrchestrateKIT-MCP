@@ -716,7 +716,7 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
   "playbook": {
     "confidence": 0.82,
     "id": "codebase_agent_workflow",
-    "precision": 0.86,
+    "precision": 1,
     "recall": 0.75,
     "route_id": "codebase_agent_route_v1",
     "title": "Codebase Agent Workflow",
@@ -997,7 +997,7 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
       "step": 8,
     },
   ],
-  "route_score": 81,
+  "route_score": 84,
   "route_status": "validated",
   "safety_review": {
     "approval_gates_required": [],
@@ -2586,7 +2586,7 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
   "playbook": {
     "confidence": 0.82,
     "id": "codebase_agent_workflow",
-    "precision": 0.86,
+    "precision": 1,
     "recall": 0.75,
     "route_id": "codebase_agent_route_v1",
     "title": "Codebase Agent Workflow",
@@ -2867,7 +2867,7 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
       "step": 8,
     },
   ],
-  "route_score": 81,
+  "route_score": 84,
   "route_status": "validated",
   "safety_review": {
     "approval_gates_required": [],
@@ -3306,6 +3306,7 @@ exports[`MAR-249 — export_build_brief output schema > compact structuredConten
   "agent_manifest": {
     "agent": {
       "build_target": "code",
+      "display_name": "Read emails detect leads and write a note to the CRM for eac",
       "goal": "read emails, detect leads and write a note to the CRM for each lead",
       "name": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac",
       "plan_source": "playbook",
@@ -3444,6 +3445,43 @@ exports[`MAR-249 — export_build_brief output schema > compact structuredConten
         },
       },
       "memory": [],
+      "panel": {
+        "panel_version": 1,
+        "sections": [
+          {
+            "id": "run_history",
+            "items": [
+              {
+                "id": "run_count",
+                "label": "Runs",
+                "source": {
+                  "fact": "run_count",
+                  "kind": "dash_fact",
+                },
+              },
+              {
+                "id": "last_run_at",
+                "label": "Last run",
+                "source": {
+                  "fact": "last_run_at",
+                  "kind": "dash_fact",
+                },
+              },
+              {
+                "id": "last_run_verdict",
+                "label": "Last verdict",
+                "source": {
+                  "fact": "last_run_verdict",
+                  "kind": "dash_fact",
+                },
+              },
+            ],
+            "label": "Run history",
+            "type": "metrics",
+          },
+        ],
+        "title": "Read emails detect leads and write a note to the CRM for eac",
+      },
       "runtime": {
         "availability": "unknown",
         "class": "other",
@@ -4090,6 +4128,7 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
   "agent_manifest": {
     "agent": {
       "build_target": "code",
+      "display_name": "Read emails detect leads and write a note to the CRM for eac",
       "goal": "read emails, detect leads and write a note to the CRM for each lead",
       "name": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac",
       "plan_source": "playbook",
@@ -4228,6 +4267,43 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
         },
       },
       "memory": [],
+      "panel": {
+        "panel_version": 1,
+        "sections": [
+          {
+            "id": "run_history",
+            "items": [
+              {
+                "id": "run_count",
+                "label": "Runs",
+                "source": {
+                  "fact": "run_count",
+                  "kind": "dash_fact",
+                },
+              },
+              {
+                "id": "last_run_at",
+                "label": "Last run",
+                "source": {
+                  "fact": "last_run_at",
+                  "kind": "dash_fact",
+                },
+              },
+              {
+                "id": "last_run_verdict",
+                "label": "Last verdict",
+                "source": {
+                  "fact": "last_run_verdict",
+                  "kind": "dash_fact",
+                },
+              },
+            ],
+            "label": "Run history",
+            "type": "metrics",
+          },
+        ],
+        "title": "Read emails detect leads and write a note to the CRM for eac",
+      },
       "runtime": {
         "availability": "unknown",
         "class": "other",
@@ -5164,6 +5240,7 @@ exports[`MAR-249 — export_build_brief output schema > runtime structuredConten
   "agent_manifest": {
     "agent": {
       "build_target": "code",
+      "display_name": "Read emails detect leads and write a note to the CRM for eac",
       "goal": "read emails, detect leads and write a note to the CRM for each lead",
       "name": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac",
       "plan_source": "playbook",
@@ -5302,6 +5379,43 @@ exports[`MAR-249 — export_build_brief output schema > runtime structuredConten
         },
       },
       "memory": [],
+      "panel": {
+        "panel_version": 1,
+        "sections": [
+          {
+            "id": "run_history",
+            "items": [
+              {
+                "id": "run_count",
+                "label": "Runs",
+                "source": {
+                  "fact": "run_count",
+                  "kind": "dash_fact",
+                },
+              },
+              {
+                "id": "last_run_at",
+                "label": "Last run",
+                "source": {
+                  "fact": "last_run_at",
+                  "kind": "dash_fact",
+                },
+              },
+              {
+                "id": "last_run_verdict",
+                "label": "Last verdict",
+                "source": {
+                  "fact": "last_run_verdict",
+                  "kind": "dash_fact",
+                },
+              },
+            ],
+            "label": "Run history",
+            "type": "metrics",
+          },
+        ],
+        "title": "Read emails detect leads and write a note to the CRM for eac",
+      },
       "runtime": {
         "availability": "unknown",
         "class": "other",

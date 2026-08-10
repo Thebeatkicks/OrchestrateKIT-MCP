@@ -1,6 +1,6 @@
 # ADR MAR-583 — default model routing is a per-step level, never a model name
 
-**Status:** Accepted for the MCP emitter; typed DASH schema/UI consumption pending
+**Status:** Accepted; typed DASH schema field merged
 **Date:** 2026-08-10
 **Related:** MAR-583, MAR-299, MAR-555, MAR-578
 
@@ -13,12 +13,10 @@ and a later runtime can resolve to an actual model. A provider or model name is
 not stable enough for a portable manifest, and one agent can legitimately need
 different capability floors for extraction, synthesis, and code-writing steps.
 
-DASH master `0a023585f6e3a82b550a933fd26697ac6fd16170` does not yet declare a typed
-property for this default. Its manifest-v2 `planned_route.items` schema is open
-to additive properties, so the MCP can emit the declaration without producing
-a manifest DASH rejects. That compatibility is not evidence that DASH consumes
-the field; the DASH schema, settings UI, deploy propagation, and run-row model
-recording remain the DASH half of MAR-583.
+DASH added the typed field in `d9781b9` and it is present on master
+`04dc3469402b9a31fff9097ef651986966a975ae`. The MCP fixture now pins that
+contract directly rather than relying on the planned-route item's additive
+openness.
 
 ## Decision
 
@@ -44,17 +42,10 @@ rule: absence states that nothing was declared.
 
 ## Contract mirror and dependency
 
-The MCP fixture was structurally re-synced against DASH master
-`0a023585f6e3a82b550a933fd26697ac6fd16170` in the same implementation commit.
-The schema has not changed semantically since the prior pin, so its semantic
-SHA-256 remains `6e04094d08fe2f637b7e46ec29a3d1b75f21af58a1b5a051d524b2f9689d64c6`;
-only `contract.lock.json.canonical_commit` advances.
-
-DASH still needs to declare `default_model_level` on the planned-route item
-before treating the field as a typed contract and before surfacing it in the
-settings UI or deploy bundle. Until that lands, the MCP output is an accepted
-additive extension, not a claim of DASH-side behavior. The dependency is
-recorded on MAR-583 rather than blocking the MCP implementation.
+MAR-596 re-synced the MCP fixture against DASH master
+`04dc3469402b9a31fff9097ef651986966a975ae`. The semantic SHA-256 is now
+`ce174cc6b8e568be86b1ad27615b73cd80b0b61f027477402a2f675a63993b56`,
+recorded with the canonical commit in `tests/fixtures/dash/contract.lock.json`.
 
 ## Alternatives rejected
 
@@ -70,6 +61,6 @@ recorded on MAR-583 rather than blocking the MCP implementation.
 ## Evidence boundary
 
 The MCP proof asserts all three mappings, honest absence on deterministic
-steps, absence of provider/model names, and validation against the pinned DASH
-schema. It does not prove DASH renders, propagates, or executes the defaults;
-those are the recorded companion dependency.
+steps, absence of provider/model names, and validation against the pinned typed
+DASH schema. It does not independently re-prove DASH's UI, deploy propagation,
+or runtime recording; those remain DASH-owned evidence.
