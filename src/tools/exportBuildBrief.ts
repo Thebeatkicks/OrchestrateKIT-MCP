@@ -2855,6 +2855,8 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     task_inputs: input.task_inputs,
     panel: input.agent_panel,
     connection_requirements: input.connection_requirements,
+    dash_broker_available: input.dash_broker_available,
+    llm_provider: input.llm_provider,
   });
 
   // MAR-460: assessed for every export, including the ones that supply nothing —

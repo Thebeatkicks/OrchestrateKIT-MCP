@@ -61,6 +61,7 @@ import { loadRegistry } from "../../src/registry/registryLoader.js";
 import {
   dashManifestProvider,
   dashBrokeredConnectionIds,
+  AI_PROVIDER_IDS,
 } from "../../src/lib/dashBrokerCatalog.js";
 import {
   CONNECTOR_KINDS_V1,
@@ -242,6 +243,13 @@ describe("MAR-477 — export_build_brief output vs the pinned DASH broker facts"
     expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
 
     for (const connection of b.agent_manifest.agent_dom.connections) {
+      // MAR-596/F14: the AI-provider connection is legitimately dash_managed
+      // through a wholly separate DASH subsystem — lib/ai/providers.ts's
+      // AI-key vault (MAR-582), not the OAuth broker lib/broker/providers.ts
+      // this fixture pins. It has its own dedicated assertions in the
+      // MAR-596/F14 describe block below, scoped to AI_PROVIDER_IDS rather
+      // than folded into a fixture that only ever named "google-gmail".
+      if ((AI_PROVIDER_IDS as readonly string[]).includes(connection.provider)) continue;
       const pinned = pinnedProfileFor(connection.provider);
       if (pinned) {
         expect(
@@ -577,6 +585,18 @@ describe("MAR-569 — export_build_brief emits agent_dom.connection_requirements
           connection_id: "gmail",
           why: "Read your inbox; Write drafts (never send)",
         },
+        {
+          // MAR-596/F14: LEAD_GOAL is AI-backed and this suite's planAndBrief
+          // always supplies llm_provider: "anthropic", so the same
+          // dash_broker_available signal also derives the AI-key requirement.
+          // Dedicated F14 assertions live in the MAR-596/F14 describe block
+          // below; this confirms it does not disturb Gmail's own derivation.
+          id: "anthropic_connection",
+          name: "Your Anthropic",
+          connector_kind: "api_key",
+          connection_id: "anthropic",
+          why: "Answer this agent's AI-backed steps",
+        },
       ],
     });
     const liveIds = new Set(b.agent_manifest.agent_dom.connections.map((connection) => connection.id));
@@ -680,5 +700,50 @@ describe("MAR-569 — export_build_brief emits agent_dom.connection_requirements
     } as unknown as AgentDomConnectionRequirements;
     const b = planAndBrief({ connection_requirements: requirements });
     expect(validateManifest(b.agent_manifest)).toBe(false);
+  });
+});
+
+/**
+ * MAR-596/F14 (coordinator relay, PR #183; DASH ADR 0013) — the held item:
+ * an emitted agent with an AI-backed step declares a real DASH AI-key
+ * connection (MAR-582), on the same v1 connection_requirements join MAR-578
+ * already enforces for every other DASH-managed connection. ADR 0013 settled
+ * that this needs no schema change; these assertions run through the exact
+ * public `export_build_brief` surface a caller uses, validated against DASH's
+ * own pinned schema, not against fixtures describing the MCP's own claims.
+ */
+describe("MAR-596/F14 — export_build_brief declares an AI-provider connection for AI-backed steps", () => {
+  it("presence: an AI-backed export with dash_broker_available names a real DASH AI provider, dash_managed, one secret field, no env-var delivery", () => {
+    // LEAD_GOAL is AI-backed (asserted by observabilityManifest.test.ts's own
+    // MAR-583 coverage) and this file's planAndBrief always chooses
+    // llm_provider: "anthropic" — DASH's own connection_provider spelling,
+    // unchanged.
+    const b = planAndBrief({ dash_broker_available: true });
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+
+    const ai = b.agent_manifest.agent_dom.connections.find((c) => c.id === "anthropic");
+    expect(ai, "an AI-backed, dash_broker_available export must declare the AI-provider connection").toBeDefined();
+    expect(ai?.provider).toBe("anthropic");
+    expect(AI_PROVIDER_IDS as readonly string[]).toContain(ai?.provider);
+    expect(ai?.ownership).toBe("dash_managed");
+    expect(ai?.fields).toHaveLength(1);
+    expect(ai?.fields[0]?.kind).toBe("secret");
+    // The DASH-side trap: `resolveCredentialTarget` refuses
+    // `brokered_provider_delivery` when an AI-provider secret field ALSO
+    // declares technical.environment_name. DASH's broker holds the key and
+    // answers on the agent's behalf; it never hands the key back as an env
+    // var, unlike every agent-managed credential field this repo emits.
+    expect(ai?.fields[0]?.technical?.environment_name).toBeUndefined();
+
+    const requirement = b.agent_manifest.agent_dom.connection_requirements?.requirements.find(
+      (r) => "connection_id" in r && r.connection_id === "anthropic",
+    );
+    expect(requirement, "MAR-578's join: a dash_managed connection with a secret field derives an api_key requirement").toBeDefined();
+    expect(requirement).toMatchObject({ connector_kind: "api_key", connection_id: "anthropic" });
+  });
+
+  it("absence: without dash_broker_available, no AI-provider connection is declared even though the step is AI-backed", () => {
+    const b = planAndBrief({});
+    expect(b.agent_manifest.agent_dom.connections.some((c) => c.id === "anthropic")).toBe(false);
   });
 });

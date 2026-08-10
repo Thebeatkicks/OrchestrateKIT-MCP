@@ -18,7 +18,7 @@
 
 import type { CredentialRequirement } from "./connectContract.js";
 import type { ConnectionRequirement } from "./connectionContract.js";
-import { dashManifestProvider } from "./dashBrokerCatalog.js";
+import { dashManifestProvider, type AiProviderId } from "./dashBrokerCatalog.js";
 import { McpToolError } from "./errors.js";
 import type {
   PlacementAxis,
@@ -618,6 +618,98 @@ function agentDomConnections(input: {
   });
 }
 
+/** DASH's friendly card title for the two AI providers the MCP can select today. */
+const AI_PROVIDER_LABELS: Record<Extract<AiProviderId, "anthropic" | "openrouter">, string> = {
+  anthropic: "Anthropic",
+  openrouter: "OpenRouter",
+};
+
+/**
+ * MAR-596/F14 (coordinator relay, PR #183; DASH ADR 0013): an emitted agent
+ * with at least one AI-backed step needs a real connection for DASH's
+ * "bring your own AI key" vault (MAR-582) to hold a key against —
+ * `AiKeyConnectionView` (orchestratedash `lib/ai/connection-view.ts`) renders
+ * straight from `agent_dom.connections`, not from a new manifest block. ADR
+ * 0013 settled that the manifest shape does not change for this: the agent
+ * declares the model-provider connection exactly like any other
+ * `dash_managed` connection, and DASH resolves it against a fleet-level
+ * connection that exists without any agent.
+ *
+ * `provider` must be one of DASH's own `AI_PROVIDER_IDS` (pinned in
+ * dashBrokerCatalog.ts) or DASH's `aiProviderFor` returns null and the row is
+ * skipped rather than rendered. It is exactly the caller's already-required
+ * `llm_provider` choice: `export_build_brief` forces one before any AI-backed
+ * export reaches here (see `buildLlmProviderNeedsInput`), and
+ * "anthropic"/"openrouter" already match DASH's `connection_provider`
+ * spelling 1:1 — no translation table the way Gmail needs.
+ * "deterministic_first" is the caller explicitly choosing to omit
+ * model-provider credentials (its own option copy in exportBuildBrief.ts, and
+ * the matching branch in `buildCredentialManifest` that pushes nothing);
+ * mirrored here rather than declaring a connection with no key behind it.
+ *
+ * Gated on `dashBrokerAvailable`, the same MAR-494 signal every other
+ * `dash_managed` connection uses: DASH's vault only exists where DASH is
+ * present, and emitting this unconditionally would assert DASH is installed
+ * on a machine the MCP has never observed.
+ *
+ * **The DASH-side trap this shape exists to avoid**: `resolveCredentialTarget`
+ * (orchestratedash `lib/connection-credentials.ts`) refuses a field with
+ * `brokered_provider_delivery` when a `secret` field recognised as an
+ * AI-provider key ALSO declares `technical.environment_name` — DASH's broker
+ * holds the key and answers on the agent's behalf; it never hands the key
+ * back as an env var. So this field carries no `technical` block at all,
+ * unlike the agent-managed credential fields `connectionFields` builds for
+ * every other provider.
+ */
+function aiProviderConnection(input: {
+  routeSteps: ManifestRouteStep[];
+  llmProvider?: "anthropic" | "openrouter" | "deterministic_first";
+  dashBrokerAvailable: boolean;
+  runtimeKind: AgentDomLocationKind;
+}): AgentDomConnection | undefined {
+  if (!input.dashBrokerAvailable) return undefined;
+  if (input.llmProvider !== "anthropic" && input.llmProvider !== "openrouter") return undefined;
+
+  const aiSteps = input.routeSteps.filter(
+    (step) => step.model_tier !== undefined && step.model_tier !== "none",
+  );
+  if (aiSteps.length === 0) return undefined;
+
+  const providerId = input.llmProvider;
+  const label = AI_PROVIDER_LABELS[providerId];
+  const ownership = ownershipForRuntime("dash_managed", input.runtimeKind);
+
+  return {
+    id: providerId,
+    provider: providerId,
+    label,
+    purpose: "Answer this agent's AI-backed steps",
+    ownership,
+    capabilities: aiSteps.map((step) => ({
+      id: stableId(`${providerId}.${step.component_id}`, providerId),
+      label: step.purpose || step.component_name || step.component_id,
+      access: "read" as const,
+    })),
+    fields: [
+      {
+        id: stableId(`${providerId}-api-key`, "connection-field"),
+        label: `${label} API key`,
+        purpose: `The API key DASH's vault holds so this agent's AI-backed steps can answer through ${label}.`,
+        kind: "secret",
+        required: true,
+      },
+    ],
+    validation_action: {
+      id: stableId(`test-${providerId}`, "test-connection"),
+      label:
+        ownership === "dash_managed"
+          ? `Reconnect, test, and switch ${label}`
+          : `Test ${label} connection`,
+      behavior: ownership === "dash_managed" ? "reconnect_test_switch" : "test",
+    },
+  };
+}
+
 function connectionRequirementId(connectionId: string): string {
   const base = connectionId
     .toLowerCase()
@@ -1009,6 +1101,20 @@ export function buildAgentManifest(input: {
    * only for DASH-managed inventory entries whose connector flow is known.
    */
   connection_requirements?: AgentDomConnectionRequirements;
+  /**
+   * MAR-596/F14: the caller's DASH-presence assertion, reused for the
+   * fleet-level AI-provider connection exactly as MAR-494 already uses it for
+   * every other `dash_managed` connection. Absent/false is the honest default
+   * — no model-provider connection is declared.
+   */
+  dash_broker_available?: boolean;
+  /**
+   * MAR-596/F14: which model provider the build's AI-backed steps use. Only
+   * "anthropic"/"openrouter" produce a DASH AI-key connection;
+   * "deterministic_first" and absence both mean no provider was chosen, so
+   * nothing is declared. See `aiProviderConnection`.
+   */
+  llm_provider?: "anthropic" | "openrouter" | "deterministic_first";
 }): AgentManifest {
   const agentName =
     input.agent_name?.trim() || agentSlug(input.playbook_id, input.goal);
@@ -1048,11 +1154,22 @@ export function buildAgentManifest(input: {
     routeSteps: input.route_steps,
     runtimeKind,
   });
+  // MAR-596/F14: appended after the registry-grounded connections, never
+  // replacing them — the AI-provider connection has no route component or
+  // acquisition-path story of its own, so it is not built through
+  // `agentDomConnections`'s generic connection-contract pipeline.
+  const aiConnection = aiProviderConnection({
+    routeSteps: input.route_steps,
+    llmProvider: input.llm_provider,
+    dashBrokerAvailable: input.dash_broker_available === true,
+    runtimeKind,
+  });
+  const allDomConnections = aiConnection ? [...domConnections, aiConnection] : domConnections;
   const connectionRequirements =
-    input.connection_requirements ?? derivedConnectionRequirements(domConnections);
+    input.connection_requirements ?? derivedConnectionRequirements(allDomConnections);
   validateConnectionRequirementsJoin(
     connectionRequirements,
-    domConnections.map((connection) => connection.id),
+    allDomConnections.map((connection) => connection.id),
   );
   const displayName = agentDisplayName(agentName);
   const panel = input.panel ?? defaultAgentPanel(displayName);
@@ -1133,7 +1250,7 @@ export function buildAgentManifest(input: {
         control: controlLocation ? [controlLocation] : [],
         interaction: interactionLocation ? [interactionLocation] : [],
       },
-      connections: domConnections,
+      connections: allDomConnections,
       ...(input.task_inputs && input.task_inputs.length > 0
         ? { task_inputs: input.task_inputs }
         : {}),
