@@ -3616,12 +3616,14 @@ exports[`MAR-249 — export_build_brief output schema > compact structuredConten
       },
       {
         "component_id": "intent_classifier",
+        "default_model_level": "cheap",
         "model_tier": "small",
         "risk_level": "low",
         "step": 3,
       },
       {
         "component_id": "email_draft",
+        "default_model_level": "standard",
         "model_tier": "standard",
         "risk_level": "medium",
         "step": 4,
@@ -3634,6 +3636,7 @@ exports[`MAR-249 — export_build_brief output schema > compact structuredConten
       },
       {
         "component_id": "crm_note_write",
+        "default_model_level": "cheap",
         "model_tier": "small",
         "risk_level": "high",
         "step": 6,
@@ -4397,12 +4400,14 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
       },
       {
         "component_id": "intent_classifier",
+        "default_model_level": "cheap",
         "model_tier": "small",
         "risk_level": "low",
         "step": 3,
       },
       {
         "component_id": "email_draft",
+        "default_model_level": "standard",
         "model_tier": "standard",
         "risk_level": "medium",
         "step": 4,
@@ -4415,6 +4420,7 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
       },
       {
         "component_id": "crm_note_write",
+        "default_model_level": "cheap",
         "model_tier": "small",
         "risk_level": "high",
         "step": 6,
@@ -5468,12 +5474,14 @@ exports[`MAR-249 — export_build_brief output schema > runtime structuredConten
       },
       {
         "component_id": "intent_classifier",
+        "default_model_level": "cheap",
         "model_tier": "small",
         "risk_level": "low",
         "step": 3,
       },
       {
         "component_id": "email_draft",
+        "default_model_level": "standard",
         "model_tier": "standard",
         "risk_level": "medium",
         "step": 4,
@@ -5486,6 +5494,7 @@ exports[`MAR-249 — export_build_brief output schema > runtime structuredConten
       },
       {
         "component_id": "crm_note_write",
+        "default_model_level": "cheap",
         "model_tier": "small",
         "risk_level": "high",
         "step": 6,

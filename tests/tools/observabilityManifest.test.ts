@@ -11,7 +11,10 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
-import { buildAgentManifest } from "../../src/lib/observabilityContract.js";
+import {
+  DEFAULT_MODEL_LEVELS,
+  buildAgentManifest,
+} from "../../src/lib/observabilityContract.js";
 import { exportBuildBrief } from "../../src/tools/exportBuildBrief.js";
 import {
   planWorkflow,
@@ -362,6 +365,45 @@ describe("MAR-296 — manifest content is deterministic + registry-grounded", ()
       expect(["low", "medium", "high", "critical"]).toContain(s.risk_level);
       expect(["none", "small", "standard", "frontier"]).toContain(s.model_tier);
     }
+  });
+
+  it("MAR-583 declares a provider-neutral default level on every AI-needing step only", () => {
+    const b = planAndBrief(LEAD_GOAL);
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect([...DEFAULT_MODEL_LEVELS]).toEqual(["cheap", "standard", "frontier"]);
+
+    const expectedByTier = {
+      none: undefined,
+      small: "cheap",
+      standard: "standard",
+      frontier: "frontier",
+    } as const;
+    const aiSteps = b.agent_manifest.planned_route.filter((step) => step.model_tier !== "none");
+    const deterministicSteps = b.agent_manifest.planned_route.filter(
+      (step) => step.model_tier === "none",
+    );
+
+    expect(aiSteps.length).toBeGreaterThan(0);
+    for (const step of aiSteps) {
+      expect(step.default_model_level).toBe(expectedByTier[step.model_tier]);
+      expect(DEFAULT_MODEL_LEVELS).toContain(step.default_model_level);
+    }
+    for (const step of deterministicSteps) {
+      expect("default_model_level" in step).toBe(false);
+    }
+
+    const frontier = planAndBrief("summarize these articles into a report");
+    expect(validateManifest(frontier.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(
+      true,
+    );
+    expect(
+      frontier.agent_manifest.planned_route.find(
+        (step) => step.component_id === "research_synthesis",
+      )?.default_model_level,
+    ).toBe("frontier");
+
+    const serializedLevels = JSON.stringify(aiSteps.map((step) => step.default_model_level));
+    expect(serializedLevels).not.toMatch(/anthropic|openai|gemini|claude|gpt/i);
   });
 
   it("carries the full v1 event set + env-var wiring", () => {
