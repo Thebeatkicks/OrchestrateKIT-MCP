@@ -17,6 +17,7 @@
 
 import type { CapabilityMatch } from "./capabilityMatcher.js";
 import { isNegatedInContext } from "./capabilityMatcher.js";
+import { containsPhrase } from "../lib/constraintSignals.js";
 
 export type CoverageLabel = "full" | "partial" | "poor";
 
@@ -188,6 +189,16 @@ const APPROVAL_BINDING_PHRASES = [
   "cannot be changed after i approve",
   "unchanged after approval",
   "tamper-proof approval",
+  // MAR-580: the original LAB black-box post's own compliance vocabulary. The
+  // gate now hears these phrases, but it still does not bind an approval
+  // identity to the executed payload (MAR-540/561), so coverage must say so
+  // instead of letting the new hint absorb the concern.
+  "who authorized it",
+  "who authorised it",
+  "tied to authorization",
+  "tied to authorisation",
+  "tied to who authorized",
+  "tied to who authorised",
 ];
 
 /**
@@ -584,7 +595,7 @@ export function computeCoverage(input: CoverageInput): Coverage {
     // was absorbing. Checked before the lexicon so that claim cannot dismiss it.
     if (
       APPROVAL_BINDING_PHRASES.some(
-        (p) => clauseLower.includes(p) && !isNegatedInContext(goalLower, p),
+        (p) => containsPhrase(clauseLower, p) && !isNegatedInContext(goalLower, p),
       ) &&
       !finalComponentIds.some((id) => APPROVAL_BINDING_COMPONENTS.has(id))
     ) {

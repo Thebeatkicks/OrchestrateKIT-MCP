@@ -2559,6 +2559,40 @@ const KEYWORD_HINTS: Record<string, string[]> = {
   persist: ["state_store"],
 };
 
+// MAR-580: approval language from the five original LAB signal-intake posts.
+//
+// The black-box post never says "approve" or "approval". It asks who
+// "authorized" an action and for every step to be "tied to authorization";
+// the governance post uses the British spelling "authorisation". Those are
+// ordinary human-approval words in audit/compliance language, not matcher
+// jargon, and previously never reached human_approval_gate. Sign-off wording
+// had the same hole even though our own plain-language risk copy uses it.
+//
+// This is deliberately NOT folded into KEYWORD_HINTS because that table still
+// uses String.includes for long-established compatibility. New vocabulary must
+// keep MAR-529's whole-word discipline: "unauthorized" must not contain an
+// "authorized" approval signal. Authorization also has a second, technical
+// meaning in this product, so OAuth/header/token and sender-authorization
+// language is excluded rather than turning a Connect/authentication goal into a
+// human approval workflow.
+const HUMAN_SIGN_OFF_HINTS = ["sign-off", "sign off", "signed-off", "signed off"];
+const AUTHORIZATION_HINT_PATTERN =
+  /(?<!\w)(?:authorize|authorizes|authorized|authorizing|authorization|authorise|authorises|authorised|authorising|authorisation)(?!\w)/g;
+const TECHNICAL_AUTHORIZATION_CONTEXT =
+  /\b(?:oauth|bearer|header|token|scope|credential|sender|caller|allowlist|signature|login|sign-in)\b/;
+
+/** True when the goal uses authorization/sign-off as human approval language. */
+export function hasHumanApprovalLanguage(goalLower: string): boolean {
+  if (HUMAN_SIGN_OFF_HINTS.some((hint) => containsPhrase(goalLower, hint))) return true;
+
+  for (const match of goalLower.matchAll(AUTHORIZATION_HINT_PATTERN)) {
+    const start = Math.max(0, match.index - 48);
+    const end = Math.min(goalLower.length, match.index + match[0].length + 48);
+    if (!TECHNICAL_AUTHORIZATION_CONTEXT.test(goalLower.slice(start, end))) return true;
+  }
+  return false;
+}
+
 /**
  * MAR-253: weekday / clock-time schedule signals. "Every morning" reached
  * scheduled_trigger via its phrase hint, but "Every Monday at 8am" did not —
@@ -3097,6 +3131,14 @@ export function matchCapabilities(
         if (domainAllowed.has(id)) bump(id, 2, keyword, "hint");
       }
     }
+  }
+
+  // MAR-580: compliance/audit language reaches the same gate as
+  // approve/approval, but only through the whole-word, auth-context-aware path
+  // above. The evidence token names what the user actually wrote rather than
+  // translating it into matcher vocabulary.
+  if (domainAllowed.has("human_approval_gate") && hasHumanApprovalLanguage(goalLower)) {
+    bump("human_approval_gate", 2, "authorization or sign-off", "hint");
   }
 
   // Pass 1b (MAR-253): weekday/clock schedule signal — regex, hint-strength.
