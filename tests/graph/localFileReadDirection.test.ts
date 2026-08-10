@@ -229,16 +229,13 @@ describe("summary matching is word-aligned, not bare substring (MAR-550)", () =>
 // ── Recorded limits, asserted rather than hidden (MAR-529 discipline) ────────
 
 describe("MAR-550 recorded limits", () => {
-  it("a write-BACK with no named destination loses file_storage, and coverage does not report it", () => {
-    // Both halves are stated on purpose. Suppression is right on its own terms —
-    // file_storage appends to a destination and cannot edit rows in place. But
-    // the write-back does NOT then surface as a gap: the clause "write the
-    // result back" carries the demand verb "write", and `audit_log`
-    // independently claims that same word, so the clause reads as covered.
-    // A coverage-lexicon limitation, not something this fix introduced.
+  it("a write-BACK with no named destination loses file_storage, and coverage now reports it", () => {
+    // file_storage appends to a destination and cannot edit rows in place.
+    // MAR-596/F1 removes audit_log's false bare-"write" match, so that unrelated
+    // safety component no longer hides the genuinely uncovered write-back.
     const goal = "load a spreadsheet from disk, clean the messy rows, and write the result back";
     expect(routeIds(goal)).not.toContain("file_storage");
-    expect(plan(goal).coverage.unmatched_demand.join(" ")).not.toContain("write the result back");
+    expect(plan(goal).coverage.unmatched_demand.join(" ")).toContain("write the result back");
   });
 
   it("a filename period no longer splits a clause into a fabricated gap", () => {

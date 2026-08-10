@@ -65,7 +65,7 @@ export const ALWAYS_REQUIRES_GATE = new Set([
   "gmail_draft_write",
 ]);
 
-/** External-write components that always require audit_log. */
+/** Components whose external action always requires audit_log. */
 const ALWAYS_RECOMMEND_AUDIT = new Set([
   "external_publish",
   "optional_email_send",
@@ -95,6 +95,17 @@ const ALWAYS_RECOMMEND_AUDIT = new Set([
   // approved it, and — critically — that it was SAVED and not sent.
   "gmail_draft_write",
 ]);
+
+/**
+ * A scheduled anonymous feed read is a deliberately narrow operational-audit
+ * case: the log records fetched/empty/failed runs so a missed local digest is
+ * diagnosable. Keeping this as a component-pair policy means the MAR-455/456
+ * route retains its audit trail without treating the bare prose verb `write`
+ * as a request for audit_log (MAR-596 F1).
+ */
+function needsScheduledFeedAudit(selectedIds: ReadonlySet<string>): boolean {
+  return selectedIds.has("scheduled_trigger") && selectedIds.has("public_feed_fetch");
+}
 
 /**
  * External-write components that must always be preceded by schema_validation
@@ -141,7 +152,8 @@ export type AugmentResult = {
  * 2. Any requires edge from a selected component to human_approval_gate → add gate.
  * 3. Any high/critical risk component without a gate → add gate.
  * 4. If any component is in ALWAYS_REQUIRES_VALIDATION → add schema_validation.
- * 5. If any component is in ALWAYS_RECOMMEND_AUDIT → add audit_log.
+ * 5. If any component is in ALWAYS_RECOMMEND_AUDIT, or the route is a
+ *    scheduled public-feed read, → add audit_log.
  * 6. Walk requires + must_run_before chains for all augmenter-added components
  *    (worklist) until stable.
  */
@@ -202,7 +214,9 @@ export function augmentWithSafety(
   }
 
   // ── Rule 5: add audit_log for external actions ──
-  const needsAudit = selected.some((c) => ALWAYS_RECOMMEND_AUDIT.has(c.id));
+  const needsAudit =
+    selected.some((c) => ALWAYS_RECOMMEND_AUDIT.has(c.id)) ||
+    needsScheduledFeedAudit(selectedIds);
   if (needsAudit && inject(AUDIT_LOG_ID)) {
     added_audit = true;
   }

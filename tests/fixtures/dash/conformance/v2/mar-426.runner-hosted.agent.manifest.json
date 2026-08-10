@@ -2,6 +2,7 @@
   "manifest_version": 2,
   "agent": {
     "name": "hubspot-contact-reporter",
+    "display_name": "Hubspot contact reporter",
     "goal": "Read HubSpot contacts on request and write a local JSON report.",
     "plan_source": "composed",
     "playbook_id": "",
@@ -174,6 +175,43 @@
         }
       }
     ],
+    "panel": {
+      "panel_version": 1,
+      "title": "Hubspot contact reporter",
+      "sections": [
+        {
+          "id": "run_history",
+          "type": "metrics",
+          "label": "Run history",
+          "items": [
+            {
+              "id": "run_count",
+              "label": "Runs",
+              "source": {
+                "kind": "dash_fact",
+                "fact": "run_count"
+              }
+            },
+            {
+              "id": "last_run_at",
+              "label": "Last run",
+              "source": {
+                "kind": "dash_fact",
+                "fact": "last_run_at"
+              }
+            },
+            {
+              "id": "last_run_verdict",
+              "label": "Last verdict",
+              "source": {
+                "kind": "dash_fact",
+                "fact": "last_run_verdict"
+              }
+            }
+          ]
+        }
+      ]
+    },
     "control": {
       "supported": true,
       "command_version": 1,

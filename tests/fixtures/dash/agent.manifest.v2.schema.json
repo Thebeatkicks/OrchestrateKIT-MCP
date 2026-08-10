@@ -96,6 +96,13 @@
               "standard",
               "frontier"
             ]
+          },
+          "default_model_level": {
+            "enum": [
+              "cheap",
+              "standard",
+              "frontier"
+            ]
           }
         }
       }

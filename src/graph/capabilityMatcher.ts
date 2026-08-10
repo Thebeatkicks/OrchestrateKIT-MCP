@@ -2767,8 +2767,11 @@ function tokenize(text: string): string[] {
 /**
  * Tokens too generic to be meaningful as capability/summary matching signals.
  *
- * Applied only to the cap/summary substring passes — keyword hints and
- * id/name segment matching are unaffected.
+ * Applied to the cap/summary substring passes — keyword hints and most id/name
+ * segments remain unaffected. `out` is also blocked explicitly in the identifier
+ * pass below: `out` in `fan_out_collector` is still the English preposition in
+ * "out of my Notion database" unless the goal says the dedicated `fan out` hint
+ * (MAR-596/F1).
  *
  * Key examples of why each group is here:
  *   - English function words ("and", "the", "for", …): appear inside compound
@@ -2787,7 +2790,7 @@ const MATCH_STOPWORDS = new Set([
   "that", "this", "from", "with", "when", "then", "into", "onto", "over",
   "under", "also", "each", "both", "been", "will", "have", "more", "than",
   "what", "when", "they", "them", "some", "such", "only", "very", "well",
-  "your", "just", "even", "most", "like", "make", "take",
+  "your", "just", "even", "most", "like", "make", "take", "out",
   // Generic architectural nouns that appear in nearly every component summary
   "workflow", "process", "system", "service", "agent", "step", "task",
   "item", "data", "input", "output", "result", "value", "type", "list",
@@ -3113,6 +3116,9 @@ export function matchCapabilities(
   const goalTokens = tokenize(goalNeutralized);
   const tokenSet = new Set(goalTokens);
   const mustAvoidSet = new Set(mustAvoid.map((s) => s.toLowerCase()));
+  const hasExplicitFanOutContext = EXPLICIT_FAN_OUT_SIGNALS.some((signal) =>
+    goalLower.includes(signal),
+  );
 
   // ── Phase 1: classify domains ──
   const goalDomains = classifyGoalDomains(goal);
@@ -3348,15 +3354,22 @@ export function matchCapabilities(
     const nameWords = component.name.toLowerCase().split(/[^a-z0-9]+/);
     const identifierTokens = new Set([...idSegments, ...nameWords]);
     for (const seg of identifierTokens) {
-      if (seg.length > 2 && tokenSet.has(seg)) {
+      if (
+        seg.length > 2 &&
+        (seg !== "out" || hasExplicitFanOutContext) &&
+        tokenSet.has(seg)
+      ) {
         bump(component.id, 2, seg, "segment");
       }
     }
 
     for (const token of goalTokens) {
-      if (MATCH_STOPWORDS.has(token)) continue;
-      // Capability substring match
+      if (MATCH_STOPWORDS.has(token) && !(token === "out" && hasExplicitFanOutContext)) continue;
+      // Capability substring match. MAR-596's bare `write` cannot by itself
+      // establish audit_log: the log needs its contextual audit/log hint, not a
+      // verb embedded in `record_external_write`.
       for (const cap of component.capabilities) {
+        if (component.id === "audit_log" && /^writ(?:e|es|ing|ten)$/.test(token)) continue;
         if (cap.toLowerCase().includes(token)) {
           bump(component.id, 1, token, "capability");
           break;

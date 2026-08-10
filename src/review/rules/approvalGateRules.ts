@@ -6,6 +6,11 @@ import { componentActionClass } from "../../graph/automationClearance.js";
 // External write keywords in integrations / goal / architecture text
 // ---------------------------------------------------------------------------
 
+/**
+ * Conservative integration/component vocabulary. A bare integration name can
+ * still be write-capable when review_workflow_design has no resolved route to
+ * inspect, so this list deliberately remains broader than goal-text matching.
+ */
 const EXTERNAL_WRITE_KEYWORDS = [
   "publish",
   "send email",
@@ -23,6 +28,24 @@ const EXTERNAL_WRITE_KEYWORDS = [
 ];
 
 /**
+ * Direction-carrying goal/architecture signals. Provider nouns are not actions:
+ * "support emails" and "read my calendar" must not become evidence of a send or
+ * write. Resolved components remain the primary authority through
+ * `ctx.hasExternalWrite`; these patterns cover explicit write intent when a
+ * caller supplies only prose (MAR-596/F3).
+ */
+const EXTERNAL_WRITE_TEXT_PATTERNS = [
+  /(?<!\w)publish(?:es|ed|ing)?(?!\w)/,
+  /(?<!\w)(?:send|sends|sending|sent)[ _-]?(?:an? |the )?(?:email|message|sms|reply)(?!\w)/,
+  /(?<!\w)email(?:s|ed|ing)?\s+(?:me|us|them|the|a|an)(?!\w)/,
+  /(?<!\w)(?:post|posts|posted|posting)\s+to(?!\w)/,
+  /(?<!\w)(?:notify|notifies|notified|notifying)(?!\w)/,
+  /(?<!\w)tweet(?:s|ed|ing)?(?!\w)/,
+  /(?<!\w)(?:optional_email_send|calendar_write|accounting_write|send_email)(?!\w)/,
+  /(?<!\w)(?:create|creates|creating|add|adds|adding|book|books|booking)(?!\w)[^.;!?]{0,40}(?<!\w)calendar (?:event|invite)(?!\w)/,
+];
+
+/**
  * MAR-252: negation-aware. "No emails, no social posts" is a CONSTRAINT, not a
  * write — the negation-blind scan made a read-only news-digest goal fail the
  * safety review for an "ungated external write" while automation_clearance
@@ -31,9 +54,10 @@ const EXTERNAL_WRITE_KEYWORDS = [
  */
 function mentionsExternalWrite(text: string): boolean {
   const lower = text.toLowerCase();
-  return EXTERNAL_WRITE_KEYWORDS.some(
-    (kw) => lower.includes(kw) && !isNegatedInContext(lower, kw),
-  );
+  return EXTERNAL_WRITE_TEXT_PATTERNS.some((pattern) => {
+    const match = lower.match(pattern)?.[0];
+    return match !== undefined && !isNegatedInContext(lower, match);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -41,10 +65,14 @@ function mentionsExternalWrite(text: string): boolean {
 // ---------------------------------------------------------------------------
 
 const externalWriteWithoutApprovalGate: ReviewRule = (ctx: ReviewContext): ReviewFinding[] => {
+  const classes = ctx.resolvedComponents.map((c) => componentActionClass(c));
   const triggeredByIntegration = ctx.integrations.some((i) =>
     EXTERNAL_WRITE_KEYWORDS.some((kw) => i.toLowerCase().includes(kw)),
   );
-  const triggeredByComponent = ctx.hasExternalWrite;
+  // Notification components are deliberate egress too, but remain advisory
+  // below. Use the same action classification as automation_clearance instead
+  // of asking provider nouns in the goal to stand in for route facts.
+  const triggeredByComponent = ctx.hasExternalWrite || classes.some((cls) => cls === 2);
   const triggeredByGoal = mentionsExternalWrite(ctx.goal);
   const triggeredByArch = ctx.proposedArchitecture
     ? mentionsExternalWrite(ctx.proposedArchitecture)
@@ -83,7 +111,6 @@ const externalWriteWithoutApprovalGate: ReviewRule = (ctx: ReviewContext): Revie
   // real external write (class ≥ 3: email send, calendar write, CRM write,
   // publish) keeps the critical finding regardless of any notification also
   // being present.
-  const classes = ctx.resolvedComponents.map((c) => componentActionClass(c));
   const notificationClassOnly =
     classes.length > 0 && classes.every((cls) => cls <= 2) && classes.some((cls) => cls === 2);
   if (notificationClassOnly) {

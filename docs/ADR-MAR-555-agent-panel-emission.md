@@ -1,10 +1,16 @@
 # ADR MAR-555 — the panel is declared by the build, never derived by the planner
 
-**Status:** Proposed (awaiting Henrik)
+**Status:** Superseded in part by ADR MAR-596
 **Date:** 2026-08-08
 **Implements:** orchestratedash ADR 0008 slice 4 ("the MCP emitter"), spec-only on the DASH side by design
 **Declines:** ADR 0008's optional derivation clause ("the emitter MAY derive a default panel … an `output_location`-bearing route gets a single `report` section")
 **Related:** MAR-552 (DASH's `$defs.panel`, merged as `3666459`), MAR-507 (`task_inputs`, the pattern this follows), MAR-494 (explicit-signal-defaulting-to-the-honest-negative), MAR-549 (the precedent for a recorded decline)
+
+> **2026-08-10 amendment:** MAR-596 supersedes only the blanket omission
+> decision. The emitter now derives a default `metrics` section whose three
+> values are facts DASH observes itself (`run_count`, `last_run_at`, and
+> `last_run_verdict`). The refusal to derive an artifact role, report, table, or
+> outputs section from `output_location` remains in force.
 
 ## Context
 

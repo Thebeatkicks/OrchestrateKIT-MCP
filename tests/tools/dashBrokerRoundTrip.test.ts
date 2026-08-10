@@ -376,9 +376,9 @@ describe("MAR-507 companion — export_build_brief emits task_inputs against DAS
  * holds itself to.
  *
  * The two panels below are the ones MAR-548's two shipped sample agents would
- * declare — `ai-agent-news` and `gmail-meeting-assistant`. They are AUTHOR
- * declarations, which is the whole point of this slice: nothing here is
- * derived by the emitter, and the absence tests are what pin that.
+ * declare — `ai-agent-news` and `gmail-meeting-assistant`. They remain AUTHOR
+ * declarations and override the MAR-596 default, which is deliberately limited
+ * to DASH-observed run facts and binds no artifact role.
  * `digest` and `draft` are the two artifact kinds DASH's own
  * `describeArtifactRole` (`lib/copy/artifacts.ts`) names today; the rest bind
  * to roles those builds give their own outputs.
@@ -444,23 +444,42 @@ describe("MAR-555 — export_build_brief emits agent_dom.panel against DASH's pi
     expect([...PANEL_SECTION_TYPES_V1]).toEqual(schema.$defs.panelSectionV1.properties.type.enum);
   });
 
-  it("honest absence: a plan that declares no panel omits agent_dom.panel entirely", () => {
+  it("MAR-596 default: a plan with no authored panel gets DASH-fact run history", () => {
     const b = planAndBrief({});
     expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
-    expect("panel" in b.agent_manifest.agent_dom).toBe(false);
+    expect(b.agent_manifest.agent_dom.panel?.panel_version).toBe(1);
+    const section = b.agent_manifest.agent_dom.panel?.sections[0];
+    expect(section).toMatchObject({ id: "run_history", type: "metrics" });
+    expect(section && "items" in section ? section.items : []).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "run_count",
+          source: { kind: "dash_fact", fact: "run_count" },
+        }),
+        expect.objectContaining({
+          id: "last_run_at",
+          source: { kind: "dash_fact", fact: "last_run_at" },
+        }),
+        expect.objectContaining({
+          id: "last_run_verdict",
+          source: { kind: "dash_fact", fact: "last_run_verdict" },
+        }),
+      ]),
+    );
   });
 
-  it("the recorded decline: an output_location-bearing export still derives no panel", () => {
+  it("keeps MAR-555's artifact-binding refusal: output_location does not become a report role", () => {
     // ADR 0008 PERMITS deriving one `report` section from an output_location.
     // docs/ADR-MAR-555-agent-panel-emission.md declines it: `report` requires
     // an `artifact_role`, a role is a name the agent's RUNTIME gives what it
     // writes, and an output_location is free text naming a destination. This
-    // is the absence twin that keeps the decline a fact rather than a comment
-    // — if somebody wires derivation up later, this test is where they must
-    // argue for it.
+    // MAR-596 can still populate the panel with DASH's own facts because that
+    // declares no artifact. The location must not leak into any section.
     const b = planAndBrief({ output_location: "HubSpot notes + Gmail drafts" });
     expect(b.agent_manifest.monitoring.output_location).toBe("HubSpot notes + Gmail drafts");
-    expect("panel" in b.agent_manifest.agent_dom).toBe(false);
+    expect(b.agent_manifest.agent_dom.panel?.sections).toHaveLength(1);
+    expect(JSON.stringify(b.agent_manifest.agent_dom.panel)).not.toContain("HubSpot");
+    expect(JSON.stringify(b.agent_manifest.agent_dom.panel)).not.toContain("artifact_role");
   });
 
   it("never an empty object: a panel with no sections is refused by DASH's own schema", () => {
@@ -543,6 +562,25 @@ describe("MAR-569 — export_build_brief emits agent_dom.connection_requirements
     const b = planAndBrief({});
     expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
     expect("connection_requirements" in b.agent_manifest.agent_dom).toBe(false);
+  });
+
+  it("MAR-596 derives the Gmail requirement when the same export declares it DASH-managed", () => {
+    const b = planAndBrief({ dash_broker_available: true });
+    expect(validateManifest(b.agent_manifest), JSON.stringify(validateManifest.errors)).toBe(true);
+    expect(b.agent_manifest.agent_dom.connection_requirements).toEqual({
+      requirements_version: 1,
+      requirements: [
+        {
+          id: "gmail_connection",
+          name: "Your Gmail",
+          connector_kind: "google_oauth_broker",
+          connection_id: "gmail",
+          why: "Read your inbox; Write drafts (never send)",
+        },
+      ],
+    });
+    const liveIds = new Set(b.agent_manifest.agent_dom.connections.map((connection) => connection.id));
+    expect(liveIds.has("gmail")).toBe(true);
   });
 
   it("never an empty object: DASH's own schema refuses requirements_version with no requirements array member", () => {
