@@ -45,10 +45,11 @@ notes: >
   via MAR-302. The human_approval_gate is MANDATORY, not advisory: the goal
   demands a hard threshold requiring a human gate and carries no unattended
   waiver, so the MAR-132 advisory downgrade does not apply. The
-  accounting-system write is deliberately NOT a registry component (no
-  accounting_write component exists; MAR-135 does not track one and inventing
-  one ad hoc destabilizes precision — the MAR-265 lesson): document it as the
-  integration wired at the gate's output in implementation steps. email_read is
+  accounting-system write is deliberately NOT part of this fixed route. MAR-581
+  now provides accounting_write for goals that explicitly request a gated Xero
+  or QuickBooks write; this playbook's original "never post to the ledger
+  automatically" boundary remains a read-and-handoff pattern. Document the
+  operator integration at the gate's output in implementation steps. email_read is
   a document SOURCE here — the matcher's email drafting/sending path and the web
   scraper/page-monitor are suppressed for the invoice-from-inbox shape (MAR-302
   matcher fix), so this route never drafts, sends, or scrapes.

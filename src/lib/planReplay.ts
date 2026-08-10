@@ -152,6 +152,7 @@ const EXTERNAL_WRITE_HINTS = [
   "delete",
   "calendar_write",
   "crm_note_write",
+  "accounting_write",
   "deal_stage_update",
   "external_publish",
   "optional_email_send",

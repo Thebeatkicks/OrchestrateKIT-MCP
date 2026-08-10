@@ -1,0 +1,20 @@
+id: accounting_write__requires__human_approval_gate
+from: accounting_write
+to: human_approval_gate
+relation: requires
+status: published
+reason: An accounting transaction changes a financial system of record and can affect reconciliation, reporting, tax treatment, and downstream automations. Every write requires an explicit human decision.
+severity: critical
+notes: >-
+  This edge proves only that the gate is present. It does not prove that the
+  reviewed payload is the payload executed. The runtime must carry a payload
+  identity through approval and reject a changed or missing identity immediately
+  before the provider call; until that proof exists, approval remains unbound.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/accountingWriteDirection.test.ts > edge: accounting_write__requires__human_approval_gate"
+failure_modes:
+  - accounting entry is created without an explicit human approval decision
+  - a blanket approval is reused for a different transaction or accounting organisation
+sources: []

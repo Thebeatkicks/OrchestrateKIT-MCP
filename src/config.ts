@@ -34,7 +34,7 @@ export const MIN_PLAYBOOKS = 12;
  * intentionally changed and re-released — recompute via
  * `contentFingerprint(readRawEntries())`.
  */
-export const EXPECTED_RELEASE_FINGERPRINT = "a59ee01fa6e99a1a";
+export const EXPECTED_RELEASE_FINGERPRINT = "7b1edec52c349c78";
 
 /**
  * MAR-99: server-level instructions sent to AI clients on connect.
@@ -171,4 +171,3 @@ UNKNOWN and ask the human rather than guessing.
 Call \`health_check\` to verify the server is connected and to see registry
 counts.
 `;
-

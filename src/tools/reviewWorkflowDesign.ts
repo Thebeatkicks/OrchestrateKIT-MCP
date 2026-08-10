@@ -108,6 +108,7 @@ const EXTERNAL_WRITE_IDS = new Set([
   "external_publish",
   "optional_email_send",
   "calendar_write",
+  "accounting_write",
 ]);
 
 export function buildReviewContext(

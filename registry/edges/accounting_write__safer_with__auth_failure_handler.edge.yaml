@@ -1,0 +1,12 @@
+id: accounting_write__safer_with__auth_failure_handler
+from: accounting_write
+to: auth_failure_handler
+relation: safer_with
+status: published
+reason: Xero and QuickBooks Online writes use expirable, scoped OAuth credentials. A credential-failure path prevents an approved transaction from disappearing silently when the grant expires or loses scope.
+severity: high
+notes: A 401 or 403 after approval must halt and alert. Never loop the write blindly; an ambiguous timeout may mean the transaction already exists, so reconcile by idempotency key before retrying.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/accountingWriteDirection.test.ts > edge: accounting_write__safer_with__auth_failure_handler"

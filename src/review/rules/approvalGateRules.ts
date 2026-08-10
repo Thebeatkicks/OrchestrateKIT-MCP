@@ -13,6 +13,7 @@ const EXTERNAL_WRITE_KEYWORDS = [
   "email",
   "calendar",
   "calendar_write",
+  "accounting_write",
   "slack",
   "post to",
   "tweet",
@@ -114,14 +115,14 @@ const externalWriteWithoutApprovalGate: ReviewRule = (ctx: ReviewContext): Revie
         "Publishing, sending emails, writing to calendars or posting to external services are irreversible. " +
         "Automated workflows must require explicit human sign-off before executing these actions.",
       recommended_fix:
-        "Add `human_approval_gate` before any external_publish, optional_email_send or calendar_write step. " +
+        "Add `human_approval_gate` before any external_publish, optional_email_send, calendar_write or accounting_write step. " +
         "Set human_approval.required=true and list the approval_points explicitly.",
       entity_ref: ctx.hasExternalWrite
         ? {
             entity_type: "component" as const,
             entity_id:
               ctx.resolvedComponents.find((c) =>
-                ["external_publish", "optional_email_send", "calendar_write"].includes(c.id),
+                ["external_publish", "optional_email_send", "calendar_write", "accounting_write"].includes(c.id),
               )?.id ?? "external_publish",
           }
         : undefined,
