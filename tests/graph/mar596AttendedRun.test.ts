@@ -51,6 +51,7 @@ describe("MAR-596/F1 — fuzzy matching requires a meaningful whole word", () =>
 
     expect(ids("out")).not.toContain("fan_out_collector");
     expect(ids("write")).not.toContain("audit_log");
+    expect(ids("read")).not.toContain("reviewer_notification");
     expect(ids("fan out the records in parallel")).toContain("fan_out_collector");
     expect(ids("audit every external action")).toContain("audit_log");
   });
