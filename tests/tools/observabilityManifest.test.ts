@@ -15,6 +15,7 @@ import {
   DEFAULT_MODEL_LEVELS,
   buildAgentManifest,
 } from "../../src/lib/observabilityContract.js";
+import { AI_PROVIDER_IDS } from "../../src/lib/dashBrokerCatalog.js";
 import { exportBuildBrief } from "../../src/tools/exportBuildBrief.js";
 import {
   planWorkflow,
@@ -497,6 +498,18 @@ describe("MAR-596 — the attended-run manifest fields are populated", () => {
           connection_id: "gmail",
           why: "Read your inbox",
         },
+        {
+          // MAR-596/F14: this export's AI-backed step (research_synthesis,
+          // asserted above) plus the always-supplied `llm_provider: "anthropic"`
+          // (planAndBrief's default) and `dash_broker_available: true` together
+          // produce a real DASH AI-key connection, derived through the exact
+          // same v1-requirement join as Gmail's.
+          id: "anthropic_connection",
+          name: "Your Anthropic",
+          connector_kind: "api_key",
+          connection_id: "anthropic",
+          why: "Answer this agent's AI-backed steps",
+        },
       ],
     });
     const connectionIds = new Set(
@@ -507,6 +520,96 @@ describe("MAR-596 — the attended-run manifest fields are populated", () => {
         expect(connectionIds.has(requirement.connection_id)).toBe(true);
       }
     }
+
+    // F14's own shape, checked directly against the emitted connection rather
+    // than only through the derived requirement: dash_managed, one secret
+    // field, and — the DASH-side trap this exists to dodge — no
+    // `technical.environment_name` on that field. DASH's
+    // `resolveCredentialTarget` refuses `brokered_provider_delivery` when an
+    // AI-provider secret field also declares one, because the broker holds
+    // the key and answers on the agent's behalf rather than ever handing it
+    // back as an env var.
+    const aiConnection = b.agent_manifest.agent_dom.connections.find(
+      (connection) => connection.id === "anthropic",
+    );
+    expect(aiConnection).toMatchObject({ provider: "anthropic", ownership: "dash_managed" });
+    expect(aiConnection?.fields).toHaveLength(1);
+    expect(aiConnection?.fields[0]?.kind).toBe("secret");
+    expect(aiConnection?.fields[0]?.technical?.environment_name).toBeUndefined();
+  });
+});
+
+describe("MAR-596/F14 — AI-provider connection: presence and absence fixtures", () => {
+  const AI_STEP_ROUTE = [
+    { step: 1, component_id: "research_synthesis", model_tier: "frontier" },
+  ];
+
+  it("presence: openrouter selects DASH's openrouter provider, not a translated id", () => {
+    const manifest = buildAgentManifest({
+      goal: "Summarize the pasted text",
+      plan_source: "composed",
+      playbook_id: "",
+      route_id: "",
+      build_target: "code",
+      route_steps: AI_STEP_ROUTE,
+      automation_clearance: "L0",
+      enforced_approval_gates: [],
+      output_location: "Current client",
+      registry_fingerprint: "f14-fixture",
+      generated_at: "2026-08-10T00:00:00Z",
+      connections: [],
+      dash_broker_available: true,
+      llm_provider: "openrouter",
+    });
+    const ai = manifest.agent_dom.connections.find((c) => c.id === "openrouter");
+    expect(ai).toMatchObject({ provider: "openrouter", label: "OpenRouter", ownership: "dash_managed" });
+  });
+
+  it("absence: llm_provider 'deterministic_first' declares no connection, even with the signal and an AI step", () => {
+    // The caller explicitly declined a model provider (its own option copy:
+    // "omit model-provider credentials from the generated connect contract"),
+    // mirrored here rather than declaring a connection with no key behind it.
+    const manifest = buildAgentManifest({
+      goal: "Summarize the pasted text",
+      plan_source: "composed",
+      playbook_id: "",
+      route_id: "",
+      build_target: "code",
+      route_steps: AI_STEP_ROUTE,
+      automation_clearance: "L0",
+      enforced_approval_gates: [],
+      output_location: "Current client",
+      registry_fingerprint: "f14-fixture",
+      generated_at: "2026-08-10T00:00:00Z",
+      connections: [],
+      dash_broker_available: true,
+      llm_provider: "deterministic_first",
+    });
+    expect(
+      manifest.agent_dom.connections.some((c) => (AI_PROVIDER_IDS as readonly string[]).includes(c.provider)),
+    ).toBe(false);
+  });
+
+  it("absence: no AI-backed step declares no connection, even with the signal and a chosen provider", () => {
+    const manifest = buildAgentManifest({
+      goal: "Record a local audit entry",
+      plan_source: "composed",
+      playbook_id: "",
+      route_id: "",
+      build_target: "code",
+      route_steps: [{ step: 1, component_id: "audit_log" }],
+      automation_clearance: "L0",
+      enforced_approval_gates: [],
+      output_location: "Current client",
+      registry_fingerprint: "f14-fixture",
+      generated_at: "2026-08-10T00:00:00Z",
+      connections: [],
+      dash_broker_available: true,
+      llm_provider: "anthropic",
+    });
+    expect(
+      manifest.agent_dom.connections.some((c) => (AI_PROVIDER_IDS as readonly string[]).includes(c.provider)),
+    ).toBe(false);
   });
 });
 

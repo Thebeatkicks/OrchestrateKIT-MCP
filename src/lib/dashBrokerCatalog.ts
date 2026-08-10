@@ -106,3 +106,24 @@ export function dashBrokeredConnectionIds(): string[] {
 export function dashNamedConnectionIds(): string[] {
   return Object.keys(DASH_MANIFEST_PROVIDER).sort();
 }
+
+/**
+ * MAR-582 (F14 companion, MAR-596): every model-provider DASH will hold an API
+ * key for, by value — mirrors orchestratedash's `lib/ai/providers.ts::AI_PROVIDER_IDS`.
+ * Same discipline as `DASH_MANIFEST_PROVIDER`/`DASH_BROKERED_CONNECTIONS` above
+ * and for the same reason: this is DASH's registry of manifest `provider`
+ * strings DASH will actually act on for its AI-key vault (MAR-582's "bring
+ * your own AI key" feature), not something derivable from this repo's own
+ * registry.
+ *
+ * Checked against orchestratedash master on 2026-08-10 (`5ad6d70`):
+ * `AI_PROVIDER_IDS = ["openrouter", "anthropic", "openai"] as const`, and
+ * `AiProviderProfile.connection_provider` equals `id` for all three — so the
+ * MCP's own `llm_provider` spelling ("anthropic"/"openrouter") already matches
+ * DASH's manifest `provider` string with no translation table, unlike Gmail.
+ * "openai" has no MCP-side selection path yet (`connectContract.ts`'s
+ * `LlmProvider` union does not offer it): narrow drift, the safe direction
+ * this file's own header calls out — unreachable today rather than guessed.
+ */
+export const AI_PROVIDER_IDS = ["openrouter", "anthropic", "openai"] as const;
+export type AiProviderId = (typeof AI_PROVIDER_IDS)[number];

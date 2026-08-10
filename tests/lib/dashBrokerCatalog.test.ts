@@ -14,6 +14,7 @@ import {
   dashBrokersConnection,
   dashBrokeredConnectionIds,
   dashNamedConnectionIds,
+  AI_PROVIDER_IDS,
 } from "../../src/lib/dashBrokerCatalog.js";
 
 describe("MAR-493 — provider vocabulary is DASH's, not the MCP's", () => {
@@ -85,6 +86,24 @@ describe("MAR-494 — brokered is a narrower claim than named", () => {
     // ownership ever mattered.
     for (const id of dashBrokeredConnectionIds()) {
       expect(dashNamedConnectionIds()).toContain(id);
+    }
+  });
+});
+
+describe("MAR-582/F14 — AI_PROVIDER_IDS is DASH's own vocabulary, pinned by value", () => {
+  it("names exactly the three providers orchestratedash's lib/ai/providers.ts holds a key for", () => {
+    // Checked against orchestratedash master `5ad6d70` (2026-08-10):
+    // export const AI_PROVIDER_IDS = ["openrouter", "anthropic", "openai"] as const;
+    expect(AI_PROVIDER_IDS).toEqual(["openrouter", "anthropic", "openai"]);
+  });
+
+  it("the two MCP-selectable llm_provider values both name a real DASH AI provider", () => {
+    // "deterministic_first" is deliberately absent from AI_PROVIDER_IDS — it is
+    // the caller declining a model provider, not naming one DASH holds a key
+    // for, and observabilityContract.ts's aiProviderConnection treats it as
+    // absence rather than as a fourth provider.
+    for (const provider of ["anthropic", "openrouter"]) {
+      expect(AI_PROVIDER_IDS as readonly string[]).toContain(provider);
     }
   });
 });
