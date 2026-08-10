@@ -1,6 +1,6 @@
 # OrchestrateKit MCP project state
 
-Updated: 2026-08-09 (MAR-580 adds whole-word authorization/sign-off approval vocabulary; five original LAB posts re-run; portfolio-wide `pnpm verify` green including DASH schema parity)
+Updated: 2026-08-10 (MAR-596 populates the DASH-readable emitter fields and closes attended-run planner regressions F1-F3; F14 remains held on MAR-593; portfolio-wide `pnpm verify` green including DASH schema parity)
 
 Portfolio sequence and estimates: [`docs/PORTFOLIO_ROADMAP_2026-08-01.md`](docs/PORTFOLIO_ROADMAP_2026-08-01.md).
 
@@ -97,6 +97,14 @@ The MCP is now a credible deterministic planner and DASH build-brief exporter. M
     DASH master `0a023585f6e3a82b550a933fd26697ac6fd16170` does not yet declare the new property. Its route-item schema is open to additive properties, so the MCP output validates today without pretending DASH consumes the field. The fixture was structurally re-synced against that exact commit and the lock moved atomically: the schema has no semantic change, so the v2 fingerprint remains `6e04094d`, while `canonical_commit` advances from `ffa74fd` to `0a02358`. [`docs/ADR-MAR-583-default-model-levels.md`](docs/ADR-MAR-583-default-model-levels.md) records the contract and the explicit dependency: DASH still owns the typed schema member, per-agent/per-step settings UI, deploy propagation, and actual-model recording on run rows. This MCP slice does not claim those behaviors.
 
     `DEFAULT_MODEL_LEVELS` is pinned by value to `cheap | standard | frontier`. `tests/tools/observabilityManifest.test.ts` exercises small, standard, frontier, deterministic absence, no model/provider names, and validation against the pinned DASH schema through real `export_build_brief` calls. Three deterministic output-schema snapshots moved to carry the new additive fields. Registry untouched; fingerprint remains `a59ee01fa6e99a1a`. **Portfolio-wide `pnpm verify` green end to end, including the live sibling `dash:schema:check`: 98 files / 2665 passed / 0 failed.** Implementation commit `9058a20`; draft PR #182 targets `master`; Linear is In Review. Merge remains coordinator-owned.
+
+---
+
+31. **MAR-596 (this session, planned; draft PR #183): the emitter now feeds the DASH readers and the planner no longer keys orchestration/safety on bare English words.** The exact attended support-mail export emits `agent.display_name`, a DASH-facts-only `agent_dom.panel`, a joined Gmail `agent_dom.connection_requirements`, and MAR-583's `default_model_level: frontier` on `research_synthesis`. Explicit panel/requirement inputs still win; derived Connect requirements are limited to `dash_managed` connections with a real closed-vocabulary connector flow. [`docs/ADR-MAR-596-populated-agent-dom-defaults.md`](docs/ADR-MAR-596-populated-agent-dom-defaults.md) records the cross-repository boundary.
+
+    Planner regressions are pinned from the attended wording: `out` in `out of my Notion database` no longer pulls `fan_out_collector`, `intent_classifier`, `job_queue`, or `threshold_router`; bare `write` no longer pulls `audit_log`; explicit fan-out/audit language remains reachable. The support-mail summary retains an AI-backed synthesis step, and its read-only plan now has a non-failing safety review consistent with L0 autonomous clearance. The named scheduled public-feed route retains `audit_log` through a narrow operational component-pair policy rather than the word `write`. The MCP-owned DASH schema fixture is re-pinned to clean DASH master `04dc3469402b9a31fff9097ef651986966a975ae` with v2 semantic hash `ce174cc6b8e568be86b1ad27615b73cd80b0b61f027477402a2f675a63993b56`.
+
+    **F14 is held:** MAR-593 was re-read after verification and remains Backlog with no coordinator comment/relay defining the fleet-level model-provider connection shape. No model-provider connection was guessed and no orchestratedash file was changed. Implementation commit `8385b98`; [draft PR #183](https://github.com/orchestratemcp/OrchestrateKIT-MCP/pull/183) targets `master`; Linear is In Review. `pnpm verify` is green: 101 files / 2708 tests plus typecheck, registry lint, benchmark, release trust, and live sibling-DASH schema parity. Lifecycle remains `planned` until merge; no installed-DASH runtime proof is claimed.
 
 ## Product direction
 
