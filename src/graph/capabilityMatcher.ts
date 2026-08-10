@@ -88,6 +88,12 @@ const COMPONENT_DOMAINS: Record<string, Domain[]> = {
   pdf_extraction: ["data_etl"],
   airtable_lookup: ["data_etl"],
   stripe_data_read: ["data_etl"],
+  // MAR-581: an accounting-system write is provider-specific but the workflow
+  // shape is ordinary data ETL (receipt/invoice -> normalized transaction ->
+  // ledger). Generic membership lets an explicit Xero/QuickBooks destination
+  // reach it even when no other ETL noun is present. HINT_ONLY below: the words
+  // "write", "transaction" and "accounting" are too ambient for fuzzy routing.
+  accounting_write: ["data_etl", "generic_orchestration"],
   // MAR-244: file_storage is the generic "store it somewhere" write. It belongs to
   // data_etl (extract → normalise → store) but is ALSO generic_orchestration so a
   // "save the results to a spreadsheet" step routes in any domain. HINT_ONLY (see
@@ -247,6 +253,11 @@ const DOMAIN_KEYWORDS: Record<Exclude<Domain, "generic_orchestration">, string[]
     "pdf",
     "airtable",
     "stripe",
+    "xero",
+    "quickbooks",
+    "bookkeeping",
+    "accounting system",
+    "general ledger",
     "parse",
     // MAR-244: document-extraction + storage terms. "invoice"/"receipt" name the
     // extract-structured-data-from-documents shape; "spreadsheet"/"csv" name the
@@ -1333,6 +1344,73 @@ function suppressStripeDataReadForWriteGoal(
   if (!hasStripeWriteIntent(goalLower)) return;
   if (hasStripeReadIntent(goalLower)) return;
   domainAllowed.delete("stripe_data_read");
+}
+
+/**
+ * MAR-581: accounting-system WRITE direction.
+ *
+ * The registry now has an explicit Xero/QuickBooks-class write component, but a
+ * provider noun alone still carries no direction. "Read transactions from
+ * Xero" must never receive ledger-write scopes, and a generic "create a
+ * transaction object" must never invent an accounting destination. Selection
+ * therefore needs all three facts in the same clause:
+ *
+ *   1. a write verb;
+ *   2. an accounting object (transaction, journal entry, bill, ...); and
+ *   3. an accounting provider/system context (Xero, QuickBooks, ledger, ...).
+ *
+ * This mirrors MAR-541's direction discipline, except the honest write-side
+ * component now exists, so Pass 1f below bumps it instead of surfacing a gap.
+ */
+const ACCOUNTING_CONTEXT_SOURCE =
+  "(?:xero|quickbooks(?:\\s+online)?|qbo|accounting(?:\\s+system)?|bookkeeping(?:\\s+system)?|general\\s+ledger|ledger)";
+const ACCOUNTING_CONTEXT = new RegExp(`(?<!\\w)${ACCOUNTING_CONTEXT_SOURCE}(?!\\w)`);
+const ACCOUNTING_WRITE_VERB =
+  /(?<!\w)(create|creates|creating|created|post|posts|posting|posted|write|writes|writing|wrote|record|records|recording|recorded|add|adds|adding|added|insert|inserts|inserting|inserted|submit|submits|submitting|submitted|book|books|booking|booked|update|updates|updating|updated|upsert|upserts|upserting|sync|syncs|syncing|synced)(?!\w)/;
+const ACCOUNTING_WRITE_OBJECT_SOURCE =
+  "(?:transaction|transactions|journal\\s+entr(?:y|ies)|ledger\\s+entr(?:y|ies)|bill|bills|invoice|invoices|credit\\s+note|credit\\s+notes|payment|payments)";
+const ACCOUNTING_WRITE_OBJECT = new RegExp(
+  `(?<!\\w)${ACCOUNTING_WRITE_OBJECT_SOURCE}(?!\\w)`,
+);
+const ACCOUNTING_VERB_PROVIDER_OBJECT = new RegExp(
+  `${ACCOUNTING_WRITE_VERB.source}[^.;!?]{0,50}?${ACCOUNTING_CONTEXT.source}[^.;!?]{0,30}?${ACCOUNTING_WRITE_OBJECT.source}`,
+);
+const ACCOUNTING_VERB_OBJECT_DESTINATION = new RegExp(
+  `${ACCOUNTING_WRITE_VERB.source}[^.;!?]{0,60}?${ACCOUNTING_WRITE_OBJECT.source}[^.;!?]{0,30}?(?:to|into|in|on|via|through)\\s+(?:a|an|the|our|my|your|their|its)?\\s*${ACCOUNTING_CONTEXT.source}`,
+);
+const ACCOUNTING_PROVIDER_OBJECT_PASSIVE_WRITE = new RegExp(
+  `${ACCOUNTING_CONTEXT.source}[^.;!?]{0,30}?${ACCOUNTING_WRITE_OBJECT.source}[^.;!?]{0,40}?(?:is|are|was|were|be|been)\\s+${ACCOUNTING_WRITE_VERB.source}`,
+);
+
+/** True only when the goal asks to mutate an accounting system (MAR-581). */
+export function hasAccountingWriteIntent(goalLower: string): boolean {
+  return goalLower.split(/[.;!?]+/).some((clause) =>
+    ACCOUNTING_VERB_PROVIDER_OBJECT.test(clause) ||
+    ACCOUNTING_VERB_OBJECT_DESTINATION.test(clause) ||
+    ACCOUNTING_PROVIDER_OBJECT_PASSIVE_WRITE.test(clause),
+  );
+}
+
+/**
+ * Return the user's provider/object words for matcher provenance and coverage.
+ * Synthetic labels would not let coverage credit the Xero transaction demand.
+ */
+export function accountingWriteDemandToken(goalLower: string): string | null {
+  const writeClause = goalLower.split(/[.;!?]+/).find((clause) =>
+    ACCOUNTING_VERB_PROVIDER_OBJECT.test(clause) ||
+    ACCOUNTING_VERB_OBJECT_DESTINATION.test(clause) ||
+    ACCOUNTING_PROVIDER_OBJECT_PASSIVE_WRITE.test(clause),
+  );
+  if (!writeClause) return null;
+  const providerObject = writeClause.match(
+    /(?<!\w)(?:xero|quickbooks(?:\s+online)?|qbo)[^.;!?]{0,30}?(?:transaction|transactions|journal\s+entr(?:y|ies)|ledger\s+entr(?:y|ies)|bill|bills|invoice|invoices|credit\s+notes?|payments?)(?!\w)/,
+  )?.[0];
+  if (providerObject) return providerObject;
+  const objectProvider = writeClause.match(
+    /(?<!\w)(?:transaction|transactions|journal\s+entr(?:y|ies)|ledger\s+entr(?:y|ies)|bill|bills|invoice|invoices|credit\s+notes?|payments?)[^.;!?]{0,30}?(?:xero|quickbooks(?:\s+online)?|qbo)(?!\w)/,
+  )?.[0];
+  if (objectProvider) return objectProvider;
+  return writeClause.match(ACCOUNTING_CONTEXT)?.[0] ?? null;
 }
 
 /**
@@ -2728,6 +2806,10 @@ const MATCH_STOPWORDS = new Set([
  */
 const HINT_ONLY_COMPONENTS = new Set([
   "human_approval_gate",
+  // MAR-581: a privileged external ledger write. It is reachable only through
+  // the direction-carrying accounting signal in Pass 1f; never through fuzzy
+  // "write" / "transaction" / "accounting" words.
+  "accounting_write",
   // calendar_lookup/calendar_write are only valid in genuine calendar goals.
   // Fuzzy matching on "calendar" / "meeting" tokens in non-calendar goals
   // (e.g. "team meeting summary", "schedule social posts") injected these
@@ -3171,7 +3253,22 @@ export function matchCapabilities(
     bump("file_storage", 2, `${dbObject}-write phrase`, "hint");
   }
 
-  // Pass 1f (MAR-549): "track/monitor these listings" reaches data_scraper.
+  // Pass 1f (MAR-581): explicit accounting-system destination. Unlike the
+  // Stripe write gap MAR-541 refused to substitute, this route has a real
+  // provider-class write component. The component remains HINT_ONLY and the
+  // signal carries verb + object + provider direction, so read-only Xero /
+  // QuickBooks goals never receive a write.
+  if (domainAllowed.has("accounting_write") && hasAccountingWriteIntent(goalLower)) {
+    const demandToken = accountingWriteDemandToken(goalLower) ?? "accounting transaction";
+    bump("accounting_write", 2, demandToken, "hint");
+    if (goalLower.includes("evidence link")) {
+      bump("accounting_write", 2, "evidence link", "hint");
+    } else if (goalLower.includes("source link")) {
+      bump("accounting_write", 2, "source link", "hint");
+    }
+  }
+
+  // Pass 1g (MAR-549): "track/monitor these listings" reaches data_scraper.
   // It is HINT_ONLY and reachable only through `scrape`/`crawl`/`extract` — the
   // words that name the ACCESS PATTERN — so an ordinary goal that names the
   // OUTCOME ("track competitor ad listings") composed a plan with no extraction
@@ -3188,7 +3285,7 @@ export function matchCapabilities(
     bump("data_scraper", 2, trackListings, "hint");
   }
 
-  // Pass 1g (MAR-549): the watch half of the same shape. "track competitor
+  // Pass 1h (MAR-549): the watch half of the same shape. "track competitor
   // prices across their product pages every morning" composed
   // `scheduled_trigger → state_store` — no monitor at all — because the
   // monitoring domain was never established, so page_monitor's own "product
@@ -3198,7 +3295,7 @@ export function matchCapabilities(
     bump("page_monitor", 2, trackWatchable, "hint");
   }
 
-  // Pass 1h (MAR-550): local-file-as-SOURCE, the mirror of Passes 1d/1e.
+  // Pass 1i (MAR-550): local-file-as-SOURCE, the mirror of Passes 1d/1e.
   // local_file_read is HINT_ONLY and has no KEYWORD_HINTS of its own on
   // purpose: a bare "spreadsheet"/"csv" noun is exactly what carried no
   // direction and caused this bug family, so the ONLY way in is the read

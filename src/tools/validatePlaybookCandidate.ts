@@ -161,6 +161,7 @@ const GATED_WRITE_COMPONENTS = new Set([
   "external_publish",
   "crm_note_write",
   "calendar_write",
+  "accounting_write",
   "optional_email_send",
   "slack_notification",
 ]);

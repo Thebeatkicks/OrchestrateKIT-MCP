@@ -48,6 +48,7 @@ const MATCH_TOP_N = 8;
  * notification then stands in for it). These are protected from both cuts.
  */
 const NAMED_EGRESS_COMPONENTS = new Set([
+  "accounting_write",
   "slack_notification",
   "discord_notification",
   "teams_notification",
@@ -261,6 +262,7 @@ const CREDENTIALED_COMPONENTS = new Set([
   "calendar_lookup",
   "email_read",
   "crm_note_write",
+  "accounting_write",
   "data_scraper",
   "page_monitor",
 ]);
@@ -563,7 +565,7 @@ export function composeRoute(
     warnings.push(
       `Added human_approval_gate because the route includes external write actions (${augmented
         .filter((c) =>
-          ["external_publish", "optional_email_send", "calendar_write"].includes(c.id),
+          ["external_publish", "optional_email_send", "calendar_write", "accounting_write"].includes(c.id),
         )
         .map((c) => c.id)
         .join(", ")}). Do not remove this gate.`,
@@ -743,7 +745,7 @@ export function composeRoute(
   // ── Step 8: Score ──
   const requiredGatesPresent = finalIds.has("human_approval_gate");
   const gatesNeeded = finalComponents.some((c) =>
-    ["external_publish", "optional_email_send", "calendar_write"].includes(c.id),
+    ["external_publish", "optional_email_send", "calendar_write", "accounting_write"].includes(c.id),
   );
   const missingSafetyGates = gatesNeeded && !requiredGatesPresent ? 1 : 0;
 

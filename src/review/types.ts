@@ -56,7 +56,7 @@ export type ReviewContext = {
   resolvedPlaybooks: Playbook[];
 
   // Derived flags (pre-computed for rule convenience)
-  hasExternalWrite: boolean;    // any of: external_publish, optional_email_send, calendar_write
+  hasExternalWrite: boolean;    // any explicitly classified business-system write component
   hasResearch: boolean;         // research_synthesis, source_ranking, source_retrieval
   hasDataScraper: boolean;
   hasSchemaValidation: boolean;

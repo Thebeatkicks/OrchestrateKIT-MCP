@@ -1,0 +1,16 @@
+id: audit_log__recommended__accounting_write
+from: audit_log
+to: accounting_write
+relation: recommended_for
+status: published
+reason: A financial record needs reproducible evidence connecting the source item, proposed payload, human decision, executed payload, idempotency key, and provider transaction ID.
+severity: high
+notes: >-
+  Log the source reference, proposed and executed payload digests, decision actor
+  and timestamp, provider tenant/organisation, idempotency key, API outcome, and
+  resulting transaction ID. Recording these fields does not itself prove the
+  approval was bound; the runtime comparison must produce that evidence.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/accountingWriteDirection.test.ts > edge: audit_log__recommended__accounting_write"

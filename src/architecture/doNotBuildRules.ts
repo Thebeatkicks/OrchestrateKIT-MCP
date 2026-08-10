@@ -54,14 +54,14 @@ const noRemoteAuthForLocalTools: Rule = (ctx) => {
 
 const noDirectPublishWithoutApprovalGate: Rule = (ctx) => {
   const hasExternalWrite = ctx.componentIds.some((id) =>
-    ["external_publish", "optional_email_send", "calendar_write"].includes(id),
+    ["external_publish", "optional_email_send", "calendar_write", "accounting_write"].includes(id),
   );
   const hasApprovalGate = ctx.componentIds.includes("human_approval_gate");
 
   if (hasExternalWrite && !hasApprovalGate) {
     return (
       "Do not publish/send/write to external systems without a human_approval_gate. " +
-      "External publish, email send and calendar write are irreversible actions. " +
+      "External publish, email send, calendar write and accounting write are consequential actions. " +
       "Always require human sign-off before executing them."
     );
   }

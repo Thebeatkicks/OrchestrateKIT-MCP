@@ -1,0 +1,20 @@
+id: schema_validation__before__accounting_write
+from: schema_validation
+to: accounting_write
+relation: must_run_before
+status: published
+reason: Accounting fields, totals, currency, tax treatment, tenant, and account codes must be validated before a financial record is created.
+severity: critical
+notes: >-
+  Run deterministic validation again immediately before the provider call, after
+  approval resolution. This edge guarantees ordering before the write but does
+  not by itself prove the validation ran after the human decision; the runtime
+  must test that sequence and the unchanged payload identity.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/accountingWriteDirection.test.ts > edge: schema_validation__before__accounting_write"
+failure_modes:
+  - stale or changed values pass an earlier validation and are written after approval without revalidation
+  - invalid tax code, account code, currency, or total reaches the accounting API
+sources: []

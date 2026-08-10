@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "OrchestrateKit MCP",
-  "updated_at": "2026-08-09 (MAR-580 authorization/sign-off approval vocabulary implemented; five original LAB posts re-run; portfolio-wide pnpm verify green including DASH schema parity)",
+  "updated_at": "2026-08-10T06:55:00Z",
   "current_wave": "Overnight MCP queue: MAR-580 -> MAR-581 -> MAR-583",
   "authority": {
     "implementation": "Git",
@@ -382,6 +382,18 @@
         "exact_goal_command": "pnpm exec vitest run tests/graph/approvalVocabulary.test.ts tests/graph/approvalProvenance.test.ts"
       },
       "note": "IMPLEMENTED 2026-08-10, draft PR #180 open against master; implementation commit c9bb8c0. Before: the original LAB black-box passage ('here's who authorized it' / 'every step hashed and tied to authorization') composed pdf_extraction -> threshold_router -> reviewer_notification -> audit_log with no human_approval_gate and enforced_approval_gates []; 'human sign-off' and 'signed off' also missed. After: hasHumanApprovalLanguage adds American/British authorization inflections and sign-off forms through MAR-529 whole-word matching, excluding unauthorized and OAuth/header/token/sender authentication context. The exact passage now includes human_approval_gate and enforced_approval_gates ['human_approval_gate']; coverage still reports the post's exact binding concern ('here's who authorized it', 'tied to authorization') because the registry still has no approval_binding component (MAR-540/561). Re-ran all five original LAB signal_posts rows by external id (t3_1vgytcr, t3_1vh12hd, t3_1vhsswf, t3_1vhvqp0, t3_1vhzwxs): all five carry an enforced gate; the Xero post continues to report 'create the Xero transaction' honestly pending MAR-581. tests/graph/approvalVocabulary.test.ts pins five post-derived presence fixtures, the exact binding-gap result, four authorization/sign-off forms, and four technical-auth/substring absence cases; targeted approval suite 25/25 green. Portfolio-wide pnpm verify green: 99 files / 2678 tests, including live sibling-DASH schema parity, registry lint, benchmark lock, typecheck, and release trust. Registry unchanged; release fingerprint a59ee01fa6e99a1a unchanged."
+    },
+    {
+      "id": "MAR-581",
+      "lifecycle": "planned",
+      "linear_status": "In Review",
+      "commit": "ec5b14a",
+      "pr": 181,
+      "proof": {
+        "command": "pnpm verify",
+        "exact_goal_command": "pnpm exec vitest run tests/graph/accountingWriteDirection.test.ts"
+      },
+      "note": "IMPLEMENTED 2026-08-10 in ec5b14a; draft PR #181 targets master. Added published deterministic accounting_write plus tested gate/validation/auth/audit edges. Direction-safe matcher requires write verb + accounting object + Xero/QuickBooks/accounting-system context, with paired read/preview absence fixtures. Exact MAR-581 goal now routes retry_policy -> data_normalizer -> deduplication -> schema_validation -> reviewer_notification -> human_approval_gate -> auth_failure_handler -> accounting_write -> audit_log, unmatched_demand [], and the Layer-1 card says Approval enforced (unbound) with MAR-540's payload-identity caveat. Provider-neutral connection contract lists alternative official provider scopes and requires a selected adapter rather than claiming scripts/connect.mjs can mint a neutral token. invoice_intake_po_match keeps its explicit no-auto-post read-and-handoff boundary. Registry fingerprint 7b1edec52c349c78; benchmark 02209a02c51f7bc5. pnpm verify green including sibling-DASH schema parity: 99 files / 2687 tests. Linear evidence comment 2c1450b8-8079-4af7-bf10-107776db274e records before/after and proof. Lifecycle stays planned until an ancestor commit lands on master; no installed provider write was performed, so proven is not claimed."
     }
   ]
 }

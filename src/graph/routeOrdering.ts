@@ -150,6 +150,7 @@ const IRREVERSIBLE_WRITES = new Set([
   "optional_email_send",
   "calendar_write",
   "crm_note_write",
+  "accounting_write",
   // Advancing a deal/pipeline stage is a consequential external CRM mutation,
   // exactly like crm_note_write. Adversarial-batch finding: with deal_stage_update
   // omitted here, computeExecutionOrder never moved human_approval_gate before it,

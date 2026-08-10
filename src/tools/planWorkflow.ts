@@ -1235,7 +1235,8 @@ type CatalogEntry = {
  * plan_workflow can surface concrete wiring guidance in `what_you_need`.
  *
  * Coverage: Gmail, Google Calendar, Slack, HubSpot, GitHub, Canva, Airtable,
- * Stripe (no MCP), Firecrawl, Perplexity/Exa, webhooks.
+ * Stripe (no MCP), Xero/QuickBooks Online accounting writes, Firecrawl,
+ * Perplexity/Exa, webhooks.
  */
 const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
   email_read: {
@@ -1358,6 +1359,27 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
       "Upsert contacts by email to avoid duplicates — HubSpot does not deduplicate by default",
       "Notes must be associated to a Contact, Deal, or Company via the associations API after creation",
       "HubSpot rate limit: 100 API requests / 10 seconds per token",
+    ],
+  },
+
+  accounting_write: {
+    label: "Accounting system - create transaction (gated write)",
+    product_examples: ["Xero", "QuickBooks Online"],
+    auth_model: "Provider-specific OAuth2 adapter (choose Xero or QuickBooks Online during the build)",
+    mcp_server: {
+      availability: "none",
+      transport: "none",
+      note: "No registry-proven provider-neutral MCP server; implement and test the selected provider adapter explicitly",
+    },
+    required_scopes: [
+      "Xero: accounting.transactions + offline_access, or",
+      "QuickBooks Online: com.intuit.quickbooks.accounting",
+    ],
+    gotchas: [
+      "Choose exactly one provider and tenant/organisation before export; never infer the destination from credentials",
+      "Approval-gate presence is not payload binding - compare the approved payload identity immediately before the API call",
+      "Use a source-derived idempotency key and reconcile an ambiguous timeout before retrying",
+      "Persist the provider transaction ID, source reference, proposed/executed digests, tenant, and approval decision in audit evidence",
     ],
   },
 
@@ -4841,6 +4863,15 @@ function buildProductCardConnectList(
     add("gmail", hasGoalSignal(goal, ["gmail"]) ? "Gmail / email inbox" : "Email inbox (Gmail / Outlook / IMAP)");
   }
 
+  if (routeIds.has("accounting_write")) {
+    const accountingLabel = hasGoalSignal(goal, ["xero"])
+      ? "Xero organisation"
+      : hasGoalSignal(goal, ["quickbooks", "qbo"])
+      ? "QuickBooks Online company"
+      : "Accounting system (Xero / QuickBooks Online)";
+    add("accounting_system", accountingLabel);
+  }
+
   if (
     routeIds.has("crm_note_write") ||
     routeIds.has("crm_record_read") ||
@@ -4897,6 +4928,7 @@ function buildProductCardConnectList(
         "email_draft",
         "optional_email_send",
         "crm_note_write",
+        "accounting_write",
         "crm_record_read",
         "deal_stage_update",
         "slack_notification",
@@ -4979,6 +5011,20 @@ function connectLine(goal: string, steps: RouteStep[], whatYouNeed: IntegrationN
 
 function howItWorksSteps(steps: RouteStep[]): string[] {
   const routeIds = new Set(steps.map((s) => s.component_id));
+  if (routeIds.has("accounting_write")) {
+    return [
+      routeIds.has("pdf_extraction")
+        ? "Extract the receipt or invoice into a proposed accounting transaction."
+        : "Prepare a proposed accounting transaction from the source item.",
+      routeIds.has("deduplication")
+        ? "Derive a stable idempotency key and reject duplicate source events."
+        : "Require a stable source-derived idempotency key before the write.",
+      "Show the proposed transaction and source evidence for explicit human approval.",
+      "After approval, revalidate the unchanged payload identity immediately before the provider call.",
+      "Create the transaction in the selected accounting organisation and record the provider ID.",
+      "Write audit evidence linking source, decision, executed digest, idempotency key, and provider result.",
+    ];
+  }
   if (routeIds.has("email_read") && routeIds.has("crm_note_write")) {
     const lines = [
       "Read and extract lead data from the inbox.",
@@ -5052,6 +5098,7 @@ function buildControlsLine(steps: RouteStep[]): string {
   const controls = ["state", "retries", "credential-failure handling", "tests"];
   if (
     routeIds.has("crm_note_write") ||
+    routeIds.has("accounting_write") ||
     routeIds.has("optional_email_send") ||
     routeIds.has("external_publish")
   ) {
@@ -5286,6 +5333,7 @@ function buildGuidedPlanMarkdown(
     if (enforcedGates.includes("human_approval_gate")) {
       const guardedActions = [
         cardRouteIds.has("crm_note_write") ? "CRM updates" : null,
+        cardRouteIds.has("accounting_write") ? "accounting transaction creation" : null,
         cardRouteIds.has("slack_notification") ? "Slack alerts" : null,
         cardRouteIds.has("calendar_write") ? "calendar invite creation" : null,
         cardRouteIds.has("optional_email_send") && !explicitlyDraftOnly(goal) ? "sending" : null,
