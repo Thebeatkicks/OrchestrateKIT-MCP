@@ -18,7 +18,14 @@
 
 import type { CredentialRequirement } from "./connectContract.js";
 import type { ConnectionRequirement } from "./connectionContract.js";
-import { dashManifestProvider, type AiProviderId } from "./dashBrokerCatalog.js";
+import {
+  AI_PROVIDER_IDS,
+  dashAiOperationId,
+  dashManifestProvider,
+  dashOperationById,
+  dashOperationsForComponent,
+  type AiProviderId,
+} from "./dashBrokerCatalog.js";
 import { McpToolError } from "./errors.js";
 import type {
   PlacementAxis,
@@ -94,6 +101,16 @@ export type AgentDomCommand =
   | "resume"
   | "cancel";
 export type AgentDomConnectionOwnership = "dash_managed" | "agent_managed" | "external";
+
+/**
+ * What `export_build_brief`'s caller answered when asked which model provider
+ * this build uses.
+ *
+ * `deterministic_first` is not a provider — it is the caller declining one, and
+ * it is a member here rather than an absence so the emitter has to branch on it
+ * rather than fall through to a default nobody chose.
+ */
+export type LlmProviderChoice = AiProviderId | "deterministic_first";
 
 /**
  * MAR-507 companion: one kind of file a task accepts, in the plan's own
@@ -453,17 +470,29 @@ type AgentDomConnectionField = {
   };
 };
 
+/**
+ * One capability row on a connection.
+ *
+ * `access` gained `spend` in MAR-692 and the type is the point: DASH's schema
+ * has had three members since MAR-619 and this union had two, so the emitter
+ * could not say `spend` even where it meant it, and every model capability it
+ * wrote was filed under `read`. A permission card built from that says a model
+ * call takes nothing and changes nothing, when in fact the person's own account
+ * is charged. Widening the union is what makes the honest word available.
+ */
+export type AgentDomConnectionCapability = {
+  id: string;
+  label: string;
+  access: "read" | "write" | "spend";
+};
+
 type AgentDomConnection = {
   id: string;
   provider: string;
   label: string;
   purpose: string;
   ownership: AgentDomConnectionOwnership;
-  capabilities: {
-    id: string;
-    label: string;
-    access: "read" | "write";
-  }[];
+  capabilities: AgentDomConnectionCapability[];
   fields: AgentDomConnectionField[];
   validation_action: {
     id: string;
@@ -577,15 +606,60 @@ function agentDomConnections(input: {
 }): AgentDomConnection[] {
   const routeById = new Map(input.routeSteps.map((step) => [step.component_id, step]));
   return input.connections.map((connection) => {
-    const ownership = ownershipForRuntime(connectionOwnership(connection), input.runtimeKind);
-    const capabilities = connection.serves_components.map((componentId) => {
-      const step = routeById.get(componentId);
-      return {
-        id: stableId(`${connection.connection_id}.${componentId}`, connection.connection_id),
-        label: step?.purpose || step?.component_name || componentId,
-        access: step?.connection_access ?? "read",
-      };
-    });
+    const declaredOwnership = ownershipForRuntime(
+      connectionOwnership(connection),
+      input.runtimeKind,
+    );
+    const provider = dashManifestProvider(connection.connection_id);
+    /*
+     * MAR-692: on a connection DASH will actually broker, a capability id is
+     * not a label — it is the key `operationById` looks up, and an id DASH
+     * cannot resolve is answered `unknown_operation` by `execute.ts` before it
+     * reaches a provider. `${connection_id}.${component_id}` resolves nothing,
+     * ever: DASH's ids name operations (`gmail.search`), not plan components
+     * (`gmail.email_read`). So a brokered connection declares DASH's own ids
+     * with DASH's own access class, and a component DASH has no operation for
+     * contributes nothing rather than a name that refuses.
+     */
+    const brokeredCapabilities = uniqueCapabilities(
+      connection.serves_components.flatMap((componentId) => {
+        const step = routeById.get(componentId);
+        return dashOperationsForComponent(provider, componentId).map((operationId) => ({
+          id: operationId,
+          label: step?.purpose || step?.component_name || componentId,
+          access: dashOperationById(operationId)?.access ?? ("read" as const),
+        }));
+      }),
+    );
+    /*
+     * And if none of this connection's steps resolve to a DASH operation, it is
+     * not brokered *for this plan* however well DASH knows the service — the
+     * route's only Gmail step might be `email_send`, which ADR 0002 invariant 6
+     * guarantees DASH will never have an operation for. Claiming `dash_managed`
+     * there produces the exact row `dashBrokerCatalog.ts`'s header warns about:
+     * "DASH holds this credential", every call refused. The agent holds its own
+     * credential instead, which is true and is a path the user can complete.
+     */
+    const ownership: AgentDomConnectionOwnership =
+      declaredOwnership === "dash_managed" && brokeredCapabilities.length === 0
+        ? "agent_managed"
+        : declaredOwnership;
+    /*
+     * An unbrokered connection keeps the MCP's inventory id, and that is
+     * correct rather than a leftover: DASH never looks one up, and the row is
+     * documentation of what the agent holds its own credential for.
+     */
+    const capabilities =
+      ownership === "dash_managed"
+        ? brokeredCapabilities
+        : connection.serves_components.map((componentId) => {
+            const step = routeById.get(componentId);
+            return {
+              id: stableId(`${connection.connection_id}.${componentId}`, connection.connection_id),
+              label: step?.purpose || step?.component_name || componentId,
+              access: step?.connection_access ?? ("read" as const),
+            };
+          });
     if (capabilities.length === 0) {
       capabilities.push({
         id: stableId(`${connection.connection_id}.access`, connection.connection_id),
@@ -618,66 +692,139 @@ function agentDomConnections(input: {
   });
 }
 
-/** DASH's friendly card title for the two AI providers the MCP can select today. */
-const AI_PROVIDER_LABELS: Record<Extract<AiProviderId, "anthropic" | "openrouter">, string> = {
+/**
+ * Two capability rows naming the same DASH operation are one capability.
+ *
+ * A plan may reach the same operation from several steps — two model steps both
+ * spending through `chat.completion`, `email_read` asking for both Gmail reads.
+ * The first label wins, which is the earliest step in route order and therefore
+ * the sentence a reader is least surprised by.
+ */
+function uniqueCapabilities(
+  capabilities: AgentDomConnectionCapability[],
+): AgentDomConnectionCapability[] {
+  const byId = new Map<string, AgentDomConnectionCapability>();
+  for (const capability of capabilities) {
+    if (!byId.has(capability.id)) byId.set(capability.id, capability);
+  }
+  return [...byId.values()];
+}
+
+/**
+ * DASH's own card title per AI provider.
+ *
+ * Keyed on `AiProviderId` rather than on the narrower set the tool can select
+ * today, so adding a provider to `llm_provider` cannot ship a connection
+ * labelled with a raw id. `dashBrokerCatalog.test.ts` pins that every provider
+ * DASH defines has a label here.
+ */
+const AI_PROVIDER_LABELS: Record<AiProviderId, string> = {
   anthropic: "Anthropic",
   openrouter: "OpenRouter",
+  openai: "OpenAI",
 };
 
 /**
- * MAR-596/F14 (coordinator relay, PR #183; DASH ADR 0013): an emitted agent
- * with at least one AI-backed step needs a real connection for DASH's
- * "bring your own AI key" vault (MAR-582) to hold a key against —
- * `AiKeyConnectionView` (orchestratedash `lib/ai/connection-view.ts`) renders
- * straight from `agent_dom.connections`, not from a new manifest block. ADR
- * 0013 settled that the manifest shape does not change for this: the agent
- * declares the model-provider connection exactly like any other
- * `dash_managed` connection, and DASH resolves it against a fleet-level
- * connection that exists without any agent.
+ * The model-provider connection for an agent with AI-backed steps —
+ * MAR-596/F14, corrected by MAR-692.
  *
- * `provider` must be one of DASH's own `AI_PROVIDER_IDS` (pinned in
- * dashBrokerCatalog.ts) or DASH's `aiProviderFor` returns null and the row is
- * skipped rather than rendered. It is exactly the caller's already-required
- * `llm_provider` choice: `export_build_brief` forces one before any AI-backed
- * export reaches here (see `buildLlmProviderNeedsInput`), and
- * "anthropic"/"openrouter" already match DASH's `connection_provider`
- * spelling 1:1 — no translation table the way Gmail needs.
- * "deterministic_first" is the caller explicitly choosing to omit
- * model-provider credentials (its own option copy in exportBuildBrief.ts, and
- * the matching branch in `buildCredentialManifest` that pushes nothing);
- * mirrored here rather than declaring a connection with no key behind it.
+ * ## What was wrong, observed rather than reasoned
  *
- * Gated on `dashBrokerAvailable`, the same MAR-494 signal every other
- * `dash_managed` connection uses: DASH's vault only exists where DASH is
- * present, and emitting this unconditionally would assert DASH is installed
- * on a machine the MCP has never observed.
+ * MAR-692's step 0 called `export_build_brief` for real. The 145 KB brief it
+ * produced routed every model step **around DASH**: the connect section told
+ * the builder to mint an `OPENROUTER_API_KEY` and keep it in the agent's own
+ * `.env`, and the word `spend` appeared nowhere in the artifact. Re-run against
+ * master the connection does appear — the observed brief came from a build that
+ * predates F14 — and it is wrong in three ways that all end at the same place:
  *
- * **The DASH-side trap this shape exists to avoid**: `resolveCredentialTarget`
+ *   1. its one capability was `openrouter.research_synthesis`, a plan component
+ *      id dressed as an operation id, which `operationById` cannot resolve;
+ *   2. it was `access: "read"`, for the one operation class that charges the
+ *      person's own account;
+ *   3. the raw `.env` key was emitted beside it regardless, so even the correct
+ *      row led to a builder who never asks the broker.
+ *
+ * An agent like that is not refused by DASH. It is worse than refused: it runs,
+ * it spends, and DASH cannot see any of it.
+ *
+ * ## What it declares now
+ *
+ * `${provider}.models.list` (read), always — picking a model is the one thing
+ * every AI connection needs and it costs nothing — plus one spend capability
+ * per operation the plan's model steps actually reach, resolved through
+ * `dashOperationsForComponent` and carrying DASH's own access class. For the
+ * scout's own goal that is exactly the three capabilities the proven scout
+ * declares by hand: `models.list`, `brief.compose`, `chat.completion`.
+ *
+ * ## What has NOT changed, and must not
+ *
+ * The ADR 0006 downgrade stays. `lib/manifest-constraints.ts` in orchestratedash
+ * refuses at import any manifest pairing a `remote` runtime with a
+ * `dash_managed` connection — the broker cannot reach a process it did not
+ * spawn — so on a managed-worker runtime this connection is `agent_managed` and
+ * the key really does live with the agent. That is the honest answer, not a
+ * bug to route around, and `brokersModelKey` is how the connect contract learns
+ * which of the two worlds it is in.
+ *
+ * Still gated on `dashBrokerAvailable`, the MAR-494 signal: the MCP is
+ * stateless and emitting this unconditionally would assert DASH is installed on
+ * a machine it has never observed. `deterministic_first` still declares
+ * nothing — the caller explicitly chose to omit model-provider credentials.
+ *
+ * **The DASH-side trap this shape avoids**: `resolveCredentialTarget`
  * (orchestratedash `lib/connection-credentials.ts`) refuses a field with
  * `brokered_provider_delivery` when a `secret` field recognised as an
  * AI-provider key ALSO declares `technical.environment_name` — DASH's broker
- * holds the key and answers on the agent's behalf; it never hands the key
- * back as an env var. So this field carries no `technical` block at all,
- * unlike the agent-managed credential fields `connectionFields` builds for
- * every other provider.
+ * holds the key and answers on the agent's behalf; it never hands it back as an
+ * env var. So this field carries no `technical` block at all, unlike the
+ * agent-managed credential fields `connectionFields` builds elsewhere.
  */
 function aiProviderConnection(input: {
   routeSteps: ManifestRouteStep[];
-  llmProvider?: "anthropic" | "openrouter" | "deterministic_first";
+  llmProvider?: LlmProviderChoice;
   dashBrokerAvailable: boolean;
   runtimeKind: AgentDomLocationKind;
 }): AgentDomConnection | undefined {
   if (!input.dashBrokerAvailable) return undefined;
-  if (input.llmProvider !== "anthropic" && input.llmProvider !== "openrouter") return undefined;
+  const providerId = input.llmProvider;
+  if (providerId === undefined || providerId === "deterministic_first") return undefined;
+  if (!(AI_PROVIDER_IDS as readonly string[]).includes(providerId)) return undefined;
 
   const aiSteps = input.routeSteps.filter(
     (step) => step.model_tier !== undefined && step.model_tier !== "none",
   );
   if (aiSteps.length === 0) return undefined;
 
-  const providerId = input.llmProvider;
   const label = AI_PROVIDER_LABELS[providerId];
   const ownership = ownershipForRuntime("dash_managed", input.runtimeKind);
+
+  const modelsList = dashAiOperationId(providerId, "models_list");
+  const capabilities = uniqueCapabilities([
+    ...(modelsList
+      ? [
+          {
+            id: modelsList,
+            label: `See which models your ${label} key can use`,
+            access: dashOperationById(modelsList)?.access ?? ("read" as const),
+          },
+        ]
+      : []),
+    ...aiSteps.flatMap((step) =>
+      dashOperationsForComponent(providerId, step.component_id).map((operationId) => ({
+        id: operationId,
+        label: step.purpose || step.component_name || step.component_id,
+        access: dashOperationById(operationId)?.access ?? ("spend" as const),
+      })),
+    ),
+  ]);
+  /*
+   * A connection with no resolvable operation is not a connection DASH can
+   * broker, and the schema's `minItems: 1` would make an empty list an invalid
+   * manifest rather than a quiet one. Declaring nothing is the safe direction:
+   * the plan keeps its model steps and the builder is told, in the connect
+   * section, that this provider is not brokered here.
+   */
+  if (capabilities.length === 0) return undefined;
 
   return {
     id: providerId,
@@ -685,16 +832,15 @@ function aiProviderConnection(input: {
     label,
     purpose: "Answer this agent's AI-backed steps",
     ownership,
-    capabilities: aiSteps.map((step) => ({
-      id: stableId(`${providerId}.${step.component_id}`, providerId),
-      label: step.purpose || step.component_name || step.component_id,
-      access: "read" as const,
-    })),
+    capabilities,
     fields: [
       {
         id: stableId(`${providerId}-api-key`, "connection-field"),
         label: `${label} API key`,
-        purpose: `The API key DASH's vault holds so this agent's AI-backed steps can answer through ${label}.`,
+        purpose:
+          ownership === "dash_managed"
+            ? `The API key DASH's vault holds so this agent's AI-backed steps can answer through ${label}. DASH holds it and the agent never sees it.`
+            : `The API key this agent holds so its AI-backed steps can answer through ${label}. This runtime runs away from DASH, so DASH cannot hold it (ADR 0006).`,
         kind: "secret",
         required: true,
       },
@@ -709,6 +855,28 @@ function aiProviderConnection(input: {
     },
   };
 }
+
+/**
+ * Will DASH's vault hold this build's model key, rather than the agent's `.env`?
+ *
+ * The one question `buildCredentialManifest` needs answered, and it has to be
+ * answered the same way `aiProviderConnection` answers it or the manifest and
+ * the connect contract disagree about where the key lives. Both preconditions
+ * matter: DASH present *and* a runtime DASH can broker for.
+ */
+export function dashBrokersModelKey(input: {
+  llmProvider?: LlmProviderChoice;
+  dashBrokerAvailable?: boolean;
+  runtimeClass: string | undefined;
+}): boolean {
+  if (input.dashBrokerAvailable !== true) return false;
+  const providerId = input.llmProvider;
+  if (providerId === undefined || providerId === "deterministic_first") return false;
+  if (!(AI_PROVIDER_IDS as readonly string[]).includes(providerId)) return false;
+  const runtimeKind = runtimeLocationKind(agentDomRuntimeClass(input.runtimeClass));
+  return ownershipForRuntime("dash_managed", runtimeKind) === "dash_managed";
+}
+
 
 function connectionRequirementId(connectionId: string): string {
   const base = connectionId

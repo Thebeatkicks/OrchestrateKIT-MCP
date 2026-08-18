@@ -42,7 +42,9 @@
     "release:check": "tsx scripts/check-release-trust.ts",
     "state:check": "node scripts/check-project-state.mjs",
     "dash:schema:check": "node scripts/check-dash-schema-drift.mjs",
-    "verify": "pnpm state:check && pnpm dash:schema:check && pnpm gen:registry && pnpm typecheck && pnpm registry:lint && pnpm benchmark:check && pnpm test && pnpm release:check"
+    "verify": "pnpm state:check && pnpm dash:schema:check && pnpm dash:vocab:check:local && pnpm gen:registry && pnpm typecheck && pnpm registry:lint && pnpm benchmark:check && pnpm test && pnpm release:check",
+    "dash:vocab:check": "tsx scripts/check-dash-vocabulary-drift.ts",
+    "dash:vocab:check:local": "tsx scripts/check-dash-vocabulary-drift.ts --allow-missing"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",

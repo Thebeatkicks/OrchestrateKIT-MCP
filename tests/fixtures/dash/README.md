@@ -45,14 +45,48 @@ still what DASH's `resolveGrant` needs to actually grant an operation — the
 exact seam MAR-477 found broken (two agreeing schemas, two disagreeing field
 *values*).
 
-Its own `source_commit` field is authoritative for its content (independent of
-`contract.lock.json`'s top-level `canonical_commit`, which tracks the schema
-files only, since the two are not always re-synced in the same pass). Its
-`schema_semantic_sha256` entry in `contract.lock.json` follows the same
-dual-update discipline as the schemas above: when DASH's broker facts change,
-re-copy the values, update `source_commit`, recompute the fingerprint, and
-re-run `pnpm test`. There is no live drift check against DASH's TypeScript
-source (unlike `agent.manifest.v2.schema.json`'s `pnpm dash:schema:check`) —
-importing another repo's runtime module graph for a fact this small is not
-worth the fragility; re-syncing by hand on the same review that touches DASH's
-broker files is the intended discipline.
+Its own `source_commit` field is authoritative for its content, and CI reads it
+directly: the workflow clones orchestratedash at exactly that commit before
+running the drift gate.
+
+### It is now EXTRACTED, not transcribed (MAR-692)
+
+The paragraph that used to sit here said there was no live drift check against
+DASH's TypeScript, because "importing another repo's runtime module graph for a
+fact this small is not worth the fragility", and that re-syncing by hand on the
+same review that touches DASH's broker files was the intended discipline.
+
+That discipline failed completely. This file pinned three operations while DASH
+had fifteen, 598 commits behind, and the twelve it was missing are the AI
+operations every model step needs — so the MCP could not name a single operation
+DASH would resolve for a model call, and nothing anywhere said so.
+
+`pnpm dash:vocab:check` (`scripts/check-dash-vocabulary-drift.ts`) replaces the
+hand discipline. It **runs** orchestratedash's own `lib/broker/operations.ts` and
+`lib/broker/providers.ts` out of a checkout at `source_commit` and rewrites or
+fails against what they return. There is no module graph to import: those two
+files plus `lib/ai/providers.ts` have exactly one import between them and no
+external dependency, so a bare clone with no `pnpm install` is enough — and if
+that ever stops being true, the gate fails loudly rather than falling back to
+guessing.
+
+Twelve of the fifteen operations were never transcribable anyway. They exist as
+no literal in DASH's source at all: they are generated per AI provider from
+exported suffix constants, so any hand copy was always a re-implementation of
+DASH's id generation, drifting on its own schedule.
+
+Re-sync with `pnpm dash:vocab:check --write` after moving `source_commit`, then
+recompute this file's `schema_semantic_sha256` entry in `contract.lock.json` and
+re-run `pnpm test`. `src/lib/dashBrokerCatalog.ts` is never auto-written:
+deciding whether the emitter should now *reach* a new operation is a judgement,
+and the gate exists to insist somebody makes it.
+
+## run-artifact contract — deliberately NOT here
+
+The third DASH contract the MCP mirrors, `contracts/run-artifact.schema.json`,
+lives in `src/lib/dashArtifactContract.ts` instead. It is the one mirror
+`export_build_brief` reads at runtime rather than only in a test, so it has to
+survive `pnpm build` into `dist/` — a fixture would be correct in CI and missing
+in the shipped server. The same gate checks it, by value including every
+`description` string, and checks the `items_digest` canonicalisation beside it by
+running both DASH's function and the MCP's pasteable copy over the same items.

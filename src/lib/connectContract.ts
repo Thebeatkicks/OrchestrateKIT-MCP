@@ -366,7 +366,7 @@ function dashCredentials(): CredentialRequirement[] {
  */
 export function buildCredentialManifest(
   routeSteps: RouteStepLike[],
-  options: { llm_provider?: LlmProvider } = {},
+  options: { llm_provider?: LlmProvider; dash_brokers_model_key?: boolean } = {},
 ): CredentialRequirement[] {
   const byComponent = (ids: string[]) =>
     routeSteps.filter((s) => ids.includes(s.component_id)).map((s) => s.component_id);
@@ -390,8 +390,28 @@ export function buildCredentialManifest(
         "llm_provider is required when route steps include model-backed components",
       );
     }
-    if (options.llm_provider === "openrouter") manifest.push(openRouterCredential(llmBy));
-    else if (options.llm_provider === "anthropic") manifest.push(anthropicCredential(llmBy));
+    /*
+     * MAR-692: when DASH's vault holds this key, the agent must never see it.
+     *
+     * A credential entry here becomes an env var in the generated `.env` and a
+     * step in `connect.mjs` that opens the provider's key page and asks the
+     * builder to paste one. Emitting that beside a `dash_managed` model-provider
+     * connection is how the observed brief routed every model step around DASH:
+     * the manifest said "DASH holds this and answers on the agent's behalf" and
+     * the connect contract, on the same page, told the builder to mint a raw key
+     * and keep it in a dotfile. A builder follows the instructions.
+     *
+     * So the two are one decision now. `dashBrokersModelKey` in
+     * observabilityContract.ts answers it once — DASH present AND a runtime DASH
+     * can broker for — and both the connection's ownership and this entry are
+     * derived from that same answer. On a remote runtime, where ADR 0006 means
+     * DASH genuinely cannot hold the key, the entry comes back and the `.env`
+     * path is the honest one.
+     */
+    if (options.dash_brokers_model_key !== true) {
+      if (options.llm_provider === "openrouter") manifest.push(openRouterCredential(llmBy));
+      else if (options.llm_provider === "anthropic") manifest.push(anthropicCredential(llmBy));
+    }
   }
 
   const slackBy = byComponent(SLACK_COMPONENTS);
@@ -907,9 +927,12 @@ export function buildConnectArtifacts(input: {
   agent_name: string;
   registry_fingerprint: string;
   llm_provider?: LlmProvider;
+  /** MAR-692: DASH's vault holds the model key, so no `.env` entry is emitted for it. */
+  dash_brokers_model_key?: boolean;
 }): ConnectArtifacts {
   const credential_manifest = buildCredentialManifest(input.route_steps, {
     llm_provider: input.llm_provider,
+    dash_brokers_model_key: input.dash_brokers_model_key,
   });
   const connect_script = buildConnectScript(credential_manifest, {
     agent_name: input.agent_name,
@@ -940,15 +963,97 @@ export function buildConnectArtifacts(input: {
  * deliberately still emitted in full, because a self-hoster with no broker and
  * no MCP server has nothing else.
  */
+/**
+ * Where this build's model key lives, and therefore whether DASH can see what
+ * the agent spends — MAR-692.
+ *
+ * Three states rather than a boolean, because "no model steps" and "model steps
+ * DASH cannot supervise" are not the same silence, and a reader who gets no
+ * paragraph at all should be able to conclude the first.
+ */
+export type ModelKeyCustody = {
+  /** Does this plan have any step with a real model tier? */
+  has_model_steps: boolean;
+  /** Does DASH's vault hold the key (DASH present, and a runtime it can broker for)? */
+  dash_holds_key?: boolean;
+  /** DASH's own operation ids the agent will spend through, when DASH holds the key. */
+  brokered_operations?: readonly string[];
+  /** Why DASH cannot hold it, when it cannot. */
+  reason?: "no_dash" | "remote_runtime" | "no_provider_chosen";
+};
+
+function renderModelKeyCustody(custody: ModelKeyCustody): string[] {
+  if (!custody.has_model_steps) return [];
+
+  if (custody.dash_holds_key === true) {
+    const operations = (custody.brokered_operations ?? []).map((id) => `\`${id}\``).join(", ");
+    return [
+      "**§11 Connect — the model key: DASH holds it** _(MAR-692)_",
+      "",
+      "This agent's model provider is declared as a `dash_managed` connection in " +
+        "`agent_dom.connections`, so **do not mint an API key into `.env` for it and do not read " +
+        "one from the environment.** DASH's vault holds the key, the agent never sees it, and " +
+        "every model call goes out as a broker request naming one of DASH's own operations" +
+        (operations ? `: ${operations}.` : "."),
+      "",
+      "Each of those the agent spends through is `access: \"spend\"` — the user's own provider " +
+        "account is charged and nothing is created anywhere. DASH records the call, so the " +
+        "spend is visible to the person who owns it.",
+    ];
+  }
+
+  const because =
+    custody.reason === "remote_runtime"
+      ? "this build's runtime runs away from DASH, and DASH refuses at import any manifest " +
+        "pairing a remote runtime with a `dash_managed` connection — its broker cannot reach a " +
+        "process it did not spawn (ADR 0006)"
+      : custody.reason === "no_dash"
+        ? "this export was not told DASH is present (`dash_broker_available`)"
+        : "no model provider was chosen for this build";
+
+  return [
+    "**§11 Connect — the model key: this agent holds it, and DASH cannot see the spend** _(MAR-692)_",
+    "",
+    `The API key for this agent's model steps lives in its own \`.env\`, because ${because}.`,
+    "",
+    "State the consequence to whoever runs this agent rather than leaving it implied: every " +
+      "model call is charged to their provider account, and **DASH has no record of any of it** " +
+      "— it can report that the agent ran, not what it spent." +
+      (custody.reason === "remote_runtime"
+        ? " Re-exporting against a runtime on the same computer as DASH (the DASH Agent Runner) " +
+          "is what moves this key into DASH's vault."
+        : ""),
+  ];
+}
+
+
 export function s11Connect(
   artifacts: ConnectArtifacts,
   connections: readonly ConnectionRequirement[] = [],
+  modelKeyCustody: ModelKeyCustody = { has_model_steps: false },
 ): string {
   const lines: string[] = [];
 
   const contract = renderConnectionContract(connections);
   if (contract.length > 0) {
     lines.push("**§11 Connect — connections**", "", ...contract, "");
+  }
+
+  /*
+   * MAR-692: say where the model key lives, in the section that tells a builder
+   * what to do with keys.
+   *
+   * This paragraph is the difference between the two worlds the same export can
+   * produce, and it exists because the observed brief made them look identical.
+   * A builder reading the `.env` instructions has no way to know whether DASH is
+   * holding the key or whether this agent is about to spend the user's money
+   * where DASH cannot see it — so the brief says which, and on the runtime where
+   * DASH cannot help it says that plainly rather than letting silence imply
+   * supervision.
+   */
+  const custody = renderModelKeyCustody(modelKeyCustody);
+  if (custody.length > 0) {
+    lines.push(...custody, "");
   }
 
   lines.push(
