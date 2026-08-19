@@ -51,7 +51,7 @@ It drifts **narrow**, which is the safe direction. A service missing from the se
 ## What this does not change
 
 - **ADR 0006 still bounds it.** A remote runtime downgrades `dash_managed` to `agent_managed` in `buildAgentManifest`, exactly as MAR-486 established, and the signal does not override it. The broker runs in Electron main because `safeStorage` is only readable there; when DASH is closed, the broker is closed. `tests/tools/observabilityManifest.test.ts` asserts the signal never survives a remote runtime.
-- **`plan_workflow` is untouched.** Planning happens before anyone has asserted anything about the machine, and its connection contract keeps showing the broker path as planned. Only export time, where a caller can assert, changes — the same scope as `cadence_enabled`.
+- ~~**`plan_workflow` is untouched.**~~ Superseded by Amendment 1 below (MAR-699).
 - **`recommended_route` is unaffected**, for the same reason MAR-463 left it alone: it is the description of the agent the user asked for, not of the build.
 
 ## Consequences
@@ -59,3 +59,24 @@ It drifts **narrow**, which is the safe direction. A service missing from the se
 An MCP-authored manifest exported with the signal on now resolves a real grant through DASH's own `resolveGrant`, yielding a capability card with its custody, consent-screen, consequence and wider-permission sentences, and a brokered `gmail.search` call is allowed and audited. That is MAR-477 steps 5 and 6, closed.
 
 What remains open is the half that needs a human: a real Google account at a real consent screen, which is MAR-468's shape — attended, dated, and never in `pnpm verify` (ADR 0004's rule). The proof harness stubs `mintAccessToken` and `fetchImpl`, which are seams DASH's `BrokerDeps` already exposes for DASH's own tests, so what is proven is that DASH authorizes and records the call, not that Google answers it.
+
+---
+
+## Amendment 1 — `plan_workflow` now accepts the same signal, for the runtime decision (MAR-699)
+
+- **Status:** Accepted, 2026-08-19
+- **Amends:** the "`plan_workflow` is untouched" bullet of "What this does not change" above.
+
+### What changed
+
+MAR-692's step-0 observation (this issue's own comment thread) found that `plan_workflow` recommended a **managed background worker** for a goal DASH could fully host and supervise, because the DASH Agent Runner was only ever offered when the goal's own text declared it installed (`dashAgentRunnerDeclaredAvailable`). A caller who asserts `dash_broker_available: true` at export time — DASH is genuinely present — had no way to say so before the runtime decision was made, so the planner's own default routed a supervisable agent around DASH's broker: exactly the "MCP plans → DASH controls" seam this signal exists to close (MAR-699).
+
+`plan_workflow` now accepts the identical optional `dash_broker_available: boolean` input `export_build_brief` already had. It is caller-supplied, not inferred — nothing new for the MCP to observe; the same fact, asserted one call earlier. When true, and the route also fits the runner (manifest-v2-compatible, no `must_run_while_computer_off` requirement), `runtime_recommendation` prefers the DASH Agent Runner over the managed background worker or scheduled job; the demoted option remains a real alternative, not a hidden one. `control_surface`, `hosting_and_monitoring`, and every other placement axis that already re-projects `runtime_recommendation.id === "dash_agent_runner_local"` move with it — one decision, not two.
+
+### Why this does not weaken the "caller-supplied fact" rule
+
+The signal is still never inferred inside `plan_workflow` — a goal carries no more evidence of the machine that will eventually run it than it did before. What changed is *when* the caller is allowed to state a fact it already knows. A caller building a DASH-authored agent typically knows `dash_broker_available` before it ever calls `plan_workflow`; requiring it to withhold that fact until `export_build_brief` bought nothing except a worse default in between.
+
+### Why the computer-off carve-out is unchanged
+
+`dash_broker_available` says DASH is present, not that it stays present while the user's computer sleeps. A goal that genuinely requires `must_run_while_computer_off` still gets the durable runtime recommended, and the DASH Agent Runner is dropped from the offered options entirely (not demoted) — the same honesty rule this ADR's "why not flip it on unconditionally" section already established: an option the runtime cannot deliver is worse than no option. `tests/tools/planWorkflowRuntimePreference.test.ts` pins both branches against the competitor scout's own goal (MAR-689 §3.3), including the ADR-0006 trade-off sentence `export_build_brief` still owes the reader when the durable runtime is the honest answer.
