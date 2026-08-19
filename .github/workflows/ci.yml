@@ -28,6 +28,36 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # MAR-692: the drift gate needs orchestratedash, and CI never had it — so
+      # `pnpm dash:schema:check` printed SKIPPED and exited 0 on every push,
+      # which is how the broker catalogue went 598 commits stale and the pinned
+      # manifest schema went without `access: "spend"` for 323. This clones DASH
+      # at the commit the mirrors pin, so the check finally runs where it counts.
+      #
+      # Public repo, so no token. `--filter=blob:none --no-checkout` fetches
+      # metadata only and then materialises exactly the pinned tree, which keeps
+      # it to a few seconds. Deliberately no `pnpm install` in the clone: the two
+      # broker files, the AI profile list and the fingerprint module are a
+      # dependency-free island the gate executes directly, and if that ever stops
+      # being true the gate fails loudly rather than degrading (see
+      # scripts/dash-vocabulary.ts).
+      - name: Check out orchestratedash at the pinned commit (MAR-692)
+        run: |
+          set -euo pipefail
+          PIN=$(node -p "require('./tests/fixtures/dash/broker-profiles.json').source_commit")
+          echo "pinned orchestratedash commit: $PIN"
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/orchestratemcp/orchestratedash.git ../orchestratedash
+          git -C ../orchestratedash checkout --detach "$PIN"
+
+      # Named so it reports under its own heading rather than inside verify's
+      # output — this is the check the whole of MAR-692 exists to add, and a
+      # reviewer should be able to see it pass or fail without reading a log.
+      # No --allow-missing here, unlike `pnpm verify`: the clone above means a
+      # missing sibling is a broken workflow, and it must fail as one.
+      - name: DASH vocabulary drift gate (MAR-692)
+        run: pnpm dash:vocab:check
+
       # The conformance fixtures reach the registry through the generated
       # bundle, so it has to exist before the gate runs. `pnpm verify`
       # regenerates it anyway; doing it here lets the conformance gate report

@@ -1122,15 +1122,40 @@ describe("export_build_brief delivery contract (PKG-W0-BRIEF-SIZE)", () => {
    * The trade was made deliberately in that direction: this budget protects
    * client context, and 96 KB serves that as well as 90 KB did, whereas a
    * fail-closed gate whose evidence is hidden to save bytes is not worth
-   * shipping. The 4x compact/full ratio below is the assertion that still does
-   * the real structural work.
+   * shipping. The compact/full ratio below is the assertion that still does the
+   * real structural work.
+   *
+   * ## MAR-692 raised it again, 96 KB -> 128 KB, and this is the reasoning
+   *
+   * `run_artifact_contract.schema` is orchestratedash's run-artifact contract
+   * carried byte for byte: ~22.7 KB minified, of which ~17 KB is its
+   * `description` strings. Compact went from 90,621 to 117,130 bytes, and the
+   * ratio from 4.7x to 3.6x, so both halves of this assertion moved.
+   *
+   * The alternative considered and rejected was to strip the descriptions in
+   * compact (5.6 KB) and carry the annotated contract only in `full`. Two
+   * reasons it loses. First, **compact is the mode people use** — the observed
+   * MAR-692 export was compact — so a contract that only appears in `full` is a
+   * contract the agent-building LLM does not read, which is the exact failure
+   * this issue exists to fix. Second, the descriptions are not decoration:
+   * they carry the field-length ceilings, why `items` stays authoritative, and
+   * what a `derived_from` mismatch does. MAR-689 §3.4 records a real agent
+   * losing a whole briefing to a manifest three characters over a cap, and a
+   * cap is exactly what a stripped schema drops.
+   *
+   * So the same trade as MAR-460, in the same direction: bytes are cheaper than
+   * an agent whose output DASH silently discards. What this budget still
+   * protects is a compact response that stays a fraction of `full`, and 3x
+   * holds that line — if a future addition pushes it under 3x, compact has
+   * stopped being compact and the fix is to move something out, not to lower
+   * this number again.
    */
-  it("keeps the canonical compact response below 96 KB and at least 4x smaller", () => {
+  it("keeps the canonical compact response below 128 KB and at least 3x smaller", () => {
     const { compact, full } = deliveryPair();
     const compactBytes = new TextEncoder().encode(JSON.stringify(compact)).byteLength;
     const fullBytes = new TextEncoder().encode(JSON.stringify(full)).byteLength;
-    expect(compactBytes).toBeLessThan(96 * 1024);
-    expect(fullBytes / compactBytes).toBeGreaterThan(4);
+    expect(compactBytes).toBeLessThan(128 * 1024);
+    expect(fullBytes / compactBytes).toBeGreaterThan(3);
   });
 });
 

@@ -727,6 +727,21 @@ export const ExportBuildBriefOutputShape = z
       .optional(),
     agent_manifest: z.object({}).passthrough().optional(),
     /**
+     * MAR-692: the run-artifact contract, carried as data. `schema` is
+     * orchestratedash's own file byte for byte, so it is deliberately opaque
+     * here — validating a copy of a JSON Schema against a hand-written shape
+     * would be a second contract to drift.
+     */
+    run_artifact_contract: z
+      .object({
+        source_commit: z.string(),
+        schema: z.object({}).passthrough(),
+        planned_kinds: z.array(z.string()),
+        items_digest_mirror_js: z.string(),
+      })
+      .passthrough()
+      .optional(),
+    /**
      * MAR-460: public-runner eligibility. `decision` is a three-way gate, not a
      * boolean — `ineligible` (a record says the runner lacks a required
      * capability) and `needs_evidence` (no record was supplied) are distinct

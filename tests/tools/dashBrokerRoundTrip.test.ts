@@ -61,6 +61,7 @@ import { loadRegistry } from "../../src/registry/registryLoader.js";
 import {
   dashManifestProvider,
   dashBrokeredConnectionIds,
+  dashBrokerOperations,
   AI_PROVIDER_IDS,
 } from "../../src/lib/dashBrokerCatalog.js";
 import {
@@ -92,7 +93,10 @@ const validateManifest = ajv.compile(loadFixtureJson("agent.manifest.v2.schema.j
 
 type BrokerProfile = {
   connection_provider: string;
-  oauth_provider_id: string;
+  // MAR-692: null for the three AI providers — they are API-key profiles with
+  // no OAuth flow, and typing this as a bare string made a real DASH profile
+  // unrepresentable in the fixture that is supposed to mirror DASH.
+  oauth_provider_id: string | null;
   label: string;
   token_custodian: string;
   client_owner: string;
@@ -100,7 +104,10 @@ type BrokerProfile = {
 type BrokerOperationFixture = {
   id: string;
   connection_provider: string;
-  access: "read" | "write";
+  // MAR-692: `spend` is DASH's third access class and has been since MAR-619.
+  // Omitting it here is the type-level half of the same drift that left the
+  // pinned manifest schema with a two-member enum for 323 commits.
+  access: "read" | "write" | "spend";
   required_scopes: string[];
 };
 const brokerFixture = loadFixtureJson("broker-profiles.json") as {
@@ -218,13 +225,107 @@ function planAndBrief(opts: {
 }
 
 describe("MAR-477 — export_build_brief output vs the pinned DASH broker facts", () => {
-  it("sanity: the pinned fixture names google-gmail and nothing else", () => {
-    // A canary for the fixture itself drifting silently out of sync with what
-    // the rest of this file assumes. If DASH's real profile set ever grows,
-    // this is the assertion that forces tests/fixtures/dash/broker-profiles.json
-    // to be re-synced deliberately rather than the tests below quietly
-    // covering less than they claim to.
-    expect(brokerFixture.profiles.map((p) => p.connection_provider)).toEqual(["google-gmail"]);
+  it("sanity: the pinned fixture names the four profiles DASH's broker resolves", () => {
+    /*
+     * The canary that fired. This asserted `["google-gmail"]` and nothing else,
+     * and it was right to — DASH's profile set had grown to four and the fixture
+     * was 598 commits behind (MAR-692), so every assertion below was covering
+     * less than it claimed to while passing.
+     *
+     * What it cannot do is fire on its own: this file only fails once somebody
+     * re-syncs the fixture. `pnpm dash:vocab:check` is the half that closes the
+     * loop, by extracting the profiles from DASH's running `brokerProfileFor()`
+     * in CI. Kept anyway, pinned by value, because it is the line that says out
+     * loud which four this suite is written against.
+     */
+    expect(brokerFixture.profiles.map((p) => p.connection_provider).sort()).toEqual([
+      "anthropic",
+      "google-gmail",
+      "openai",
+      "openrouter",
+    ]);
+  });
+
+  it("sanity: the pinned fixture carries all fifteen operations, spends included", () => {
+    /*
+     * The other half of the same drift, and the one the emitter reads. Three
+     * operations were pinned where DASH had fifteen, and twelve of the missing
+     * ones are the AI operations every model step needs — so an MCP-authored
+     * agent could not name a single operation DASH would resolve for a model
+     * call. `spend` is asserted by name because it is the access class the
+     * pinned manifest schema itself was missing for 323 commits.
+     */
+    expect(brokerFixture.operations).toHaveLength(15);
+    expect([...new Set(brokerFixture.operations.map((o) => o.access))].sort()).toEqual([
+      "read",
+      "spend",
+      "write",
+    ]);
+    expect(
+      brokerFixture.operations.filter((o) => o.access === "spend").map((o) => o.id).sort(),
+    ).toEqual([
+      "anthropic.brief.compose",
+      "anthropic.chat.completion",
+      "anthropic.digest.curate",
+      "openai.brief.compose",
+      "openai.chat.completion",
+      "openai.digest.curate",
+      "openrouter.brief.compose",
+      "openrouter.chat.completion",
+      "openrouter.digest.curate",
+    ]);
+  });
+
+  it("the MCP's own catalogue is the pinned one — no third copy of DASH's vocabulary", () => {
+    /*
+     * `src/lib/dashBrokerCatalog.ts` holds the operations by value because the
+     * emitter needs them at runtime, and this fixture holds them because the
+     * cross-repo test needs something DASH-grounded to check against. Two copies
+     * is one more than ideal; this assertion is why it is safe — they cannot
+     * disagree — and `pnpm dash:vocab:check` proves both agree with DASH.
+     */
+    expect(
+      dashBrokerOperations().map((operation) => ({
+        id: operation.id,
+        connection_provider: operation.connection_provider,
+        access: operation.access,
+        required_scopes: [...operation.required_scopes],
+      })),
+    ).toEqual(brokerFixture.operations);
+  });
+
+  it("every capability on a dash_managed connection is an operation DASH can resolve", () => {
+    /*
+     * **The MAR-692 assertion.** A capability id on a brokered connection is not
+     * a label — it is the key `operationById` looks up, and DASH answers
+     * `unknown_operation` before the request reaches a provider. The emitter
+     * used to write `${connection_id}.${component_id}` there
+     * (`openrouter.research_synthesis`, `gmail.email_read`), which resolves
+     * nothing, ever. Checked against the pinned fixture rather than against the
+     * MCP's own catalogue, so this proves agreement with DASH and not with
+     * itself — the distinction that let MAR-477's gap survive a green verify.
+     *
+     * The access class is checked too. A model call filed under `read` makes a
+     * permission card claim the user's account is not charged, which is the one
+     * thing a completion certainly does.
+     */
+    const b = planAndBrief({ dash_broker_available: true });
+    const brokered = b.agent_manifest.agent_dom.connections.filter(
+      (connection) => connection.ownership === "dash_managed",
+    );
+    expect(brokered.length).toBeGreaterThan(0);
+    for (const connection of brokered) {
+      for (const capability of connection.capabilities) {
+        const pinned = brokerFixture.operations.find((o) => o.id === capability.id);
+        expect(
+          pinned,
+          `${connection.id} declares capability ${JSON.stringify(capability.id)}, which is not an ` +
+            "operation DASH's operationById resolves per the pinned fixture — DASH would answer " +
+            "unknown_operation for every call",
+        ).toBeDefined();
+        expect(capability.access, `access class for ${capability.id}`).toBe(pinned?.access);
+      }
+    }
   });
 
   it("provider vocabulary: dashManifestProvider spells brokered connections the way DASH's broker recognises them", () => {

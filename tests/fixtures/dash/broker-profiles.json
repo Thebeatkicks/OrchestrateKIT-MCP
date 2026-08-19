@@ -1,35 +1,149 @@
 {
   "source_repository": "https://github.com/orchestratemcp/orchestratedash",
-  "source_commit": "9d42447f95023d5d07cb1323a25ef73e6b64fffd",
-  "source_files": ["lib/broker/providers.ts", "lib/broker/operations.ts"],
-  "note": "Semantic copy of the REAL broker profiles and operations DASH's lib/broker/providers.ts and lib/broker/operations.ts define. Excludes the loopback proof profile (env-gated, test-only, cannot exist on a hosted agent per lib/broker/providers.ts's own guard). Dual-update discipline (README.md): when DASH's broker facts change, copy the new values here, update source_commit, and re-run pnpm test.",
+  "source_commit": "118d83b04c3fbf20e048528821dbffb3ed0568f3",
+  "source_files": [
+    "lib/broker/providers.ts",
+    "lib/broker/operations.ts",
+    "lib/ai/providers.ts"
+  ],
+  "note": "EXTRACTED, not transcribed (MAR-692). `pnpm dash:vocab:check` runs orchestratedash's own lib/broker/operations.ts and lib/broker/providers.ts out of a checkout at source_commit and rewrites/compares this file, so it is DASH's operation set rather than a reading of it. Excludes nothing: the env-gated loopback proof profile defines no operations, so extracting from allOperations() never sees it. Regenerate with `pnpm dash:vocab:check --write` after moving source_commit.",
+  "ai_provider_ids": [
+    "openrouter",
+    "anthropic",
+    "openai"
+  ],
+  "operation_id_suffixes": {
+    "models_list": ".models.list",
+    "chat_completion": ".chat.completion",
+    "digest_curate": ".digest.curate",
+    "brief_compose": ".brief.compose"
+  },
   "profiles": [
+    {
+      "connection_provider": "anthropic",
+      "oauth_provider_id": null,
+      "label": "Anthropic",
+      "token_custodian": "dash_vault",
+      "client_owner": "not_oauth"
+    },
     {
       "connection_provider": "google-gmail",
       "oauth_provider_id": "google",
       "label": "Gmail",
       "token_custodian": "dash_vault",
-      "client_owner": "dash_project"
+      "client_owner": "user_project"
+    },
+    {
+      "connection_provider": "openai",
+      "oauth_provider_id": null,
+      "label": "OpenAI",
+      "token_custodian": "dash_vault",
+      "client_owner": "not_oauth"
+    },
+    {
+      "connection_provider": "openrouter",
+      "oauth_provider_id": null,
+      "label": "OpenRouter",
+      "token_custodian": "dash_vault",
+      "client_owner": "not_oauth"
     }
   ],
   "operations": [
     {
-      "id": "gmail.search",
-      "connection_provider": "google-gmail",
-      "access": "read",
-      "required_scopes": ["https://www.googleapis.com/auth/gmail.readonly"]
+      "id": "anthropic.brief.compose",
+      "connection_provider": "anthropic",
+      "access": "spend",
+      "required_scopes": []
     },
     {
-      "id": "gmail.message.read",
-      "connection_provider": "google-gmail",
+      "id": "anthropic.chat.completion",
+      "connection_provider": "anthropic",
+      "access": "spend",
+      "required_scopes": []
+    },
+    {
+      "id": "anthropic.digest.curate",
+      "connection_provider": "anthropic",
+      "access": "spend",
+      "required_scopes": []
+    },
+    {
+      "id": "anthropic.models.list",
+      "connection_provider": "anthropic",
       "access": "read",
-      "required_scopes": ["https://www.googleapis.com/auth/gmail.readonly"]
+      "required_scopes": []
     },
     {
       "id": "gmail.draft.create",
       "connection_provider": "google-gmail",
       "access": "write",
-      "required_scopes": ["https://www.googleapis.com/auth/gmail.compose"]
+      "required_scopes": [
+        "https://www.googleapis.com/auth/gmail.compose"
+      ]
+    },
+    {
+      "id": "gmail.message.read",
+      "connection_provider": "google-gmail",
+      "access": "read",
+      "required_scopes": [
+        "https://www.googleapis.com/auth/gmail.readonly"
+      ]
+    },
+    {
+      "id": "gmail.search",
+      "connection_provider": "google-gmail",
+      "access": "read",
+      "required_scopes": [
+        "https://www.googleapis.com/auth/gmail.readonly"
+      ]
+    },
+    {
+      "id": "openai.brief.compose",
+      "connection_provider": "openai",
+      "access": "spend",
+      "required_scopes": []
+    },
+    {
+      "id": "openai.chat.completion",
+      "connection_provider": "openai",
+      "access": "spend",
+      "required_scopes": []
+    },
+    {
+      "id": "openai.digest.curate",
+      "connection_provider": "openai",
+      "access": "spend",
+      "required_scopes": []
+    },
+    {
+      "id": "openai.models.list",
+      "connection_provider": "openai",
+      "access": "read",
+      "required_scopes": []
+    },
+    {
+      "id": "openrouter.brief.compose",
+      "connection_provider": "openrouter",
+      "access": "spend",
+      "required_scopes": []
+    },
+    {
+      "id": "openrouter.chat.completion",
+      "connection_provider": "openrouter",
+      "access": "spend",
+      "required_scopes": []
+    },
+    {
+      "id": "openrouter.digest.curate",
+      "connection_provider": "openrouter",
+      "access": "spend",
+      "required_scopes": []
+    },
+    {
+      "id": "openrouter.models.list",
+      "connection_provider": "openrouter",
+      "access": "read",
+      "required_scopes": []
     }
   ]
 }

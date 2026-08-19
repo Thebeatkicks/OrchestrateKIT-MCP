@@ -76,13 +76,21 @@ export function dashManifestProvider(connectionId: string): string {
  * a provider profile AND at least one allowlisted operation. A service DASH can
  * name but not broker belongs in the map above and not in this set.
  *
- * Checked against orchestratedash master on 2026-08-06: `lib/broker/providers.ts`
- * defines exactly one real profile (`google-gmail`; the loopback proof profile is
- * test-only and env-gated), and `lib/broker/operations.ts` defines three
- * operations, all `google-gmail`. Google Calendar has an OAuth flow on the DASH
- * side but no broker profile and no operations, so it is deliberately absent —
- * including it would be the "looks connected, grants nothing" failure this file's
- * header warns about.
+ * Re-checked against orchestratedash master `118d83b` on 2026-08-18 (MAR-692),
+ * by extraction rather than by reading: `lib/broker/providers.ts` now resolves
+ * FOUR profiles — `google-gmail` plus the three AI providers — and
+ * `lib/broker/operations.ts` defines fifteen operations. The 2026-08-06 note
+ * this replaces said "one profile, three operations" and was 598 commits stale.
+ *
+ * This set stays `["gmail"]` anyway, and that is not an oversight. It answers a
+ * narrower question than the catalogue below: which *registry connection* named
+ * by a planned route can be handed to DASH's broker. The three AI providers are
+ * reached through the model-provider connection `observabilityContract.ts`
+ * appends for AI-backed steps, which is chosen from `llm_provider` and never
+ * from a route component, so it never passes through here. Google Calendar has
+ * an OAuth flow on the DASH side but still no broker profile and no operations,
+ * so it is deliberately absent — including it would be the "looks connected,
+ * grants nothing" failure this file's header warns about.
  */
 const DASH_BROKERED_CONNECTIONS: ReadonlySet<string> = new Set(["gmail"]);
 
@@ -127,3 +135,189 @@ export function dashNamedConnectionIds(): string[] {
  */
 export const AI_PROVIDER_IDS = ["openrouter", "anthropic", "openai"] as const;
 export type AiProviderId = (typeof AI_PROVIDER_IDS)[number];
+
+/* ------------------------------------------------------------------ *
+ * The operation catalogue (MAR-692)
+ * ------------------------------------------------------------------ */
+
+/**
+ * DASH's three access classes, `spend` included.
+ *
+ * `spend` is not a third flavour of write. DASH's own words on the manifest
+ * schema: it means the person's own account is charged and **nothing appears
+ * anywhere**. Filing a model call under `write` makes a permission card promise
+ * something turns up in an account, which is the one thing a completion does
+ * not do — so the emitter has to be able to say `spend` or it has no honest
+ * word for the only class of thing an AI-backed agent does.
+ */
+export type DashBrokerAccess = "read" | "write" | "spend";
+
+/** One operation DASH's `operationById` resolves. */
+export interface DashBrokerOperation {
+  readonly id: string;
+  readonly connection_provider: string;
+  readonly access: DashBrokerAccess;
+  readonly required_scopes: readonly string[];
+}
+
+/**
+ * Every operation DASH's broker will perform, by value.
+ *
+ * **This is the vocabulary the whole issue is about.** A capability id an agent
+ * declares on a DASH-brokered connection has to be one of these, or DASH's
+ * `operationById` misses and `execute.ts` answers `unknown_operation`. Before
+ * MAR-692 this repo held three entries against DASH's fifteen, 598 commits
+ * stale, and every AI-backed agent the MCP authored named a capability id that
+ * existed nowhere.
+ *
+ * Kept by value here and extracted-not-transcribed into
+ * `tests/fixtures/dash/broker-profiles.json`: `pnpm dash:vocab:check` runs
+ * DASH's own `lib/broker/operations.ts` out of a checkout at the pinned commit
+ * and fails when this list and that one disagree. So the list is hand-readable
+ * where the emitter needs it and machine-checked against DASH where it counts,
+ * which is what the 598 commits proved a comment alone cannot do.
+ *
+ * Twelve of the fifteen do not appear as literals in DASH's source at all —
+ * they are generated per AI provider. See `dashAiOperationId`.
+ */
+const DASH_BROKER_OPERATIONS: readonly DashBrokerOperation[] = Object.freeze([
+  { id: "anthropic.brief.compose", connection_provider: "anthropic", access: "spend", required_scopes: [] },
+  { id: "anthropic.chat.completion", connection_provider: "anthropic", access: "spend", required_scopes: [] },
+  { id: "anthropic.digest.curate", connection_provider: "anthropic", access: "spend", required_scopes: [] },
+  { id: "anthropic.models.list", connection_provider: "anthropic", access: "read", required_scopes: [] },
+  { id: "gmail.draft.create", connection_provider: "google-gmail", access: "write", required_scopes: ["https://www.googleapis.com/auth/gmail.compose"] },
+  { id: "gmail.message.read", connection_provider: "google-gmail", access: "read", required_scopes: ["https://www.googleapis.com/auth/gmail.readonly"] },
+  { id: "gmail.search", connection_provider: "google-gmail", access: "read", required_scopes: ["https://www.googleapis.com/auth/gmail.readonly"] },
+  { id: "openai.brief.compose", connection_provider: "openai", access: "spend", required_scopes: [] },
+  { id: "openai.chat.completion", connection_provider: "openai", access: "spend", required_scopes: [] },
+  { id: "openai.digest.curate", connection_provider: "openai", access: "spend", required_scopes: [] },
+  { id: "openai.models.list", connection_provider: "openai", access: "read", required_scopes: [] },
+  { id: "openrouter.brief.compose", connection_provider: "openrouter", access: "spend", required_scopes: [] },
+  { id: "openrouter.chat.completion", connection_provider: "openrouter", access: "spend", required_scopes: [] },
+  { id: "openrouter.digest.curate", connection_provider: "openrouter", access: "spend", required_scopes: [] },
+  { id: "openrouter.models.list", connection_provider: "openrouter", access: "read", required_scopes: [] },
+]);
+
+/** Every operation DASH brokers, in id order. The mirror the drift gate checks. */
+export function dashBrokerOperations(): readonly DashBrokerOperation[] {
+  return DASH_BROKER_OPERATIONS;
+}
+
+/**
+ * The MCP's own copy of DASH's `operationById`.
+ *
+ * Deliberately the same shape and the same answer for an unknown id — `null` —
+ * so a test can ask the question DASH will ask, in DASH's own terms, before a
+ * manifest ever leaves this repo.
+ */
+export function dashOperationById(id: string): DashBrokerOperation | null {
+  return DASH_BROKER_OPERATIONS.find((operation) => operation.id === id) ?? null;
+}
+
+/** Every id, sorted. For tests and for the drift gate's diff. */
+export function dashOperationIds(): string[] {
+  return DASH_BROKER_OPERATIONS.map((operation) => operation.id).sort();
+}
+
+/**
+ * How DASH spells each AI operation family, by suffix.
+ *
+ * `.digest.curate` and `.brief.compose` are exported constants on DASH's side
+ * (`CURATE_OPERATION_SUFFIX`, `COMPOSE_OPERATION_SUFFIX`) precisely so nobody
+ * types the literal twice; `.models.list` and `.chat.completion` are template
+ * literals inside DASH's generator functions and have no constant to import.
+ * All four are mirrored here and all four are checked by the drift gate against
+ * ids extracted from DASH's running source, so the distinction costs nothing.
+ */
+export const DASH_AI_OPERATION_SUFFIX = Object.freeze({
+  models_list: ".models.list",
+  chat_completion: ".chat.completion",
+  digest_curate: ".digest.curate",
+  brief_compose: ".brief.compose",
+});
+
+export type DashAiOperationFamily = keyof typeof DASH_AI_OPERATION_SUFFIX;
+
+/**
+ * The operation id for one AI provider and one family, built DASH's way.
+ *
+ * One construction with one place to be wrong, mirroring `curateOperationId` /
+ * `composeOperationId` in orchestratedash. Returns `null` rather than a string
+ * for a provider DASH has no profile for — the safe direction this file's
+ * header sets out: a missing id is a connection that declares less, and a
+ * guessed one is a capability card promising an operation that refuses.
+ */
+export function dashAiOperationId(
+  providerId: string,
+  family: DashAiOperationFamily,
+): string | null {
+  const id = `${providerId}${DASH_AI_OPERATION_SUFFIX[family]}`;
+  return dashOperationById(id) ? id : null;
+}
+
+/**
+ * Which components mean "write a document about what this agent collected".
+ *
+ * The two whose registry outputs are exactly what DASH's `brief.compose`
+ * projection returns — ordered sections of prose with per-paragraph indexes
+ * back into a digest. Everything else model-backed falls to `chat.completion`,
+ * which is DASH's general "answer a question" spend and is never wrong about
+ * what a model step does.
+ */
+const AI_COMPOSE_COMPONENTS: ReadonlySet<string> = new Set([
+  "research_synthesis",
+  "report_generation",
+]);
+
+/**
+ * Gmail components to the operations DASH actually has for them.
+ *
+ * `email_send` and `optional_email_send` map to **nothing**, on purpose. DASH
+ * has no send operation and ADR 0002 invariant 6 says it never will in this
+ * profile; an emitted capability claiming otherwise would render as "DASH can
+ * send mail for this agent" over a call that is refused. An empty list is the
+ * honest answer and the caller drops the step from the brokered capability
+ * block rather than inventing an id for it.
+ */
+const GMAIL_COMPONENT_OPERATIONS: Readonly<Record<string, readonly string[]>> = {
+  email_read: ["gmail.search", "gmail.message.read"],
+  gmail_draft_write: ["gmail.draft.create"],
+  email_send: [],
+  optional_email_send: [],
+};
+
+/** Which AI family a model-backed component's step should spend through. */
+export function dashAiFamilyForComponent(componentId: string): DashAiOperationFamily {
+  return AI_COMPOSE_COMPONENTS.has(componentId) ? "brief_compose" : "chat_completion";
+}
+
+/**
+ * The DASH operation ids a brokered connection should declare for one component.
+ *
+ * Returns `[]` for anything DASH cannot broker for that component — an unknown
+ * component, a provider with no profile, or a real component DASH has no
+ * operation for (`email_send`). Callers must treat an empty list as "declare no
+ * brokered capability here", never as "declare the component id", which is the
+ * `${provider}.${component_id}` mistake MAR-692 exists to end.
+ *
+ * Nothing maps to `digest.curate` today: no component in this registry means
+ * "group a list of collected items under labels", and naming one that does not
+ * fit would put a wrong id in front of a real spend. It stays in the catalogue
+ * because DASH has it and the drift gate checks the whole set, not because the
+ * emitter reaches it.
+ */
+export function dashOperationsForComponent(
+  connectionProvider: string,
+  componentId: string,
+): string[] {
+  if (connectionProvider === "google-gmail") {
+    return [...(GMAIL_COMPONENT_OPERATIONS[componentId] ?? [])].filter(
+      (id) => dashOperationById(id) !== null,
+    );
+  }
+  if ((AI_PROVIDER_IDS as readonly string[]).includes(connectionProvider)) {
+    const id = dashAiOperationId(connectionProvider, dashAiFamilyForComponent(componentId));
+    return id ? [id] : [];
+  }
+  return [];
+}

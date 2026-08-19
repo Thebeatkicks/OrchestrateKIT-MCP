@@ -28,6 +28,13 @@ import { createHash } from "node:crypto";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { toErrorResult } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
+import { dashAiFamilyForComponent } from "../lib/dashBrokerCatalog.js";
+import {
+  DASH_ITEMS_DIGEST_MIRROR_JS,
+  DASH_RUN_ARTIFACT_SCHEMA,
+  DASH_RUN_ARTIFACT_SCHEMA_COMMIT,
+  dashArtifactRequiredMembers,
+} from "../lib/dashArtifactContract.js";
 import {
   detectConstraintSignals,
   outboundComponentsExcludedByConstraints,
@@ -42,13 +49,19 @@ import {
   CONNECTOR_KINDS_V1,
   DASH_ENDPOINT_ENV,
   DASH_TOKEN_ENV,
+  dashBrokersModelKey,
   type AgentDomConnectionRequirements,
   type AgentDomPanel,
   type AgentDomTaskInputRole,
   type AgentManifest,
   type ManifestBuildTarget,
 } from "../lib/observabilityContract.js";
-import { buildConnectArtifacts, s11Connect, type ConnectArtifacts } from "../lib/connectContract.js";
+import {
+  buildConnectArtifacts,
+  s11Connect,
+  type ConnectArtifacts,
+  type ModelKeyCustody,
+} from "../lib/connectContract.js";
 import {
   assessRunnerEligibility,
   RUNNER_CAPABILITY_DIMENSIONS,
@@ -731,6 +744,27 @@ export type BuildBriefOutput = {
    * machine, never here.
    */
   connect: ConnectArtifacts;
+  /**
+   * MAR-692: what DASH will accept as this agent's OUTPUT — orchestratedash's
+   * `contracts/run-artifact.schema.json` copied byte for byte, plus the exact
+   * `items_digest` canonicalisation a brief-writing agent must mirror.
+   *
+   * Carried as data rather than described in prose for the reason §9 states: a
+   * summary of a contract loses the caps and the conditionals, which are the
+   * parts that fail silently. Present on every delivery mode including
+   * `compact` — the observed MAR-692 export was compact, and an artifact
+   * contract that vanishes in the mode people actually use is not shipped.
+   */
+  run_artifact_contract: {
+    /** The orchestratedash commit this copy was taken from. */
+    source_commit: string;
+    /** `contracts/run-artifact.schema.json`, verbatim. */
+    schema: Readonly<Record<string, unknown>>;
+    /** Which kinds this plan should emit, in order. A brief never replaces its digest. */
+    planned_kinds: string[];
+    /** DASH's own `items_digest` canonicalisation, as pasteable JavaScript. */
+    items_digest_mirror_js: string;
+  };
   /**
    * MAR-460: whether the runner that would host this build is eligible for the
    * declared posture, with the per-dimension evidence behind the decision.
@@ -1728,6 +1762,125 @@ function s9Observability(
   return lines.join("\n");
 }
 
+/**
+ * Which artifact kinds this plan is supposed to produce — MAR-692.
+ *
+ * Derived from the model steps' own operation families rather than from words
+ * in the goal: a step routed through `brief.compose` is a step that writes a
+ * document, and that is the same signal the manifest's capability block already
+ * carries, so the two cannot disagree.
+ *
+ * A brief NEVER replaces the digest. ADR 0025 records Henrik's rule on reopening
+ * decision 2 — *"One RAW and one curated. Don't mix them."* — and the mechanism
+ * behind it: DASH grades a run's grounding over `items`, so a run that emitted
+ * only a well-written brief would have improved its own verdict by writing
+ * well. So a brief-writing plan produces both, in that order.
+ */
+function plannedArtifactKinds(route: ExportBuildBriefInput["recommended_route"]): string[] {
+  const writesDocument = route.some(
+    (step) =>
+      step.model_tier !== undefined &&
+      step.model_tier !== "none" &&
+      dashAiFamilyForComponent(step.component_id) === "brief_compose",
+  );
+  return writesDocument ? ["digest", "brief"] : ["digest"];
+}
+
+/**
+ * What this agent's output has to be for DASH to display it — MAR-692.
+ *
+ * The gap this closes is total rather than partial: before this the MCP said
+ * nothing at all about the run artifact, so an agent built from a brief would
+ * report its telemetry correctly and then emit a product DASH's channel
+ * validator drops on the floor. The run reads as a success and there is nothing
+ * to open.
+ *
+ * The section names the required members per kind, both read off the copied
+ * contract rather than listed here, and then hands over the contract itself —
+ * `run_artifact_contract` in this result — because a summary of a contract is
+ * exactly the artefact that loses the caps and the conditionals.
+ */
+function s9ArtifactContract(kinds: string[], agentName: string): string {
+  const lines = [
+    "**§9 What this agent must PRODUCE — the run-artifact contract** _(ADR 0025 — 🟢 grounded, copied verbatim)_",
+    "",
+    "Telemetry says what the agent *did*. An artifact is what it *made*, and DASH validates it " +
+      "at the same boundary: send it on the runner's newline-delimited JSON channel as one line " +
+      '`{"type":"artifact","artifact":{…}}`. **An artifact that fails validation is dropped, not ' +
+      "reported** — the run still reads as a success and there is nothing for anyone to open. " +
+      "So build against the schema, not against this paragraph.",
+    "",
+    "`run_artifact_contract.schema` in this result is orchestratedash's own " +
+      "`contracts/run-artifact.schema.json`, byte for byte. Read its `description` strings: they " +
+      "carry the reasoning, including the field-length ceilings that have already cost a real " +
+      "agent a whole briefing.",
+    "",
+  ];
+
+  for (const kind of kinds) {
+    const required = dashArtifactRequiredMembers(kind);
+    lines.push(
+      `- **\`kind: "${kind}"\`** — required members: ` +
+        required.map((member) => `\`${member}\``).join(", ") +
+        `. \`agent\` must equal \`"${agentName}"\`, the manifest's own \`agent.name\`.`,
+    );
+  }
+
+  if (kinds.includes("brief")) {
+    lines.push(
+      "",
+      "**The two are one run, in this order, and the brief never replaces the digest.** DASH " +
+        "grades a run's grounding over the digest's `items`; if the roundup were dropped in " +
+        "favour of the document, an agent would improve its own verdict by writing well. Emit " +
+        "the raw digest first, then the brief written from it.",
+      "",
+      "For the brief specifically:",
+      "",
+      "- `artifact_version` must be `2`. The contract requires it for this kind and only this " +
+        "kind, so a producer emitting one has necessarily been written against the current " +
+        "contract. A `brief` at version 1 is rejected whole.",
+      "- `document.sections` is an ORDERED array and **a renderer must not re-sort it** — the " +
+        "ordering is the document. Each section has a `heading` and `paragraphs`.",
+      "- Each paragraph carries `body` (model-authored prose) and an OPTIONAL `items`: " +
+        "**zero-based positions into the digest's `items` array**, bound to the paragraph and " +
+        "never to the section. A section-level binding would let one wrong sentence borrow the " +
+        "citations of every other sentence under the same heading, which is the defect this " +
+        "shape exists to prevent. Absent `items` is not an error — it means prose written " +
+        "without naming a source, and DASH marks it rather than dropping it.",
+      "- Prose carries NO links and NO markup. DASH drops a paragraph containing anything that " +
+        "looks like an address rather than cleaning it. What crosses from the model is an index " +
+        "into a list the agent already had — never a URL the model composed.",
+      "- `derived_from` names the digest this was written from: `artifact_id`, `run_id`, " +
+        "`item_count` and `items_digest`. It is required because a paragraph's citations index " +
+        "into a DIFFERENT artifact's array, and nothing about two separate records guarantees " +
+        "they are the same list in the same order.",
+      "",
+      "**`items_digest` — copy the function, do not write your own.** DASH recomputes this over " +
+        "the digest it holds and on a mismatch draws the brief with **no citations at all**. " +
+        "Nothing errors; the agent just reads as a model that forgot to cite. " +
+        "`run_artifact_contract.items_digest_mirror_js` in this result is the exact " +
+        "canonicalisation DASH uses (`lib/brief/fingerprint.ts`). Paste it in unchanged:",
+      "",
+      "```js",
+      DASH_ITEMS_DIGEST_MIRROR_JS.trimEnd(),
+      "```",
+      "",
+      "Then `derived_from.items_digest = fingerprintItems(digestItems)` over the same array, in " +
+        "the same order, that the digest artifact carries.",
+    );
+  }
+
+  lines.push(
+    "",
+    "- `sources_fetched` on the digest is what makes grounding checkable: an item citing a " +
+      "source the run never fetched is a finding DASH can state without trusting the item. It " +
+      "is the agent's own report, not proof DASH observed a fetch — do not describe it as more.",
+    "- An item with no `source_url` is KEPT and rendered as uncited. Dropping it is how a " +
+      "grounded verdict becomes theatre.",
+  );
+  return lines.join("\n");
+}
+
 // ─────────────────────────── MAR-249: artifact compiler ─────────────────────
 
 function shortGoal(goal: string, max = 80): string {
@@ -2676,6 +2829,36 @@ export type ExportBuildBriefInput = {
   generated_at?: string;
 };
 
+/**
+ * The spend operations the emitted manifest actually declares — MAR-692.
+ *
+ * Read back off the manifest rather than recomputed, so the paragraph §11 shows
+ * a builder and the capability block DASH will resolve cannot say different
+ * things. If the connection was downgraded to `agent_managed`, there is nothing
+ * brokered to list and this is empty.
+ */
+function brokeredModelOperations(manifest: AgentManifest): string[] {
+  return manifest.agent_dom.connections
+    .filter((connection) => connection.ownership === "dash_managed")
+    .flatMap((connection) => connection.capabilities)
+    .filter((capability) => capability.access === "spend")
+    .map((capability) => capability.id);
+}
+
+/** Why DASH is not holding this build's model key, when it is not. */
+function modelKeyCustodyReason(
+  input: ExportBuildBriefInput,
+  dashHoldsModelKey: boolean,
+): ModelKeyCustody["reason"] {
+  if (dashHoldsModelKey) return undefined;
+  if (!input.llm_provider || input.llm_provider === "deterministic_first") {
+    return "no_provider_chosen";
+  }
+  if (input.dash_broker_available !== true) return "no_dash";
+  return "remote_runtime";
+}
+
+
 function modelBackedComponentIds(route: ExportBuildBriefInput["recommended_route"]): string[] {
   return route
     .filter((s) => s.model_tier !== undefined && s.model_tier !== "none")
@@ -2794,6 +2977,21 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     { dash_broker_available: input.dash_broker_available },
   );
 
+  /*
+   * MAR-692: one decision, read by both halves of the export.
+   *
+   * The manifest's model-provider connection and the connect contract's `.env`
+   * entry are two statements about the same key, and the observed brief made
+   * them contradict each other. Answering here, once, is what keeps them from
+   * disagreeing again — and it has to be answered before `buildConnectArtifacts`
+   * runs, which is why it sits above it rather than beside the manifest.
+   */
+  const dashHoldsModelKey = dashBrokersModelKey({
+    llmProvider: input.llm_provider,
+    dashBrokerAvailable: input.dash_broker_available,
+    runtimeClass: input.runtime_recommendation?.runtime_class,
+  });
+
   // MAR-364: credential manifest + connect.mjs source, derived from the route.
   const connect = buildConnectArtifacts({
     route_steps: recommendedRoute.map((s) => ({
@@ -2803,6 +3001,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     agent_name: manifestAgentName,
     registry_fingerprint: registryFingerprint,
     llm_provider: input.llm_provider,
+    dash_brokers_model_key: dashHoldsModelKey,
   });
 
   // Registry permissions are the grounded read/write source for Agent DOM
@@ -2895,11 +3094,28 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
       input.untested_edges,
       input.enforced_approval_gates,
     ),
-    s9_observability: s9Observability(agent_manifest, runner_eligibility),
+    /*
+     * MAR-692: §9 now answers both halves of "what does DASH see?". The
+     * telemetry half was always here; the artifact half — what the agent
+     * PRODUCES — was missing entirely, so an agent built from this brief
+     * reported perfectly and emitted an output DASH drops at the channel.
+     * Appended rather than given its own section key so a reader who already
+     * knows §9 as "the DASH contract section" finds it where they look.
+     */
+    s9_observability: [
+      s9Observability(agent_manifest, runner_eligibility),
+      "",
+      s9ArtifactContract(plannedArtifactKinds(recommendedRoute), agent_manifest.agent.name),
+    ].join("\n"),
     // MAR-383: §11 now LEADS with the connection contract (how you obtain each
     // connection, and who holds the token) and keeps the MAR-364 credential
     // manifest + connect.mjs below it as the self-hosted escape hatch.
-    s11_connect: s11Connect(connect, connectionContract),
+    s11_connect: s11Connect(connect, connectionContract, {
+      has_model_steps: modelBackedComponents.length > 0,
+      dash_holds_key: dashHoldsModelKey,
+      brokered_operations: brokeredModelOperations(agent_manifest),
+      reason: modelKeyCustodyReason(input, dashHoldsModelKey),
+    }),
   };
 
   const sectionList = [
@@ -3034,6 +3250,13 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     );
   }
 
+  const run_artifact_contract = {
+    source_commit: DASH_RUN_ARTIFACT_SCHEMA_COMMIT,
+    schema: DASH_RUN_ARTIFACT_SCHEMA,
+    planned_kinds: plannedArtifactKinds(recommendedRoute),
+    items_digest_mirror_js: DASH_ITEMS_DIGEST_MIRROR_JS,
+  };
+
   if (deliveryMode === "plan_passport") {
     return {
       delivery: delivery as PlanPassportOutput["delivery"],
@@ -3043,6 +3266,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
       artifact_index,
       agent_manifest,
       connect,
+      run_artifact_contract,
       runner_eligibility,
       plan_passport: passport.plan_passport,
       provenance_tag: "registry-grounded",
@@ -3062,6 +3286,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
       artifact_index,
       agent_manifest,
       connect,
+      run_artifact_contract,
       runner_eligibility,
       provenance_tag: "registry-grounded",
       grounding_note:
@@ -3080,6 +3305,7 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
     artifact_package,
     agent_manifest,
     connect,
+    run_artifact_contract,
     runner_eligibility,
     provenance_tag: "registry-grounded",
     grounding_note:

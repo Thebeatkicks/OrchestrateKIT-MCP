@@ -4022,6 +4022,671 @@ exports[`MAR-249 — export_build_brief output schema > compact structuredConten
     "prompt": "[text]",
   },
   "provenance_tag": "registry-grounded",
+  "run_artifact_contract": {
+    "items_digest_mirror_js": "[text]",
+    "planned_kinds": [
+      "digest",
+    ],
+    "schema": {
+      "$id": "https://orchestratemcp.dev/orchestratedash/contracts/run-artifact.schema.json",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "allOf": [
+        {
+          "description": "[text]",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "digest",
+              },
+            },
+            "required": [
+              "kind",
+            ],
+          },
+          "then": {
+            "$comment": "[text]",
+            "properties": {
+              "items": true,
+            },
+            "required": [
+              "items",
+            ],
+          },
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "draft",
+              },
+            },
+            "required": [
+              "kind",
+            ],
+          },
+          "then": {
+            "properties": {
+              "draft": true,
+            },
+            "required": [
+              "draft",
+            ],
+          },
+        },
+        {
+          "description": "[text]",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "brief",
+              },
+            },
+            "required": [
+              "kind",
+            ],
+          },
+          "then": {
+            "$comment": "[text]",
+            "properties": {
+              "artifact_version": {
+                "const": 2,
+              },
+              "derived_from": true,
+              "document": true,
+            },
+            "required": [
+              "document",
+              "derived_from",
+            ],
+          },
+        },
+      ],
+      "description": "[text]",
+      "properties": {
+        "agent": {
+          "description": "[text]",
+          "minLength": 1,
+          "type": "string",
+        },
+        "artifact_id": {
+          "description": "[text]",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string",
+        },
+        "artifact_version": {
+          "description": "[text]",
+          "enum": [
+            1,
+            2,
+          ],
+        },
+        "curation": {
+          "allOf": [
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "curated",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "$comment": "[text]",
+                "properties": {
+                  "groups": true,
+                },
+                "required": [
+                  "groups",
+                ],
+              },
+            },
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "not_curated",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "properties": {
+                  "reason": true,
+                },
+                "required": [
+                  "reason",
+                ],
+              },
+            },
+          ],
+          "description": "[text]",
+          "properties": {
+            "groups": {
+              "description": "[text]",
+              "items": {
+                "properties": {
+                  "items": {
+                    "description": "[text]",
+                    "items": {
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "maxItems": 200,
+                    "type": "array",
+                  },
+                  "label": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "summary": {
+                    "maxLength": 400,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "label",
+                  "items",
+                ],
+                "type": "object",
+              },
+              "maxItems": 12,
+              "type": "array",
+            },
+            "model": {
+              "description": "[text]",
+              "maxLength": 128,
+              "type": "string",
+            },
+            "overview": {
+              "description": "[text]",
+              "maxLength": 600,
+              "type": "string",
+            },
+            "reason": {
+              "description": "[text]",
+              "enum": [
+                "no_model_connection",
+                "not_connected",
+                "no_model_chosen",
+                "needs_a_person",
+                "refused",
+                "unreadable",
+              ],
+            },
+            "state": {
+              "description": "[text]",
+              "enum": [
+                "curated",
+                "not_curated",
+              ],
+            },
+          },
+          "required": [
+            "state",
+          ],
+          "type": "object",
+        },
+        "deep_dive": {
+          "allOf": [
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "written",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "$comment": "[text]",
+                "properties": {
+                  "text": true,
+                },
+                "required": [
+                  "text",
+                ],
+              },
+            },
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "not_written",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "properties": {
+                  "reason": true,
+                },
+                "required": [
+                  "reason",
+                ],
+              },
+            },
+          ],
+          "description": "[text]",
+          "properties": {
+            "model": {
+              "description": "[text]",
+              "maxLength": 128,
+              "type": "string",
+            },
+            "reason": {
+              "description": "[text]",
+              "enum": [
+                "nothing_picked",
+                "nothing_found",
+                "no_model_connection",
+                "not_connected",
+                "no_model_chosen",
+                "needs_a_person",
+                "unreadable",
+                "refused",
+              ],
+            },
+            "state": {
+              "description": "Whether a model actually wrote a closer look this run.",
+              "enum": [
+                "written",
+                "not_written",
+              ],
+            },
+            "text": {
+              "description": "[text]",
+              "maxLength": 12000,
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "state",
+          ],
+          "type": "object",
+        },
+        "derived_from": {
+          "description": "[text]",
+          "properties": {
+            "artifact_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string",
+            },
+            "item_count": {
+              "description": "[text]",
+              "minimum": 0,
+              "type": "integer",
+            },
+            "items_digest": {
+              "description": "[text]",
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string",
+            },
+            "run_id": {
+              "description": "[text]",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "artifact_id",
+            "run_id",
+            "item_count",
+            "items_digest",
+          ],
+          "type": "object",
+        },
+        "document": {
+          "description": "[text]",
+          "properties": {
+            "model": {
+              "description": "[text]",
+              "maxLength": 128,
+              "type": "string",
+            },
+            "sections": {
+              "items": {
+                "properties": {
+                  "heading": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "properties": {
+                        "body": {
+                          "maxLength": 1200,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "items": {
+                          "description": "[text]",
+                          "items": {
+                            "minimum": 0,
+                            "type": "integer",
+                          },
+                          "maxItems": 200,
+                          "type": "array",
+                        },
+                      },
+                      "required": [
+                        "body",
+                      ],
+                      "type": "object",
+                    },
+                    "maxItems": 6,
+                    "type": "array",
+                  },
+                },
+                "required": [
+                  "heading",
+                  "paragraphs",
+                ],
+                "type": "object",
+              },
+              "maxItems": 8,
+              "type": "array",
+            },
+          },
+          "required": [
+            "sections",
+          ],
+          "type": "object",
+        },
+        "draft": {
+          "description": "[text]",
+          "properties": {
+            "body": {
+              "maxLength": 20000,
+              "type": "string",
+            },
+            "in_reply_to": {
+              "description": "[text]",
+              "properties": {
+                "message_id": {
+                  "maxLength": 128,
+                  "type": "string",
+                },
+                "thread_id": {
+                  "maxLength": 128,
+                  "type": "string",
+                },
+              },
+              "type": "object",
+            },
+            "placement": {
+              "allOf": [
+                {
+                  "description": "[text]",
+                  "if": {
+                    "properties": {
+                      "where": {
+                        "const": "dash_only",
+                      },
+                    },
+                    "required": [
+                      "where",
+                    ],
+                  },
+                  "then": {
+                    "properties": {
+                      "draft_id": false,
+                    },
+                  },
+                },
+                {
+                  "description": "[text]",
+                  "if": {
+                    "properties": {
+                      "where": {
+                        "const": "provider_draft",
+                      },
+                    },
+                    "required": [
+                      "where",
+                    ],
+                  },
+                  "then": {
+                    "$comment": "[text]",
+                    "properties": {
+                      "service": true,
+                    },
+                    "required": [
+                      "service",
+                    ],
+                  },
+                },
+              ],
+              "description": "[text]",
+              "properties": {
+                "draft_id": {
+                  "description": "[text]",
+                  "maxLength": 128,
+                  "type": "string",
+                },
+                "service": {
+                  "description": "[text]",
+                  "maxLength": 60,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "where": {
+                  "enum": [
+                    "dash_only",
+                    "provider_draft",
+                  ],
+                },
+              },
+              "required": [
+                "where",
+              ],
+              "type": "object",
+            },
+            "sources": {
+              "description": "[text]",
+              "items": {
+                "properties": {
+                  "from": {
+                    "maxLength": 320,
+                    "type": "string",
+                  },
+                  "message_id": {
+                    "maxLength": 128,
+                    "type": "string",
+                  },
+                  "subject": {
+                    "maxLength": 300,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "message_id",
+                ],
+                "type": "object",
+              },
+              "type": "array",
+            },
+            "subject": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string",
+            },
+            "to": {
+              "description": "[text]",
+              "items": {
+                "maxLength": 320,
+                "type": "string",
+              },
+              "maxItems": 25,
+              "type": "array",
+            },
+          },
+          "required": [
+            "subject",
+            "body",
+            "placement",
+          ],
+          "type": "object",
+        },
+        "generated_at": "[volatile]",
+        "items": {
+          "description": "[text]",
+          "items": {
+            "properties": {
+              "headline": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string",
+              },
+              "item_url": {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string",
+              },
+              "published_at": {
+                "format": "date-time",
+                "type": "string",
+              },
+              "source_name": {
+                "maxLength": 120,
+                "type": "string",
+              },
+              "source_url": {
+                "description": "[text]",
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string",
+              },
+              "summary": {
+                "maxLength": 1000,
+                "type": "string",
+              },
+            },
+            "required": [
+              "headline",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "kind": {
+          "description": "[text]",
+          "enum": [
+            "digest",
+            "draft",
+            "brief",
+          ],
+        },
+        "run_id": {
+          "description": "[text]",
+          "minLength": 1,
+          "type": "string",
+        },
+        "set_aside": {
+          "description": "[text]",
+          "items": {
+            "properties": {
+              "headline": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string",
+              },
+              "reason": {
+                "description": "[text]",
+                "enum": [
+                  "no_signal",
+                  "duplicate",
+                  "off_topic",
+                  "too_old",
+                  "unparseable",
+                ],
+              },
+            },
+            "required": [
+              "headline",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "sources_fetched": {
+          "description": "[text]",
+          "items": {
+            "properties": {
+              "fetched_at": {
+                "format": "date-time",
+                "type": "string",
+              },
+              "item_count": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "source_name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string",
+              },
+              "source_url": {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string",
+              },
+              "status": {
+                "description": "[text]",
+                "enum": [
+                  "ok",
+                  "unreachable",
+                  "not_a_feed",
+                  "empty",
+                ],
+              },
+            },
+            "required": [
+              "source_name",
+              "source_url",
+              "status",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string",
+        },
+      },
+      "required": [
+        "artifact_version",
+        "agent",
+        "run_id",
+        "artifact_id",
+        "kind",
+        "title",
+        "generated_at",
+      ],
+      "title": "OrchestrateDASH run artifact v1 and v2",
+      "type": "object",
+    },
+    "source_commit": "118d83b04c3fbf20e048528821dbffb3ed0568f3",
+  },
   "runner_eligibility": {
     "advisories": [],
     "contract": "orchestratekit.runner_eligibility.v1",
@@ -5134,6 +5799,671 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
     },
   },
   "provenance_tag": "registry-grounded",
+  "run_artifact_contract": {
+    "items_digest_mirror_js": "[text]",
+    "planned_kinds": [
+      "digest",
+    ],
+    "schema": {
+      "$id": "https://orchestratemcp.dev/orchestratedash/contracts/run-artifact.schema.json",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "allOf": [
+        {
+          "description": "[text]",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "digest",
+              },
+            },
+            "required": [
+              "kind",
+            ],
+          },
+          "then": {
+            "$comment": "[text]",
+            "properties": {
+              "items": true,
+            },
+            "required": [
+              "items",
+            ],
+          },
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "draft",
+              },
+            },
+            "required": [
+              "kind",
+            ],
+          },
+          "then": {
+            "properties": {
+              "draft": true,
+            },
+            "required": [
+              "draft",
+            ],
+          },
+        },
+        {
+          "description": "[text]",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "brief",
+              },
+            },
+            "required": [
+              "kind",
+            ],
+          },
+          "then": {
+            "$comment": "[text]",
+            "properties": {
+              "artifact_version": {
+                "const": 2,
+              },
+              "derived_from": true,
+              "document": true,
+            },
+            "required": [
+              "document",
+              "derived_from",
+            ],
+          },
+        },
+      ],
+      "description": "[text]",
+      "properties": {
+        "agent": {
+          "description": "[text]",
+          "minLength": 1,
+          "type": "string",
+        },
+        "artifact_id": {
+          "description": "[text]",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string",
+        },
+        "artifact_version": {
+          "description": "[text]",
+          "enum": [
+            1,
+            2,
+          ],
+        },
+        "curation": {
+          "allOf": [
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "curated",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "$comment": "[text]",
+                "properties": {
+                  "groups": true,
+                },
+                "required": [
+                  "groups",
+                ],
+              },
+            },
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "not_curated",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "properties": {
+                  "reason": true,
+                },
+                "required": [
+                  "reason",
+                ],
+              },
+            },
+          ],
+          "description": "[text]",
+          "properties": {
+            "groups": {
+              "description": "[text]",
+              "items": {
+                "properties": {
+                  "items": {
+                    "description": "[text]",
+                    "items": {
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "maxItems": 200,
+                    "type": "array",
+                  },
+                  "label": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "summary": {
+                    "maxLength": 400,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "label",
+                  "items",
+                ],
+                "type": "object",
+              },
+              "maxItems": 12,
+              "type": "array",
+            },
+            "model": {
+              "description": "[text]",
+              "maxLength": 128,
+              "type": "string",
+            },
+            "overview": {
+              "description": "[text]",
+              "maxLength": 600,
+              "type": "string",
+            },
+            "reason": {
+              "description": "[text]",
+              "enum": [
+                "no_model_connection",
+                "not_connected",
+                "no_model_chosen",
+                "needs_a_person",
+                "refused",
+                "unreadable",
+              ],
+            },
+            "state": {
+              "description": "[text]",
+              "enum": [
+                "curated",
+                "not_curated",
+              ],
+            },
+          },
+          "required": [
+            "state",
+          ],
+          "type": "object",
+        },
+        "deep_dive": {
+          "allOf": [
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "written",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "$comment": "[text]",
+                "properties": {
+                  "text": true,
+                },
+                "required": [
+                  "text",
+                ],
+              },
+            },
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "not_written",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "properties": {
+                  "reason": true,
+                },
+                "required": [
+                  "reason",
+                ],
+              },
+            },
+          ],
+          "description": "[text]",
+          "properties": {
+            "model": {
+              "description": "[text]",
+              "maxLength": 128,
+              "type": "string",
+            },
+            "reason": {
+              "description": "[text]",
+              "enum": [
+                "nothing_picked",
+                "nothing_found",
+                "no_model_connection",
+                "not_connected",
+                "no_model_chosen",
+                "needs_a_person",
+                "unreadable",
+                "refused",
+              ],
+            },
+            "state": {
+              "description": "Whether a model actually wrote a closer look this run.",
+              "enum": [
+                "written",
+                "not_written",
+              ],
+            },
+            "text": {
+              "description": "[text]",
+              "maxLength": 12000,
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "state",
+          ],
+          "type": "object",
+        },
+        "derived_from": {
+          "description": "[text]",
+          "properties": {
+            "artifact_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string",
+            },
+            "item_count": {
+              "description": "[text]",
+              "minimum": 0,
+              "type": "integer",
+            },
+            "items_digest": {
+              "description": "[text]",
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string",
+            },
+            "run_id": {
+              "description": "[text]",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "artifact_id",
+            "run_id",
+            "item_count",
+            "items_digest",
+          ],
+          "type": "object",
+        },
+        "document": {
+          "description": "[text]",
+          "properties": {
+            "model": {
+              "description": "[text]",
+              "maxLength": 128,
+              "type": "string",
+            },
+            "sections": {
+              "items": {
+                "properties": {
+                  "heading": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "properties": {
+                        "body": {
+                          "maxLength": 1200,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "items": {
+                          "description": "[text]",
+                          "items": {
+                            "minimum": 0,
+                            "type": "integer",
+                          },
+                          "maxItems": 200,
+                          "type": "array",
+                        },
+                      },
+                      "required": [
+                        "body",
+                      ],
+                      "type": "object",
+                    },
+                    "maxItems": 6,
+                    "type": "array",
+                  },
+                },
+                "required": [
+                  "heading",
+                  "paragraphs",
+                ],
+                "type": "object",
+              },
+              "maxItems": 8,
+              "type": "array",
+            },
+          },
+          "required": [
+            "sections",
+          ],
+          "type": "object",
+        },
+        "draft": {
+          "description": "[text]",
+          "properties": {
+            "body": {
+              "maxLength": 20000,
+              "type": "string",
+            },
+            "in_reply_to": {
+              "description": "[text]",
+              "properties": {
+                "message_id": {
+                  "maxLength": 128,
+                  "type": "string",
+                },
+                "thread_id": {
+                  "maxLength": 128,
+                  "type": "string",
+                },
+              },
+              "type": "object",
+            },
+            "placement": {
+              "allOf": [
+                {
+                  "description": "[text]",
+                  "if": {
+                    "properties": {
+                      "where": {
+                        "const": "dash_only",
+                      },
+                    },
+                    "required": [
+                      "where",
+                    ],
+                  },
+                  "then": {
+                    "properties": {
+                      "draft_id": false,
+                    },
+                  },
+                },
+                {
+                  "description": "[text]",
+                  "if": {
+                    "properties": {
+                      "where": {
+                        "const": "provider_draft",
+                      },
+                    },
+                    "required": [
+                      "where",
+                    ],
+                  },
+                  "then": {
+                    "$comment": "[text]",
+                    "properties": {
+                      "service": true,
+                    },
+                    "required": [
+                      "service",
+                    ],
+                  },
+                },
+              ],
+              "description": "[text]",
+              "properties": {
+                "draft_id": {
+                  "description": "[text]",
+                  "maxLength": 128,
+                  "type": "string",
+                },
+                "service": {
+                  "description": "[text]",
+                  "maxLength": 60,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "where": {
+                  "enum": [
+                    "dash_only",
+                    "provider_draft",
+                  ],
+                },
+              },
+              "required": [
+                "where",
+              ],
+              "type": "object",
+            },
+            "sources": {
+              "description": "[text]",
+              "items": {
+                "properties": {
+                  "from": {
+                    "maxLength": 320,
+                    "type": "string",
+                  },
+                  "message_id": {
+                    "maxLength": 128,
+                    "type": "string",
+                  },
+                  "subject": {
+                    "maxLength": 300,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "message_id",
+                ],
+                "type": "object",
+              },
+              "type": "array",
+            },
+            "subject": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string",
+            },
+            "to": {
+              "description": "[text]",
+              "items": {
+                "maxLength": 320,
+                "type": "string",
+              },
+              "maxItems": 25,
+              "type": "array",
+            },
+          },
+          "required": [
+            "subject",
+            "body",
+            "placement",
+          ],
+          "type": "object",
+        },
+        "generated_at": "[volatile]",
+        "items": {
+          "description": "[text]",
+          "items": {
+            "properties": {
+              "headline": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string",
+              },
+              "item_url": {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string",
+              },
+              "published_at": {
+                "format": "date-time",
+                "type": "string",
+              },
+              "source_name": {
+                "maxLength": 120,
+                "type": "string",
+              },
+              "source_url": {
+                "description": "[text]",
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string",
+              },
+              "summary": {
+                "maxLength": 1000,
+                "type": "string",
+              },
+            },
+            "required": [
+              "headline",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "kind": {
+          "description": "[text]",
+          "enum": [
+            "digest",
+            "draft",
+            "brief",
+          ],
+        },
+        "run_id": {
+          "description": "[text]",
+          "minLength": 1,
+          "type": "string",
+        },
+        "set_aside": {
+          "description": "[text]",
+          "items": {
+            "properties": {
+              "headline": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string",
+              },
+              "reason": {
+                "description": "[text]",
+                "enum": [
+                  "no_signal",
+                  "duplicate",
+                  "off_topic",
+                  "too_old",
+                  "unparseable",
+                ],
+              },
+            },
+            "required": [
+              "headline",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "sources_fetched": {
+          "description": "[text]",
+          "items": {
+            "properties": {
+              "fetched_at": {
+                "format": "date-time",
+                "type": "string",
+              },
+              "item_count": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "source_name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string",
+              },
+              "source_url": {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string",
+              },
+              "status": {
+                "description": "[text]",
+                "enum": [
+                  "ok",
+                  "unreachable",
+                  "not_a_feed",
+                  "empty",
+                ],
+              },
+            },
+            "required": [
+              "source_name",
+              "source_url",
+              "status",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string",
+        },
+      },
+      "required": [
+        "artifact_version",
+        "agent",
+        "run_id",
+        "artifact_id",
+        "kind",
+        "title",
+        "generated_at",
+      ],
+      "title": "OrchestrateDASH run artifact v1 and v2",
+      "type": "object",
+    },
+    "source_commit": "118d83b04c3fbf20e048528821dbffb3ed0568f3",
+  },
   "runner_eligibility": {
     "advisories": [],
     "contract": "orchestratekit.runner_eligibility.v1",
@@ -6118,6 +7448,671 @@ exports[`MAR-249 — export_build_brief output schema > runtime structuredConten
     "prompt": "[text]",
   },
   "provenance_tag": "registry-grounded",
+  "run_artifact_contract": {
+    "items_digest_mirror_js": "[text]",
+    "planned_kinds": [
+      "digest",
+    ],
+    "schema": {
+      "$id": "https://orchestratemcp.dev/orchestratedash/contracts/run-artifact.schema.json",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "allOf": [
+        {
+          "description": "[text]",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "digest",
+              },
+            },
+            "required": [
+              "kind",
+            ],
+          },
+          "then": {
+            "$comment": "[text]",
+            "properties": {
+              "items": true,
+            },
+            "required": [
+              "items",
+            ],
+          },
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "draft",
+              },
+            },
+            "required": [
+              "kind",
+            ],
+          },
+          "then": {
+            "properties": {
+              "draft": true,
+            },
+            "required": [
+              "draft",
+            ],
+          },
+        },
+        {
+          "description": "[text]",
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "brief",
+              },
+            },
+            "required": [
+              "kind",
+            ],
+          },
+          "then": {
+            "$comment": "[text]",
+            "properties": {
+              "artifact_version": {
+                "const": 2,
+              },
+              "derived_from": true,
+              "document": true,
+            },
+            "required": [
+              "document",
+              "derived_from",
+            ],
+          },
+        },
+      ],
+      "description": "[text]",
+      "properties": {
+        "agent": {
+          "description": "[text]",
+          "minLength": 1,
+          "type": "string",
+        },
+        "artifact_id": {
+          "description": "[text]",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string",
+        },
+        "artifact_version": {
+          "description": "[text]",
+          "enum": [
+            1,
+            2,
+          ],
+        },
+        "curation": {
+          "allOf": [
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "curated",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "$comment": "[text]",
+                "properties": {
+                  "groups": true,
+                },
+                "required": [
+                  "groups",
+                ],
+              },
+            },
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "not_curated",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "properties": {
+                  "reason": true,
+                },
+                "required": [
+                  "reason",
+                ],
+              },
+            },
+          ],
+          "description": "[text]",
+          "properties": {
+            "groups": {
+              "description": "[text]",
+              "items": {
+                "properties": {
+                  "items": {
+                    "description": "[text]",
+                    "items": {
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "maxItems": 200,
+                    "type": "array",
+                  },
+                  "label": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "summary": {
+                    "maxLength": 400,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "label",
+                  "items",
+                ],
+                "type": "object",
+              },
+              "maxItems": 12,
+              "type": "array",
+            },
+            "model": {
+              "description": "[text]",
+              "maxLength": 128,
+              "type": "string",
+            },
+            "overview": {
+              "description": "[text]",
+              "maxLength": 600,
+              "type": "string",
+            },
+            "reason": {
+              "description": "[text]",
+              "enum": [
+                "no_model_connection",
+                "not_connected",
+                "no_model_chosen",
+                "needs_a_person",
+                "refused",
+                "unreadable",
+              ],
+            },
+            "state": {
+              "description": "[text]",
+              "enum": [
+                "curated",
+                "not_curated",
+              ],
+            },
+          },
+          "required": [
+            "state",
+          ],
+          "type": "object",
+        },
+        "deep_dive": {
+          "allOf": [
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "written",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "$comment": "[text]",
+                "properties": {
+                  "text": true,
+                },
+                "required": [
+                  "text",
+                ],
+              },
+            },
+            {
+              "description": "[text]",
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "not_written",
+                  },
+                },
+                "required": [
+                  "state",
+                ],
+              },
+              "then": {
+                "properties": {
+                  "reason": true,
+                },
+                "required": [
+                  "reason",
+                ],
+              },
+            },
+          ],
+          "description": "[text]",
+          "properties": {
+            "model": {
+              "description": "[text]",
+              "maxLength": 128,
+              "type": "string",
+            },
+            "reason": {
+              "description": "[text]",
+              "enum": [
+                "nothing_picked",
+                "nothing_found",
+                "no_model_connection",
+                "not_connected",
+                "no_model_chosen",
+                "needs_a_person",
+                "unreadable",
+                "refused",
+              ],
+            },
+            "state": {
+              "description": "Whether a model actually wrote a closer look this run.",
+              "enum": [
+                "written",
+                "not_written",
+              ],
+            },
+            "text": {
+              "description": "[text]",
+              "maxLength": 12000,
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "state",
+          ],
+          "type": "object",
+        },
+        "derived_from": {
+          "description": "[text]",
+          "properties": {
+            "artifact_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string",
+            },
+            "item_count": {
+              "description": "[text]",
+              "minimum": 0,
+              "type": "integer",
+            },
+            "items_digest": {
+              "description": "[text]",
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string",
+            },
+            "run_id": {
+              "description": "[text]",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "artifact_id",
+            "run_id",
+            "item_count",
+            "items_digest",
+          ],
+          "type": "object",
+        },
+        "document": {
+          "description": "[text]",
+          "properties": {
+            "model": {
+              "description": "[text]",
+              "maxLength": 128,
+              "type": "string",
+            },
+            "sections": {
+              "items": {
+                "properties": {
+                  "heading": {
+                    "maxLength": 80,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "paragraphs": {
+                    "items": {
+                      "properties": {
+                        "body": {
+                          "maxLength": 1200,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "items": {
+                          "description": "[text]",
+                          "items": {
+                            "minimum": 0,
+                            "type": "integer",
+                          },
+                          "maxItems": 200,
+                          "type": "array",
+                        },
+                      },
+                      "required": [
+                        "body",
+                      ],
+                      "type": "object",
+                    },
+                    "maxItems": 6,
+                    "type": "array",
+                  },
+                },
+                "required": [
+                  "heading",
+                  "paragraphs",
+                ],
+                "type": "object",
+              },
+              "maxItems": 8,
+              "type": "array",
+            },
+          },
+          "required": [
+            "sections",
+          ],
+          "type": "object",
+        },
+        "draft": {
+          "description": "[text]",
+          "properties": {
+            "body": {
+              "maxLength": 20000,
+              "type": "string",
+            },
+            "in_reply_to": {
+              "description": "[text]",
+              "properties": {
+                "message_id": {
+                  "maxLength": 128,
+                  "type": "string",
+                },
+                "thread_id": {
+                  "maxLength": 128,
+                  "type": "string",
+                },
+              },
+              "type": "object",
+            },
+            "placement": {
+              "allOf": [
+                {
+                  "description": "[text]",
+                  "if": {
+                    "properties": {
+                      "where": {
+                        "const": "dash_only",
+                      },
+                    },
+                    "required": [
+                      "where",
+                    ],
+                  },
+                  "then": {
+                    "properties": {
+                      "draft_id": false,
+                    },
+                  },
+                },
+                {
+                  "description": "[text]",
+                  "if": {
+                    "properties": {
+                      "where": {
+                        "const": "provider_draft",
+                      },
+                    },
+                    "required": [
+                      "where",
+                    ],
+                  },
+                  "then": {
+                    "$comment": "[text]",
+                    "properties": {
+                      "service": true,
+                    },
+                    "required": [
+                      "service",
+                    ],
+                  },
+                },
+              ],
+              "description": "[text]",
+              "properties": {
+                "draft_id": {
+                  "description": "[text]",
+                  "maxLength": 128,
+                  "type": "string",
+                },
+                "service": {
+                  "description": "[text]",
+                  "maxLength": 60,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "where": {
+                  "enum": [
+                    "dash_only",
+                    "provider_draft",
+                  ],
+                },
+              },
+              "required": [
+                "where",
+              ],
+              "type": "object",
+            },
+            "sources": {
+              "description": "[text]",
+              "items": {
+                "properties": {
+                  "from": {
+                    "maxLength": 320,
+                    "type": "string",
+                  },
+                  "message_id": {
+                    "maxLength": 128,
+                    "type": "string",
+                  },
+                  "subject": {
+                    "maxLength": 300,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "message_id",
+                ],
+                "type": "object",
+              },
+              "type": "array",
+            },
+            "subject": {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string",
+            },
+            "to": {
+              "description": "[text]",
+              "items": {
+                "maxLength": 320,
+                "type": "string",
+              },
+              "maxItems": 25,
+              "type": "array",
+            },
+          },
+          "required": [
+            "subject",
+            "body",
+            "placement",
+          ],
+          "type": "object",
+        },
+        "generated_at": "[volatile]",
+        "items": {
+          "description": "[text]",
+          "items": {
+            "properties": {
+              "headline": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string",
+              },
+              "item_url": {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string",
+              },
+              "published_at": {
+                "format": "date-time",
+                "type": "string",
+              },
+              "source_name": {
+                "maxLength": 120,
+                "type": "string",
+              },
+              "source_url": {
+                "description": "[text]",
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string",
+              },
+              "summary": {
+                "maxLength": 1000,
+                "type": "string",
+              },
+            },
+            "required": [
+              "headline",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "kind": {
+          "description": "[text]",
+          "enum": [
+            "digest",
+            "draft",
+            "brief",
+          ],
+        },
+        "run_id": {
+          "description": "[text]",
+          "minLength": 1,
+          "type": "string",
+        },
+        "set_aside": {
+          "description": "[text]",
+          "items": {
+            "properties": {
+              "headline": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string",
+              },
+              "reason": {
+                "description": "[text]",
+                "enum": [
+                  "no_signal",
+                  "duplicate",
+                  "off_topic",
+                  "too_old",
+                  "unparseable",
+                ],
+              },
+            },
+            "required": [
+              "headline",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "sources_fetched": {
+          "description": "[text]",
+          "items": {
+            "properties": {
+              "fetched_at": {
+                "format": "date-time",
+                "type": "string",
+              },
+              "item_count": {
+                "minimum": 0,
+                "type": "integer",
+              },
+              "source_name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string",
+              },
+              "source_url": {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string",
+              },
+              "status": {
+                "description": "[text]",
+                "enum": [
+                  "ok",
+                  "unreachable",
+                  "not_a_feed",
+                  "empty",
+                ],
+              },
+            },
+            "required": [
+              "source_name",
+              "source_url",
+              "status",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string",
+        },
+      },
+      "required": [
+        "artifact_version",
+        "agent",
+        "run_id",
+        "artifact_id",
+        "kind",
+        "title",
+        "generated_at",
+      ],
+      "title": "OrchestrateDASH run artifact v1 and v2",
+      "type": "object",
+    },
+    "source_commit": "118d83b04c3fbf20e048528821dbffb3ed0568f3",
+  },
   "runner_eligibility": {
     "advisories": [],
     "contract": "orchestratekit.runner_eligibility.v1",
