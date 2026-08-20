@@ -134,6 +134,15 @@ export type IntegrationNeed = {
 export type PlanWorkflowInput = ComposeInput & {
   /** Who will BUILD from this plan? Drives suggested_next_actions (MAR-208). */
   build_target?: BuildTarget;
+  /**
+   * MAR-699: caller-asserted DASH broker presence — the same MAR-494 signal
+   * `export_build_brief` accepts (`dash_broker_available`). Absent or false
+   * changes nothing. Explicit true makes `runtime_recommendation` prefer the
+   * local, brokered, supervised DASH Agent Runner over a managed background
+   * worker whenever the route also fits it (manifest-v2-compatible route, no
+   * computer-off requirement) — see `buildPlacementContract`.
+   */
+  dash_broker_available?: boolean;
 };
 
 /**
@@ -3368,6 +3377,7 @@ function buildPlacementContract(input: {
   whatYouNeed: IntegrationNeed[];
   enforcedGates: string[];
   buildTarget: BuildTarget | undefined;
+  dashBrokerAvailable: boolean;
 }): Pick<
   GoalToProductWizard,
   | "runtime_requirements"
@@ -3407,7 +3417,15 @@ function buildPlacementContract(input: {
     input.enforcedGates.every((gate) => gate === "human_approval_gate");
   const dashMonitoringFits = manifestV2Compatible && dashControlsCompatible;
   const dashRunnerFits = dashMonitoringFits && !computerOff;
-  const dashRunnerAvailable = dashAgentRunnerDeclaredAvailable(input.goal);
+  // MAR-699: `dash_broker_available` is the same MAR-494 caller-asserted "DASH
+  // is present" signal `export_build_brief` already gates its own dash_managed
+  // connections on (ADR-MAR-596). It is an equally honest declaration as the
+  // goal-text phrasing `dashAgentRunnerDeclaredAvailable` reads for, so either
+  // one is sufficient to prefer the DASH Agent Runner below — a caller who
+  // asserts the broker is present does not also have to phrase it into the
+  // goal sentence.
+  const dashRunnerAvailable =
+    dashAgentRunnerDeclaredAvailable(input.goal) || input.dashBrokerAvailable;
   const dashMonitorRequested =
     manifestV2Compatible && dashControlsCompatible && dashMonitoringDeclared(input.goal);
   const dashControlAvailable = dashControlDeclaredAvailable(input.goal);
@@ -6107,6 +6125,7 @@ export function planWorkflow(
     whatYouNeed: what_you_need,
     enforcedGates: enforced_approval_gates,
     buildTarget: input.build_target,
+    dashBrokerAvailable: input.dash_broker_available === true,
   });
   const hosting_and_monitoring = buildHostingAndMonitoring(
     input.goal,
@@ -6464,6 +6483,16 @@ const InputShape = {
     "code = raw code (Codex or similar). " +
     "Drives suggested_next_actions and what_you_need. Omit to get all options.",
   ),
+  dash_broker_available: z.boolean().optional().describe(
+    "Caller-asserted: is DASH (with its broker) present on the machine that will run this " +
+    "agent? The same signal `export_build_brief` accepts under this name. Absent or false is " +
+    "the honest negative and changes nothing. Explicit true makes `runtime_recommendation` " +
+    "prefer the local, brokered, supervised DASH Agent Runner over a managed background " +
+    "worker or scheduled job whenever the route also fits it — a manifest-v2-compatible " +
+    "route with no computer-off requirement. A goal that genuinely needs the computer off " +
+    "still gets the durable runtime recommended, because the DASH Agent Runner cannot satisfy " +
+    "that requirement.",
+  ),
 };
 
 export function registerPlanWorkflow(server: McpServer): void {
@@ -6532,6 +6561,7 @@ export function registerPlanWorkflow(server: McpServer): void {
             local_or_hosted: input.local_or_hosted,
             output_depth: input.output_depth,
             build_target: input.build_target,
+            dash_broker_available: input.dash_broker_available,
           },
           registry,
         );
