@@ -438,7 +438,7 @@
     {
       "id": "MAR-749",
       "lifecycle": "merged",
-      "linear_status": "Backlog",
+      "linear_status": "Done",
       "commit": "b6ca747",
       "proof": {
         "command": "pnpm verify",
