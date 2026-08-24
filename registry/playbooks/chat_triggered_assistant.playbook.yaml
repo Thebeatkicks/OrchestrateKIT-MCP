@@ -30,6 +30,7 @@ components:
   - intent_classifier
   - state_store
   - human_approval_gate
+  - approval_binding
   - discord_notification
   - auth_failure_handler
   - audit_log
@@ -41,6 +42,9 @@ edges:
   - audit_log__recommended__chat_trigger
   - discord_notification__safer_with__auth_failure_handler
   - audit_log__recommended__discord_notification
+  - human_approval_gate__produces__approval_binding
+  - approval_binding__produces__discord_notification
+  - approval_binding__produces__audit_log
 
 best_for:
   - a support or ops bot that answers questions in a Slack/Discord/Teams channel
@@ -75,6 +79,7 @@ deterministic_steps:
   - discord_notification
   - auth_failure_handler
   - audit_log
+  - approval_binding
 
 guardrails:
   - Verify the sender is on the allowed user/role/channel list BEFORE any downstream step runs
@@ -84,6 +89,7 @@ guardrails:
   - Persist conversation state keyed by channel/thread id with a retention/TTL policy; chat history can contain PII
   - The reply is an external write — keep human_approval_gate until the route earns validated status from logged sessions
   - Log who triggered which action, from which channel, and when — the audit trail is the only record of who asked
+  - Bind the approval to the payload — digest exactly what the approver saw and have the write refuse to run when it no longer matches. An audit trail that faithfully records the wrong payload is not provenance
 
 failure_modes:
   - Unauthorized sender triggers a privileged action because the authorization check was skipped or misconfigured
@@ -108,7 +114,7 @@ implementation_steps:
   - "Step 4: Run schema_validation on the structured event, then intent_classifier (small/standard model) to map the untrusted message to a bounded action."
   - "Step 5: Load/persist conversation state from state_store keyed by channel+thread id so multi-turn context survives between messages. Set a retention/TTL policy."
   - "Step 6: Do the bounded work for the classified intent. Keep the agent's tool set fixed — the message must not be able to widen it."
-  - "Step 7: Surface the proposed reply to human_approval_gate (until the route is validated). On approval, post via the platform egress (discord_notification / slack_notification / teams_notification / telegram_notification) into the originating thread."
+  - "Step 7: Surface the proposed reply to human_approval_gate (until the route is validated). On approval, post via the platform egress (discord_notification / slack_notification / teams_notification / telegram_notification) into the originating thread. Take the approval_binding digest over the reply text AND the destination channel/thread id — an approved message posted into an unapproved thread is drift."
   - "Step 8: Route credential failures (expired/revoked bot token) to auth_failure_handler so a dead listener surfaces a named error instead of going silently offline."
   - "Step 9: Write an audit_log entry for every triggered action — sender id, authorization result, channel/thread, intent, and outcome."
 

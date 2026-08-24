@@ -35,12 +35,34 @@ export type RouteOverlapResult = {
 };
 
 /**
+ * Components that ride in as a CONSEQUENCE of another component already in the
+ * set, never as independent evidence about what the goal wants (MAR-749).
+ *
+ * `approval_binding` is injected by safetyAugmenter Rule 5c exactly when
+ * `human_approval_gate` meets a gated write. Both of those are already in the
+ * candidate set and already carry that signal, so scoring the binding as a
+ * third data point counts the same fact twice — and it counts it against the
+ * candidate, because a playbook written before the component existed reads it
+ * as compose noise. That is not a matcher signal, it is bookkeeping: the price-
+ * monitor and scheduled-report goals both dropped out of their own playbooks
+ * the moment the binding started riding along.
+ *
+ * Subtracted from BOTH sides so the arithmetic stays symmetric — a playbook
+ * that DOES list the binding must not have its recall diluted by the same
+ * exclusion that protects one that does not.
+ */
+export const POLICY_INJECTED_IDS = new Set(["approval_binding"]);
+
+/**
  * Finds playbooks whose component list significantly overlaps with
  * the candidate component set (MAR-91).
  *
  * Returns full overlap stats — recall, precision, Jaccard, extra and missing
  * components — so callers can apply their own thresholds for playbook-first
  * routing. Results filtered to `recall >= minOverlap`, sorted by recall desc.
+ *
+ * `POLICY_INJECTED_IDS` are excluded from the scoring on both sides — see the
+ * note above.
  */
 export function findOverlappingPlaybooks(
   candidateIds: Set<string>,
@@ -48,23 +70,32 @@ export function findOverlappingPlaybooks(
   minOverlap = 0.5,
 ): PlaybookOverlapResult[] {
   const results: PlaybookOverlapResult[] = [];
-  const candidateSize = candidateIds.size;
+  const scoredCandidate = new Set(
+    [...candidateIds].filter((id) => !POLICY_INJECTED_IDS.has(id)),
+  );
+  const candidateSize = scoredCandidate.size;
 
   for (const pb of playbooks) {
     if (pb.components.length === 0) continue;
 
-    const shared = pb.components.filter((id) => candidateIds.has(id));
-    const recall = shared.length / pb.components.length;
+    const pbComponents = pb.components.filter((id) => !POLICY_INJECTED_IDS.has(id));
+    if (pbComponents.length === 0) continue;
+
+    const shared = pbComponents.filter((id) => scoredCandidate.has(id));
+    const recall = shared.length / pbComponents.length;
 
     if (recall < minOverlap) continue;
 
     const precision = candidateSize > 0 ? shared.length / candidateSize : 0;
-    const unionSize = pb.components.length + candidateSize - shared.length;
+    const unionSize = pbComponents.length + candidateSize - shared.length;
     const jaccard = unionSize > 0 ? shared.length / unionSize : 0;
 
     const sharedSet = new Set(shared);
-    const extra_components = [...candidateIds].filter((id) => !sharedSet.has(id));
-    const missing_components = pb.components.filter((id) => !candidateIds.has(id));
+    // Reported on the SCORED sets too: a policy injection is not compose noise,
+    // and listing it as an extra would push it into the benchmark's noise flags
+    // and into primaryDomainExtras' append list.
+    const extra_components = [...scoredCandidate].filter((id) => !sharedSet.has(id));
+    const missing_components = pbComponents.filter((id) => !scoredCandidate.has(id));
 
     results.push({
       playbook_id: pb.id,

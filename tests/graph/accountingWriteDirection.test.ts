@@ -103,11 +103,18 @@ describe("the exact Xero post has a guarded, honest write path (MAR-581 / MAR-54
     expect(ids.indexOf("human_approval_gate")).toBeLessThan(ids.indexOf("accounting_write"));
   });
 
-  it("states that approval is enforced but not bound to the executed payload", () => {
+  it("binds the approval to the transaction it is about to post (MAR-749)", () => {
+    // Was "enforced but NOT bound" when this test was written: MAR-540 had
+    // corrected the overclaim without building the mechanism, so the honest
+    // answer for a ledger write was "re-check it yourself". MAR-749 built the
+    // mechanism, and a posted transaction is the highest-consequence write in
+    // the registry — reversible only by a second, separately audited entry — so
+    // it is the last route that should still be reading (unbound).
     expect(output.enforced_approval_gates).toContain("human_approval_gate");
-    expect(output.summary_markdown).toContain("Approval enforced (unbound)");
-    expect(output.summary_markdown).toContain("the gate is not bound to the payload");
-    expect(output.summary_markdown).toContain("nothing here proves what you approved is what runs");
+    expect(output.summary_markdown).toContain("Approval enforced (bound)");
+    expect(output.summary_markdown).toContain("bind the approval to the payload");
+    expect(ids).toContain("approval_binding");
+    expect(ids.indexOf("approval_binding")).toBeLessThan(ids.indexOf("accounting_write"));
   });
 
   it("exposes a provider-neutral connection without pretending connect.mjs can mint one", () => {

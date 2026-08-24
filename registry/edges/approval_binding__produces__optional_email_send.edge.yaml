@@ -1,0 +1,17 @@
+id: approval_binding__produces__optional_email_send
+from: approval_binding
+to: optional_email_send
+relation: produces_input_for
+status: published
+reason: The write takes the approval receipt as an input and refuses to run when the approved digest does not cover the message it is about to send. That is what this edge states and sequencing does not — the write CONSUMES the approval rather than merely running after it. A route can order gate, write and log correctly and still bind nothing — sequence is not provenance.
+severity: high
+notes: >
+  MAR-749 (MAR-540 bar #3). The send is the moment the approval stops being reversible. email_draft sits upstream and is an LLM step: re-running it after approval regenerates different text with no signal that anything changed, which is failure mode three on the component.
+
+  Refusal, not logging. A payload that fails the check must not execute;
+  recording a mutated payload after the fact is the failure, not the
+  detection of it. See docs/ADR-MAR-540-approval-provenance.md.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/approvalProvenance.test.ts > every gated write consumes the binding"

@@ -1,0 +1,17 @@
+id: approval_binding__produces__discord_notification
+from: approval_binding
+to: discord_notification
+relation: produces_input_for
+status: published
+reason: The write takes the approval receipt as an input and refuses to run when the approved digest does not cover the message and channel it is about to post to. That is what this edge states and sequencing does not — the write CONSUMES the approval rather than merely running after it. A route can order gate, write and log correctly and still bind nothing — sequence is not provenance.
+severity: high
+notes: >
+  MAR-749 (MAR-540 bar #3). Same shape as the Slack egress: destination and body are both part of what the human approved, and both must be covered by the digest.
+
+  Refusal, not logging. A payload that fails the check must not execute;
+  recording a mutated payload after the fact is the failure, not the
+  detection of it. See docs/ADR-MAR-540-approval-provenance.md.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/approvalProvenance.test.ts > every gated write consumes the binding"

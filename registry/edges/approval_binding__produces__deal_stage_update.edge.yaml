@@ -1,0 +1,17 @@
+id: approval_binding__produces__deal_stage_update
+from: approval_binding
+to: deal_stage_update
+relation: produces_input_for
+status: published
+reason: The write takes the approval receipt as an input and refuses to run when the approved digest does not cover the deal id and target stage it is about to set. That is what this edge states and sequencing does not — the write CONSUMES the approval rather than merely running after it. A route can order gate, write and log correctly and still bind nothing — sequence is not provenance.
+severity: high
+notes: >
+  MAR-749 (MAR-540 bar #3). Advancing a stage alters forecasts and fires downstream automations. The approval covers one deal moving to one stage; a re-resolved deal id after approval moves a different deal for the same human decision.
+
+  Refusal, not logging. A payload that fails the check must not execute;
+  recording a mutated payload after the fact is the failure, not the
+  detection of it. See docs/ADR-MAR-540-approval-provenance.md.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/approvalProvenance.test.ts > every gated write consumes the binding"

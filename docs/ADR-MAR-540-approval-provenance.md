@@ -1,8 +1,10 @@
 # ADR MAR-540 — Approval provenance: binding an approval to the action that runs
 
-- **Status:** Accepted (design). Bar #1 implemented; bars #2–#6 are filed as follow-ups.
-- **Date:** 2026-08-08
-- **Issue:** MAR-540
+- **Status:** Accepted and **implemented**. Bar #1 shipped 2026-08-08 (MAR-540,
+  PR #177 `f11d8de`); bars #2–#5 shipped 2026-08-24 (MAR-749, atlas Proposal 1)
+  as designed below, with no decision here re-litigated.
+- **Date:** 2026-08-08; implementation section added 2026-08-24.
+- **Issue:** MAR-540, closed out by MAR-749.
 - **Supersedes:** nothing. Extends the MAR-132 gate policy and the MAR-250 coverage-honesty layer.
 
 ## Context
@@ -125,6 +127,69 @@ merely following it — is deliberately **not** written yet. No component produc
 an approval identity to consume, and writing that edge early would assert in the
 graph exactly the guarantee this ADR exists to stop asserting.
 
+## Implementation — MAR-749, 2026-08-24
+
+Everything above shipped as designed. What the design did not say, and the build
+had to decide:
+
+### `produces_input_for`, not `must_run_before`
+
+The consume edge was written as `approval_binding__produces__<write>` with
+relation `produces_input_for`. `must_run_before` was the obvious candidate and is
+wrong: it says only that the write RUNS AFTER the binding, which is precisely the
+sequencing this ADR calls insufficient. `produces_input_for` says the receipt is
+an **input** to the write, which is the relation that distinguishes consumption
+from order. It also carries ordering weight in both orderers, so the binding
+lands after the gate and before the write with no separate ordering edge.
+
+### One edge per gated write, not one exemplar plus a policy set
+
+`schema_validation` sets the local precedent for a representative edge plus a
+policy constant, and it was rejected here. The defect MAR-540 filed is that a
+route can order gate, write and log correctly and relate none of them; an edge
+that names only `external_publish` reproduces exactly that defect for the other
+ten gated writes. All eleven members of `ALWAYS_REQUIRES_GATE` have one, and
+`tests/graph/approvalProvenance.test.ts` iterates the set so a twelfth write
+added later fails until its edge exists.
+
+### The injection predicate is shared with the chip, deliberately
+
+`safetyAugmenter` Rule 5c fires on the same pair that drives the Layer-1
+qualifier — `human_approval_gate` present, plus a component in
+`ALWAYS_REQUIRES_GATE`. Keeping one predicate means the chip and the route can
+never disagree about whether the plan carries the guarantee, which would be a new
+instance of the original bug.
+
+### `POLICY_INJECTED_IDS` — a derived component is not matcher evidence
+
+Unforeseen, and the one real design addition. Playbook selection scores a
+candidate component set against each playbook's components. `approval_binding`
+rides in *because* the gate is there, so scoring it as a third data point counted
+one fact twice — and counted it **against** the candidate, since playbooks
+written before the component read it as compose noise. Two goals
+(MAR-266's price monitor, the `scheduled_data_report` probe) fell out of their
+own playbooks the moment the binding started riding along. `findOverlappingPlaybooks`
+now subtracts `POLICY_INJECTED_IDS` from **both** sides, so a playbook that lists
+the binding does not have its recall diluted by the exclusion that protects one
+that does not.
+
+### The golden paths carry it too
+
+The augmenter does not run on playbook-source plans — those serve the golden-path
+route verbatim. Leaving the eleven gated route/playbook pairs alone would have
+given the same goal two different guarantees depending on which path it took, so
+each gained the component, its edges, a `deterministic_steps` entry, a guardrail,
+and a clause on the implementation step that already owned the approval.
+
+### What is NOT built
+
+The component is a **design contract**, not a runtime. Nothing in this repository
+computes a digest or refuses an execution — OrchestrateMCP is the deterministic
+design layer and stays read-only. The plan now tells a builder that the write must
+refuse a payload whose digest does not match, and names the four ways that goes
+wrong; making it true is the builder's job, exactly as it is for every other
+component in the registry.
+
 ## Consequences
 
 - Every gated plan's Layer-1 card now says less than it used to, and what it says
@@ -136,7 +201,23 @@ graph exactly the guarantee this ADR exists to stop asserting.
 - The remaining bars (#2 the component, #4 verified on the default path once the
   component exists, #5 regression fixtures both directions, #6 re-triage of the
   five LAB posts) are filed as follow-ups rather than half-shipped, per MAR-526's
-  own slicing precedent.
-- A reader who wants the guarantee today has an honest answer instead of a
+  own slicing precedent. **All closed by MAR-749 on 2026-08-24.**
+- ~~A reader who wants the guarantee today has an honest answer instead of a
   misleading one: re-check the request at execution time yourself, because the
-  plan does not.
+  plan does not.~~ Superseded: the plan now carries the mechanism, and the
+  Risks & safeguards line tells the reader to build the refusal rather than to
+  work around its absence.
+
+### After MAR-749
+
+- The registry fingerprint moved `7b1edec52c349c78` → `ef5f328df6682feb`:
+  69 components, 183 edges. The public benchmark still passes 7/7 prompts and
+  50/50 assertions with 2 compose-noise flags; four route scores fall 1–2 points
+  because those routes are one step longer, which is the honest price of the step.
+- `Approval enforced (unbound)` is still reachable and still correct — a caller
+  passing `must_avoid: [approval_binding]` gets it, and that is the negative
+  control the acceptance probe uses. The qualifier stayed a statement about a
+  particular route rather than becoming a constant that always reads the same way.
+- Proposals 2 (the gate's vocabulary and durability) and 3 (gate-composition
+  order) from `docs/AGENT_LANDSCAPE_MAR-566.md` remain open and deliberately
+  untouched here.

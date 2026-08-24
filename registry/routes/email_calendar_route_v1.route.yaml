@@ -11,6 +11,7 @@ components:
   - calendar_write
   - gmail_draft_write
   - human_approval_gate
+  - approval_binding
   - audit_log
 edges:
   - email_read__produces__intent_classifier
@@ -24,6 +25,11 @@ edges:
   - audit_log__recommended__calendar_write
   - audit_log__recommended__gmail_draft_write
   - email_draft__compatible__calendar_lookup
+  - human_approval_gate__produces__approval_binding
+  - approval_binding__produces__optional_email_send
+  - approval_binding__produces__calendar_write
+  - approval_binding__produces__gmail_draft_write
+  - approval_binding__produces__audit_log
 risk_level: high
 confidence: 0.88
 failure_modes:

@@ -1,0 +1,23 @@
+id: human_approval_gate__produces__approval_binding
+from: human_approval_gate
+to: approval_binding
+relation: produces_input_for
+status: published
+reason: The gate emits a decision; the binding turns that decision into an identity. Its inputs are the payload exactly as the approver saw it and the approved/rejected verdict, and its output is a digest plus a single-use token that a later step can check. Without this relation the gate's decision is a fact about a human, not a fact about a payload.
+severity: high
+notes: >
+  MAR-749 (MAR-540 bar #2/#3). Before this edge the gate had exactly one
+  outgoing relation — human_approval_gate__produces__audit_log, added by
+  MAR-540 — which recorded THAT a decision happened. Nothing carried WHAT was
+  decided forward in a form another step could compare against.
+
+  The binding is deliberately a separate component rather than extra fields on
+  the gate. The gate's job is to reach a human; the binding's job is to make the
+  answer checkable. They fail differently — a gate fails by stalling or by
+  showing an ambiguous summary, a binding fails by covering the wrong bytes or
+  by being replayed — and docs/ADR-MAR-540-approval-provenance.md keeps them
+  apart for that reason.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/approvalProvenance.test.ts > the gate's decision now reaches an approval identity"

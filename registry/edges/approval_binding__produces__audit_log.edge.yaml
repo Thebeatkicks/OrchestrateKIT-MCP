@@ -1,0 +1,22 @@
+id: approval_binding__produces__audit_log
+from: approval_binding
+to: audit_log
+relation: produces_input_for
+status: published
+reason: The receipt is what makes the audit trail comparable. audit_log already records the EXECUTED payload; with the approved digest and token recorded alongside it, a reader can check the two against each other after the fact instead of taking the sequence of entries on trust.
+severity: high
+notes: >
+  MAR-749 (MAR-540 bar #3, second half of the audit relation). MAR-540's
+  human_approval_gate__produces__audit_log states that the decision is recorded.
+  This states that the IDENTITY of what was decided is recorded. The pair is the
+  difference between a log that can be read as a story and a log that can be
+  used as evidence.
+
+  Recording the receipt is not the same as enforcing it. The refusal happens at
+  execution time, in the approval_binding__produces__* edges to the write
+  components — a mutated payload that is executed and then faithfully logged is
+  the failure this component exists to prevent, not the detection of it.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/approvalProvenance.test.ts > the receipt reaches the audit log"

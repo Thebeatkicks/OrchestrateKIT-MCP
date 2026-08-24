@@ -39,7 +39,7 @@ import {
   edgesWithinSet,
   type AvoidViolation,
 } from "../graph/routeOrdering.js";
-import { ALWAYS_REQUIRES_GATE } from "../graph/safetyAugmenter.js";
+import { ALWAYS_REQUIRES_GATE, APPROVAL_BINDING_ID } from "../graph/safetyAugmenter.js";
 import {
   matchCapabilities,
   isNegatedInContext,
@@ -4587,23 +4587,34 @@ function buildCompactStatusHeader(
       : `${titleCaseStatus(coverage.coverage_label)} coverage`;
   // MAR-540 bar #1 + #4: an enforced gate sitting in front of an external write
   // guarantees that a human SAW something, not that what they saw is what runs.
-  // Nothing in the registry binds an approval to a payload — `human_approval_gate`
-  // emits an `approved | rejected | timeout` decision with no identity attached,
-  // and `audit_log` records the executed payload with no reference to an approved
-  // one — so "Approval enforced" alone claims a guarantee no fixture backs.
+  // `human_approval_gate` emits an `approved | rejected | timeout` decision with
+  // no identity attached, and `audit_log` records the executed payload with no
+  // reference to an approved one — so "Approval enforced" alone claimed a
+  // guarantee no fixture backed.
   //
   // Qualified on the DEFAULT path, not only when the goal asks: bar #4 exists
   // because a goal that never says the word "approval" reaches the same gate and
   // deserves the same honesty. Same shape as the MAR-250 rule three lines above,
   // where "Full coverage" is qualified rather than deleted when a constraint gap
   // is present — the plan keeps its chip and stops overstating it.
+  //
+  // MAR-749 gives the chip its other half. `approval_binding` now rides in
+  // wherever this same pair is present (safetyAugmenter Rule 5c), so the honest
+  // reading is no longer one-sided: (bound) says the route carries a payload
+  // digest the write refuses to run without, (unbound) says it does not. Both
+  // states are reachable — a caller can pass `must_avoid: [approval_binding]`,
+  // and a golden-path route that predates the component keeps its own shape —
+  // so the qualifier stays a statement about THIS route rather than a constant.
   const gateGuardsAWrite =
     enforcedGates.includes("human_approval_gate") &&
     routeComponentIds.some((id) => ALWAYS_REQUIRES_GATE.has(id));
+  const approvalIsBound = routeComponentIds.includes(APPROVAL_BINDING_ID);
   const approval =
     enforcedGates.length > 0
       ? gateGuardsAWrite
-        ? "Approval enforced (unbound)"
+        ? approvalIsBound
+          ? "Approval enforced (bound)"
+          : "Approval enforced (unbound)"
         : "Approval enforced"
       : approvalAdvisory
       ? "Approval advisory"
@@ -5360,14 +5371,22 @@ function buildGuidedPlanMarkdown(
         guardedActions.length > 0
           ? `Keep the approval gate before ${formatHumanList(guardedActions)}`
           : `Keep the human approval gate before any irreversible action`;
-      // MAR-540 bar #1/#4: say what the gate does NOT guarantee, on every gated
-      // plan rather than only when the goal asks. The gate proves a human saw
-      // something; nothing in the registry proves that what they saw is what
-      // runs. The "(unbound)" chip in the compact header is this sentence's
-      // short form, and a chip with no explanation anywhere is not honesty.
+      // MAR-540 bar #1/#4 + MAR-749: say what the gate does and does not
+      // guarantee, on every gated plan rather than only when the goal asks. The
+      // gate proves a human saw something; only the binding proves that what
+      // they saw is what runs. The "(bound)"/"(unbound)" chip in the compact
+      // header is this sentence's short form, and a chip with no explanation
+      // anywhere is not honesty.
+      //
+      // The bound sentence is a BUILD instruction, not a claim about something
+      // already true: `approval_binding` is a component the reader has to
+      // implement, and the refusal is the part people skip. Naming refusal
+      // explicitly is the difference between this and an audit trail that
+      // faithfully records the wrong payload.
       if (guardedActions.length > 0) {
-        cardSafeguard +=
-          "; the gate is not bound to the payload — re-check the request at execution time, because nothing here proves what you approved is what runs";
+        cardSafeguard += cardRouteIds.has(APPROVAL_BINDING_ID)
+          ? "; bind the approval to the payload — digest exactly what the approver saw, and have the write refuse anything that no longer matches rather than logging the difference afterwards"
+          : "; the gate is not bound to the payload — re-check the request at execution time, because nothing here proves what you approved is what runs";
       }
       if (explicitlyDraftOnly(goal) && cardRouteIds.has("email_draft")) {
         cardSafeguard += "; keep the reply draft-only and leave sending disabled";

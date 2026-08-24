@@ -26,6 +26,7 @@ components:
   - lead_enrichment
   - schema_validation
   - human_approval_gate
+  - approval_binding
   - auth_failure_handler
   - crm_note_write
   - deal_stage_update
@@ -39,6 +40,10 @@ edges:
   - deal_stage_update__requires__human_approval_gate
   - deal_stage_update__safer_with__auth_failure_handler
   - audit_log__recommended__deal_stage_update
+  - human_approval_gate__produces__approval_binding
+  - approval_binding__produces__crm_note_write
+  - approval_binding__produces__deal_stage_update
+  - approval_binding__produces__audit_log
 
 best_for:
   - a nightly enrichment pass over new CRM leads that appends firmographics and a fit score
@@ -76,6 +81,7 @@ deterministic_steps:
   - crm_note_write
   - deal_stage_update
   - audit_log
+  - approval_binding
 
 guardrails:
   - Never advance a deal stage without a human approval gate — the write is irreversible and triggers downstream CRM automations that cannot be recalled
@@ -84,6 +90,7 @@ guardrails:
   - Never let enrichment data overwrite a fresher CRM field; append or write to a dedicated note rather than clobbering owner-edited values
   - Strip and gate PII before it leaves the CRM for the enrichment provider, and record the lawful basis for EU contacts
   - Use an idempotency key on the stage change so a retry after a transient API failure cannot double-advance a deal
+  - Bind the approval to the payload — digest exactly what the approver saw and have the write refuse to run when it no longer matches. An audit trail that faithfully records the wrong payload is not provenance
 
 failure_modes:
   - Enrichment provider returns a confident match for the wrong company on a shared or generic domain and the wrong firmographics are written back
@@ -106,7 +113,7 @@ implementation_steps:
   - "Step 2: crm_record_read pulls the target object set with an explicit filter (owner, stage, last-modified) and a READ-ONLY credential. Paginate; a stale cursor on a large account silently truncates the batch."
   - "Step 3: lead_enrichment calls the provider per record with email or domain. Keep the provider's match confidence in the payload — it is the input to every downstream decision."
   - "Step 4: schema_validation rejects records whose enriched shape is incomplete or whose confidence is below the configured threshold, before anything is proposed for approval."
-  - "Step 5: human_approval_gate presents the batch as proposals: record, current stage, proposed stage, enrichment evidence, confidence. Approving is per-record, not per-batch."
+  - "Step 5: human_approval_gate presents the batch as proposals: record, current stage, proposed stage, enrichment evidence, confidence. Approving is per-record, not per-batch. Approving is also per-record for approval_binding: one receipt per record, covering the resolved record id and the proposed stage, so a re-resolved id after approval cannot move a different deal."
   - "Step 6: crm_note_write appends the enrichment result as a note using a WRITE-scoped credential. Never overwrite an owner-edited field."
   - "Step 7: deal_stage_update applies the approved stage change with an idempotency key derived from (deal id, target stage, run id)."
   - "Step 8: auth_failure_handler distinguishes an expired/under-scoped credential from a genuine empty result — a 403 that reads as 'no leads today' is how this pipeline goes quietly dead."
