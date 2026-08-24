@@ -39,7 +39,18 @@ export const MIN_PLAYBOOKS = 12;
 // the eleven gated writes consumes it), and the eleven route/playbook pairs that
 // pair a gate with a gated write now carry it. Recomputed from the YAML source
 // via contentFingerprint(readRawEntries()), not copied from a failing diff.
-export const EXPECTED_RELEASE_FINGERPRINT = "ef5f328df6682feb";
+//
+// MAR-742/F1: ef5f328df6682feb → dd1629d8b1880091. One registry change only —
+// `retry_policy` and its `job_queue__compatible__retry_policy` edge leave
+// `variant_review_route_v1`. That route documents itself as mirroring what the
+// planner composes ("live-probed 2026-08-07 ... not a hand-authored ideal"),
+// and retry_policy was only ever in the composed shape because the word "back"
+// in "fan the results back together" matched inside `exponential_back*off*`.
+// With that raw-substring match gone the route follows the planner rather than
+// preserving an artifact of the bug. Recomputed the same way — via
+// contentFingerprint(readRawEntries()) against the YAML, not read off a failing
+// assertion.
+export const EXPECTED_RELEASE_FINGERPRINT = "dd1629d8b1880091";
 
 /**
  * MAR-99: server-level instructions sent to AI clients on connect.

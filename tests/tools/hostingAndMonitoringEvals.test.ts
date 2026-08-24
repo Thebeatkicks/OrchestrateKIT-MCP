@@ -105,14 +105,45 @@ describe("MAR-315 — local_or_hosted is honored as an override", () => {
 });
 
 describe("MAR-315 — monitoring recommendation stays first-run usable", () => {
-  it("recommends simple logs by default, with reachable DASH and manual alternatives", () => {
+  /**
+   * MAR-742/F4 inverted this default.
+   *
+   * MAR-315 recommended `log_to_file` whenever DASH was merely *reachable*, and
+   * described DASH as an "optional monitor/control surface". The reported
+   * failure is what that reads like in the product: on a goal whose residency
+   * answer left DASH perfectly applicable, the planner recommended a plain log
+   * file over its own monitoring surface — for an agent that runs while nobody
+   * is watching, and using an option whose own description says nothing alerts
+   * you when a run fails.
+   *
+   * So a reachable DASH is now the recommendation and the log is the first
+   * alternative. The stated-preference case below is the absence twin: when the
+   * goal says how it wants to be watched, the goal still wins.
+   */
+  it("recommends reachable DASH over a plain log, keeping the log as the alternative", () => {
     const r = plan(G4_SCHEDULED_REPORT, { output_depth: "technical" });
-    expect(r.hosting_and_monitoring.monitoring.recommended.id).toBe("log_to_file");
-    expect(r.hosting_and_monitoring.monitoring.recommended.label).toMatch(/file or table/);
+    expect(r.hosting_and_monitoring.monitoring.recommended.id).toBe("dash_import");
     const altIds = r.hosting_and_monitoring.monitoring.alternatives.map((a) => a.id);
-    expect(altIds).toEqual(["dash_import", "manual_none"]);
+    expect(altIds).toEqual(["log_to_file", "manual_none"]);
+    // The reason names what the log cannot do, rather than selling DASH.
     expect(r.hosting_and_monitoring.monitoring.reason).toContain(
-      "optional monitor/control surface",
+      "shows a failed run instead of leaving it in a file",
+    );
+  });
+
+  it("keeps the plain log when the GOAL states its own monitoring preference (MAR-742/F4)", () => {
+    // Absence twin: the planner must not talk a user out of a choice they made.
+    const r = plan(
+      `${G4_SCHEDULED_REPORT} Log to a file I can read myself.`,
+      { output_depth: "technical" },
+    );
+    expect(r.hosting_and_monitoring.monitoring.recommended.id).toBe("log_to_file");
+    expect(r.hosting_and_monitoring.monitoring.reason).toContain(
+      "Your goal already describes a monitoring approach",
+    );
+    // DASH stays offered, just not recommended over the user's own words.
+    expect(r.hosting_and_monitoring.monitoring.alternatives.map((a) => a.id)).toContain(
+      "dash_import",
     );
   });
 
@@ -179,7 +210,10 @@ describe("MAR-315 — provenance, presence, and layering", () => {
       const r = plan(G4_SCHEDULED_REPORT, { output_depth: depth });
       const md = r.summary_markdown;
       expect(r.hosting_and_monitoring.hosting.recommended.id).toBeTruthy();
-      expect(r.hosting_and_monitoring.monitoring.recommended.id).toBe("log_to_file");
+      // MAR-742/F4: reachable DASH is now the recommendation (see the
+      // monitoring block above). Asserted here only so this test keeps naming
+      // the value it renders around; its subject is the card, not the pick.
+      expect(r.hosting_and_monitoring.monitoring.recommended.id).toBe("dash_import");
       expect(md).not.toContain("**Hosting:**");
       expect(md).not.toContain("**Monitoring:**");
       expect(md).not.toContain("### Hosting & monitoring");

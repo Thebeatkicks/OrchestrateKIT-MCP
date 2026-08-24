@@ -295,16 +295,22 @@ describe("MAR-427 — runner and monitor choices carry confirmed-scope ids", () 
     const dash = presentMonitor.options.find((option) => option.id === "dash")!;
 
     expect(presentBuild.recommended_option_id).toBe("dash_agent_runner");
-    expect(runner.label).toContain("local runtime");
-    expect(runner.description).toContain("Closing DASH does not stop it");
+    // MAR-742/F4 rewrote this copy: the old wording ("a local runtime",
+    // "manifest v2") named implementations a chooser cannot act on, and the
+    // reported failure was that it did not separate this option from
+    // "Self-host hosted". The FACTS it has to carry are unchanged and still
+    // asserted — the runner outlives the DASH window, sleep/power-off stops it,
+    // and DASH monitors rather than runs.
+    expect(runner.label).toContain("on this computer");
+    expect(runner.description).toContain("close its window");
     expect(runner.description).toMatch(/sleep or power-off/i);
     expect(runner.scope_selection?.runtime_recommendation_id).toBe(
       "dash_agent_runner_local",
     );
     expect(presentMonitor.recommended_option_id).toBe("dash");
-    expect(dash.label).toContain("manifest v2");
-    expect(dash.description).toContain("monitor/control surface");
-    expect(dash.description).toContain("still runs the agent");
+    expect(dash.label.toLowerCase()).toContain("dashboard");
+    expect(dash.description).toContain("DASH watches the agent");
+    expect(dash.description).toContain("still runs it");
     expect(dash.scope_selection).toEqual({
       monitoring_option_id: "dash_import",
       control_surface_id: "dash_control",

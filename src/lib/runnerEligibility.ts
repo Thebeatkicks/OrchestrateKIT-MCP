@@ -105,9 +105,29 @@ export type RunnerCapabilityFinding = {
   detail: string;
 };
 
+/**
+ * Where the assessed posture came from (MAR-742/F2).
+ *
+ * The posture decides which dimensions gate the decision, so a reader who
+ * cannot tell a DECLARED posture from a DEFAULTED one cannot audit the result.
+ * That was the reported failure: a goal that said "unattended" in as many words
+ * was assessed against `public`, and the brief said only "(`public` posture)" —
+ * true, unexplained, and indistinguishable from the caller having asked for it.
+ *
+ * - `declared` — the caller passed `runner_posture` explicitly.
+ * - `derived`  — read from the goal's own constraint signal, which carries the
+ *                user's trigger phrase, so the reason quotes their words.
+ * - `default`  — nothing said; the strictest posture applies.
+ */
+export type RunnerPostureSource = "declared" | "derived" | "default";
+
 export type RunnerEligibilityAssessment = {
   contract: typeof RUNNER_ELIGIBILITY_CONTRACT;
   posture: RunnerPosture;
+  /** How `posture` was arrived at — never silent, per MAR-742/F2. */
+  posture_source: RunnerPostureSource;
+  /** One sentence naming why this posture applies. Assembled, never free prose. */
+  posture_reason: string;
   decision: RunnerEligibilityDecision;
   /**
    * Recorded so a reader can see reachability and eligibility disagree. It is
@@ -258,11 +278,16 @@ export function runnerDimensionLabel(dimension: RunnerCapabilityDimension): stri
  */
 export function assessRunnerEligibility(input: {
   posture: RunnerPosture;
+  /** MAR-742/F2: how `posture` was arrived at. Defaults to `declared`. */
+  posture_source?: RunnerPostureSource;
+  /** The goal phrase behind a `derived` posture — quoted back to the reader. */
+  posture_trigger?: string;
   profile?: RunnerCapabilityProfile;
   /** Context only; see `RunnerEligibilityAssessment.runner_reachable`. */
   runner_reachable?: boolean;
 }): RunnerEligibilityAssessment {
   const posture = input.posture;
+  const posture_source: RunnerPostureSource = input.posture_source ?? "declared";
   const required = REQUIRED_BY_POSTURE[posture];
   const requiredSet = new Set<RunnerCapabilityDimension>(required);
 
@@ -309,6 +334,8 @@ export function assessRunnerEligibility(input: {
   return {
     contract: RUNNER_ELIGIBILITY_CONTRACT,
     posture,
+    posture_source,
+    posture_reason: postureReasonFor(posture, posture_source, input.posture_trigger),
     decision,
     runner_reachable: typeof input.runner_reachable === "boolean" ? input.runner_reachable : null,
     findings,
@@ -318,6 +345,36 @@ export function assessRunnerEligibility(input: {
     advisories,
     rationale: rationaleFor(posture, decision, refuted_dimensions, missing_evidence),
   };
+}
+
+/**
+ * One sentence naming why THIS posture applies (MAR-742/F2).
+ *
+ * Assembled per source, never templated with a variable spliced into one
+ * sentence — a `default` posture and a `declared` one must not be able to
+ * render as differently-worded versions of the same claim, which is the same
+ * discipline `DIMENSION_SPECS` applies to statuses.
+ */
+function postureReasonFor(
+  posture: RunnerPosture,
+  source: RunnerPostureSource,
+  trigger?: string,
+): string {
+  switch (source) {
+    case "declared":
+      return `Assessed against the \`${posture}\` posture because the caller declared it.`;
+    case "derived":
+      return (
+        `Assessed against the \`${posture}\` posture because the goal says so — ` +
+        `triggered by "${trigger ?? posture}". Pass \`runner_posture\` to override this.`
+      );
+    case "default":
+      return (
+        `Assessed against the \`public\` posture — the strictest — because nothing declared ` +
+        `one and the goal does not say who can reach this agent. An undeclared posture is ` +
+        `not evidence of a narrow one. Pass \`runner_posture\` to narrow it.`
+      );
+  }
 }
 
 /**
@@ -371,6 +428,11 @@ export function summarizeRunnerEligibility(assessment: RunnerEligibilityAssessme
   const lines = [
     `- **Public-runner eligibility (\`${assessment.posture}\` posture):** ${marker} ` +
       `\`${assessment.decision}\` — ${assessment.rationale}`,
+    // MAR-742/F2: the posture gates which dimensions count, so where it came
+    // from is part of the finding, not metadata. Rendered unconditionally —
+    // the reported failure was a defaulted posture that read exactly like a
+    // declared one.
+    `  - **Posture source:** \`${assessment.posture_source}\` — ${assessment.posture_reason}`,
   ];
   if (assessment.runner_reachable === true) {
     lines.push(

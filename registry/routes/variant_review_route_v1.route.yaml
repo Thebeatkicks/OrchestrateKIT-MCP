@@ -9,14 +9,18 @@ summary: >
   produce for a natural "generate 3 headline variants for a landing page in
   parallel, fan the results back together, stage for review, and require my
   approval before anything ships" goal (live-probed 2026-08-07), not a
-  hand-authored ideal.
+  hand-authored ideal. Re-probed 2026-08-25 after MAR-742/F1: retry_policy left
+  the composed shape and so leaves this route. It was never selected by anything
+  in the goal — the word "back" in "fan the results back together" was matching
+  inside `exponential_back*off*`, one of seven such raw-substring matches that
+  fix removed. The route says it mirrors what the planner composes, so it
+  follows the planner rather than preserving an artifact of the bug.
 goal_patterns:
   - generate .* (variants?|a/b) .* (parallel|in parallel) .* (fan|merge|collect) .* (review|approval)
   - (variant|a/b) .* content .* stage .* review .* approval
 components:
   - fan_out_collector
   - job_queue
-  - retry_policy
   - multi_variant_generator
   - review_draft_composer
   - reviewer_notification
@@ -24,7 +28,6 @@ components:
   - audit_log
 edges:
   - fan_out_collector__produces__multi_variant_generator
-  - job_queue__compatible__retry_policy
   - multi_variant_generator__produces__review_draft_composer
   - review_draft_composer__produces__human_approval_gate
   - review_draft_composer__produces__reviewer_notification
@@ -38,7 +41,7 @@ required_evals:
 failure_modes:
   - A parallel branch times out or errors and fan_out_collector's merge strategy silently drops it instead of surfacing a partial result
   - Variant count or hypothesis tags are lost across the fan-in, so the reviewer cannot tell which variant tests which hypothesis
-  - A retry after a transient branch failure produces a duplicate variant instead of a fresh one (no idempotency key on the branch task)
+  - A retry after a transient branch failure produces a duplicate variant instead of a fresh one (no idempotency key on the branch task) — retry_policy is no longer part of this route, so whatever retries branch tasks must carry the key itself
   - The staged draft's review_status is misread as approved when it is only pending, and downstream steps act on unreviewed content
   - Queue backlog under job_queue grows unbounded when branches are slower than the intake rate, delaying every variant set
 evals:

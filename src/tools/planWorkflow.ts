@@ -129,6 +129,23 @@ export type IntegrationNeed = {
   required_scopes: string[];
   /** Common gotchas for this integration (rate limits, token expiry, etc.). */
   gotchas: string[];
+  /**
+   * MAR-742/F3: the free-tier meter on the leading product example, when it has
+   * one. Present exactly when the recommendation names a metered connector, so
+   * the card can state the assumption instead of leaving it in `gotchas`.
+   */
+  quota_assumption?: { product: string; note: string };
+  /**
+   * MAR-742/F3: how to BUILD this step by default, when the cheapest correct
+   * shape is not the leading product. Prose, not a provider — see
+   * `shapeWebMonitorNeed`.
+   */
+  recommended_shape?: string;
+  /**
+   * MAR-742/F3: the shape as a value the card can switch on, so rendering never
+   * has to pattern-match the prose above.
+   */
+  recommended_shape_id?: "plain_fetch" | "rendering_service";
 };
 
 export type PlanWorkflowInput = ComposeInput & {
@@ -1234,6 +1251,23 @@ type CatalogEntry = {
   mcp_server: McpServerInfo;
   required_scopes: string[];
   gotchas: string[];
+  /**
+   * MAR-742/F3: the metered limit on this connector's free tier, as a structured
+   * field rather than a sentence buried in `gotchas`.
+   *
+   * The reported failure: a price-watch goal whose own sizing worked out to
+   * ~8,600 fetches/month was recommended Firecrawl, whose free tier is 500
+   * pages/month. The number was already in `gotchas[2]`, and the card never
+   * rendered `gotchas` — so the recommendation reached the user with the one
+   * fact that disqualifies it left in the structured output. A recommendation
+   * that names a metered connector has to carry its meter.
+   *
+   * `product` is which example the meter belongs to, so the assumption is only
+   * rendered when THAT product is the one being recommended — quoting
+   * Firecrawl's limit while pointing the user at a plain fetch would be the
+   * same dishonesty pointing the other way.
+   */
+  quota_assumption?: { product: string; note: string };
 };
 
 /**
@@ -1647,19 +1681,28 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
 
   page_monitor: {
     label: "Web monitor / scraper",
+    // These stay the real, connectable products — §11 Connect builds an
+    // authorization row from the first one, and a plain HTTP fetch is not
+    // something you authorize. The fetch-first DEFAULT is carried by
+    // `recommended_shape` instead (MAR-742/F3), which is prose about how to
+    // build the step, not a provider to sign in to.
     product_examples: ["Firecrawl", "Playwright", "Puppeteer"],
     auth_model: "API key (X-API-Key header)",
     mcp_server: {
       availability: "official",
       package: "npx @firecrawl/mcp",
       transport: "stdio",
+      note:
+        "Only needed for JavaScript-rendered pages — a plain HTTP fetch of the page or its " +
+        "JSON endpoint needs no MCP server and no API key",
     },
     required_scopes: [],
     gotchas: [
+      "Check whether the page exposes a JSON endpoint the browser already calls — fetching it directly is cheaper, more stable, and needs no rendering service",
       "JavaScript-heavy pages may need the waitFor option to let the DOM fully render before scraping",
       "Check robots.txt and Terms of Service for the target site before production use",
-      "Firecrawl free tier: 500 pages / month — upgrade before putting in production",
     ],
+    quota_assumption: { product: "Firecrawl", note: "Firecrawl's free tier is 500 pages/month" },
   },
 
   data_scraper: {
@@ -1676,6 +1719,10 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
       "Use /crawl for multi-page sites and /scrape for single pages — they have different rate-limit buckets",
       "Anti-bot measures (Cloudflare, Akamai) block headless browsers; use Firecrawl's stealth mode for resilience",
     ],
+    // MAR-742/F3: same meter as page_monitor. data_scraper keeps Firecrawl in
+    // front — bulk multi-page extraction is the case a rendering service is
+    // genuinely for — but the meter still has to travel with the name.
+    quota_assumption: { product: "Firecrawl", note: "Firecrawl's free tier is 500 pages/month" },
   },
 
   github_trigger: {
@@ -1822,9 +1869,82 @@ export function connectionContractForComponents(
  * enriched entries (auth model, MCP availability, scopes, gotchas) so a builder
  * knows up front what they need to connect and how.
  */
+/**
+ * Goal phrases that state a genuine RENDERING need (MAR-742/F3).
+ *
+ * Mirrors `DISTINCT_RENDERED_PAGE_SIGNALS` in capabilityMatcher.ts, which
+ * already decides the same question one layer up for `public_feed_fetch`. Kept
+ * as its own list rather than imported because the two answer different
+ * questions — that one gates whether a page monitor belongs in the route at
+ * all, this one gates which PRODUCT to put in front of it — and collapsing them
+ * would mean a change made for one silently re-shaped the other.
+ */
+const RENDERING_NEED_SIGNALS = [
+  "javascript-heavy",
+  "javascript rendered",
+  "javascript-rendered",
+  "js-heavy",
+  "dynamic webpage",
+  "dynamic website",
+  "renders in the browser",
+  "rendered in the browser",
+  "behind a login",
+  "logged in",
+  "single-page app",
+  "infinite scroll",
+  "click through",
+  "headless browser",
+];
+
+/**
+ * State the default SHAPE of the web-monitor step (MAR-742/F3).
+ *
+ * Reported case: a family price-watch goal — a dozen products, hourly — was
+ * handed Firecrawl, whose free tier is 500 pages/month, against the goal's own
+ * ~8,600 fetches/month. Nothing in that goal says the pages need rendering;
+ * most shop pages carry the price in the JSON endpoint the browser itself
+ * calls, and fetching that needs no API key, no MCP server and no quota.
+ *
+ * Deliberately NOT done by reordering `product_examples`: that list is what
+ * §11 Connect turns into an authorization row, and a plain HTTP fetch is not a
+ * provider you sign in to. Putting it there produced a "Plain HTTP fetch
+ * connection server (broker-backed)" row offering to hold a credential that
+ * does not exist — the same dishonesty as the quota omission, pointing the
+ * other way. The shape is prose about how to build the step; the products stay
+ * the products.
+ *
+ * Absence twin (`tests/tools/connectorHonesty.test.ts`): a goal that DOES state
+ * a rendering need gets the rendering service as its default shape, and the
+ * meter travels with it.
+ */
+function shapeWebMonitorNeed(need: IntegrationNeed, goal: string): IntegrationNeed {
+  if (need.component_id !== "page_monitor") return need;
+  const g = goal.toLowerCase();
+  const needsRendering = RENDERING_NEED_SIGNALS.some((signal) => g.includes(signal));
+  if (needsRendering) {
+    return {
+      ...need,
+      recommended_shape_id: "rendering_service",
+      recommended_shape:
+        "The goal says these pages need a browser to render, so a rendering service fits.",
+    };
+  }
+  return {
+    ...need,
+    // No rendering need stated: the meter does not apply to the recommended
+    // shape, so it must not be quoted as if it did.
+    quota_assumption: undefined,
+    recommended_shape_id: "plain_fetch",
+    recommended_shape:
+      "Fetch each page, or the JSON endpoint behind it, over plain HTTP — no API key, no " +
+      "quota. Add a rendering service only if a page needs a browser.",
+  };
+}
+
 function buildWhatYouNeed(
   componentIds: string[],
   registry: RegistrySnapshot,
+  goal: string,
 ): IntegrationNeed[] {
   const byId = new Map(registry.components.map((c) => [c.id, c]));
   return componentIds
@@ -1833,7 +1953,7 @@ function buildWhatYouNeed(
       const entry = INTEGRATION_CATALOG[id];
       const c = byId.get(id);
       const scopes = c ? [...c.permissions.read, ...c.permissions.write] : [];
-      return {
+      const need: IntegrationNeed = {
         component_id: id,
         label: entry.label,
         product_examples: entry.product_examples,
@@ -1842,7 +1962,11 @@ function buildWhatYouNeed(
         mcp_server: entry.mcp_server,
         required_scopes: entry.required_scopes,
         gotchas: entry.gotchas,
+        ...(entry.quota_assumption ? { quota_assumption: entry.quota_assumption } : {}),
       };
+      const shaped = shapeWebMonitorNeed(need, goal);
+      if (shaped.quota_assumption === undefined) delete shaped.quota_assumption;
+      return shaped;
     });
 }
 
@@ -2609,7 +2733,10 @@ const MONITORING_OPTION_LABELS: Record<MonitoringOptionId, string> = {
   // MAR-406: no private-tool names in user-facing copy. "LAB" is an internal
   // program the user does not have and cannot get; naming it here pointed every
   // user at software that isn't theirs.
-  dash_import: "DASH — monitor/control a compatible manifest v2 agent",
+  // MAR-742/F4: "manifest v2" is an implementation detail a chooser cannot act
+  // on, and this label lands on the card's own Recommended-setup line. Say what
+  // the user gets instead.
+  dash_import: "DASH — a dashboard showing every run, with a stop button",
   log_to_file: "Log runs to a file or table you already have",
   manual_none: "None — run it manually and check the results yourself",
 };
@@ -2624,7 +2751,7 @@ const HOSTING_MENU_SHORT: Record<HostingOptionId, string> = {
   dash_agent_runner_local: "DASH Agent Runner",
 };
 const MONITORING_MENU_SHORT: Record<MonitoringOptionId, string> = {
-  dash_import: "DASH import",
+  dash_import: "DASH",
   log_to_file: "log to file",
   manual_none: "manual only",
 };
@@ -2853,7 +2980,7 @@ function buildHostingBlock(
  */
 function buildMonitoringBlock(
   goal: string,
-  placement: Pick<GoalToProductWizard, "control_surface">,
+  placement: Pick<GoalToProductWizard, "control_surface" | "runtime_requirements">,
 ): HostingAndMonitoring["monitoring"] {
   const stated = anySignal(goal.toLowerCase(), MONITORING_STATED_SIGNALS);
   const controls = [
@@ -2870,18 +2997,54 @@ function buildMonitoringBlock(
         "DASH is the selected monitor/control surface for this compatible manifest-v2 agent; execution remains with the separately selected runtime.",
     };
   }
-  const reason = stated
-    ? "Your goal already describes a monitoring approach; keep that choice explicit and make failures visible in the build."
-    : dashReachable
-    ? "Default: record each run in a file or table. DASH remains an optional monitor/control surface for this compatible manifest-v2 code build."
-    : "Default: record each run in a file or table so failures and retries remain inspectable.";
+  // MAR-742/F4: the goal's own words win. When the user has already said how
+  // they want to watch it, echoing that back is the point — recommending DASH
+  // over a stated preference would be the planner overriding the user, which is
+  // a worse failure than the one below.
+  if (stated) {
+    return {
+      recommended: monitoringOption("log_to_file"),
+      alternatives: [
+        ...(dashReachable ? [monitoringOption("dash_import")] : []),
+        monitoringOption("manual_none"),
+      ],
+      reason:
+        "Your goal already describes a monitoring approach; keep that choice explicit and make failures visible in the build.",
+    };
+  }
+
+  // MAR-742/F4: nothing stated, and DASH can watch this agent — recommend it.
+  //
+  // This branch used to fall through to `log_to_file` and describe DASH as
+  // "optional", which is how the planner ended up recommending a plain log file
+  // over its own monitoring surface for an agent that runs while nobody is
+  // looking. A log is only inspectable if someone remembers to inspect it; the
+  // option's own description says nothing tells you when a run fails. Where a
+  // dashboard is genuinely available, "you'll find out eventually" is not the
+  // better default. `log_to_file` stays first among the alternatives.
+  //
+  // The exception is the one case where DASH genuinely cannot do the job:
+  // DASH is a desktop app on THIS computer, so an agent that has to keep
+  // running while the computer is asleep or off is running precisely when DASH
+  // is not. Recommending it there would be the mirror of the bug this branch
+  // fixes — pointing at a monitor that is off whenever the thing it watches is
+  // on. A file the agent writes from wherever it runs is the honest answer,
+  // and DASH stays available as an alternative for when you are back at the
+  // machine.
+  if (dashReachable && !placement.runtime_requirements.must_run_while_computer_off) {
+    return {
+      recommended: monitoringOption("dash_import"),
+      alternatives: [monitoringOption("log_to_file"), monitoringOption("manual_none")],
+      reason:
+        "DASH can monitor and control this compatible manifest-v2 agent, and shows a failed run instead of leaving it in a file for you to find; execution stays with the separately selected runtime. Logging each run to a file or table remains available.",
+    };
+  }
+
   return {
     recommended: monitoringOption("log_to_file"),
-    alternatives: [
-      ...(dashReachable ? [monitoringOption("dash_import")] : []),
-      monitoringOption("manual_none"),
-    ],
-    reason,
+    alternatives: [monitoringOption("manual_none")],
+    reason:
+      "Default: record each run in a file or table so failures and retries remain inspectable.",
   };
 }
 
@@ -2893,7 +3056,7 @@ function buildHostingAndMonitoring(
   outputDepth: "guided" | "brief" | "standard" | "technical" | "deep",
   placement: Pick<
     GoalToProductWizard,
-    "control_surface" | "runtime_recommendation"
+    "control_surface" | "runtime_recommendation" | "runtime_requirements"
   >,
 ): HostingAndMonitoring {
   const runtimeIsDashRunner =
@@ -4164,11 +4327,42 @@ function recommendedBuildSurface(
  * filter would drop the very chip the ⭐ pointed at. Reading the same source of
  * truth is a re-projection, not fresh inference.
  */
-function recommendedMonitoringSurface(hm: HostingAndMonitoring, buildSurface: string): string {
+/**
+ * MAR-742/F4 — which monitoring option carries the ⭐.
+ *
+ * The reported failure: on a goal whose residency answer left DASH perfectly
+ * applicable, the ⭐ sat on *Local logs* — the planner recommending against the
+ * product's own monitoring surface, in favour of an option whose own
+ * description says nothing tells you when a run fails.
+ *
+ * That came from reading `hm.monitoring.recommended.id` alone. MAR-315 computes
+ * that field from the goal's stated observability need, before any residency
+ * answer exists, so `log_to_file` there means "a log satisfies what the goal
+ * asked for" — not "a log beats a dashboard". Treating it as the latter made a
+ * pre-residency default outrank a post-residency fact.
+ *
+ * So the order is: incoherent options first (they are not choices), then DASH
+ * whenever the residency answer leaves it applicable, then the goal's own
+ * preference. `dashApplicable` is the same reachability the round's own
+ * `hidden_when` rules use, so the ⭐ can never land on an option the client is
+ * about to hide (the MAR-411 property).
+ */
+function recommendedMonitoringSurface(
+  hm: HostingAndMonitoring,
+  buildSurface: string,
+  dashApplicable: boolean,
+): string {
+  // Cowork keeps no run after the client closes, so there is nothing durable to
+  // point a monitor at. Not a preference — an incoherence.
   if (buildSurface === "cowork") return "cowork";
   if (hm.hosting.recommended.id === "in_client") return "cowork";
+
   const monitoring = hm.monitoring.recommended.id;
-  if (monitoring === "dash_import") return "dash";
+  // The ⭐ can never land on an option this round did not build. `dashApplicable`
+  // is the round's own `dashMonitoringReachable`, so a plan that recommends DASH
+  // while the client is about to hide it degrades to the log rather than
+  // pointing at nothing (the MAR-411 property).
+  if (monitoring === "dash_import") return dashApplicable ? "dash" : "local_logs";
   if (monitoring === "log_to_file") return "local_logs"; // MAR-406: was "lab"
   return "other"; // manual_none
 }
@@ -4246,18 +4440,35 @@ function buildQuestionFlow(
       id: "build_surface",
       question: "Where should this agent live?",
       options: [
+        // MAR-742/F4 — these four are a CHOICE, so they have to be tellable
+        // apart by someone who has never deployed anything. The reported
+        // failure was that "Self-host hosted" and "DASH Agent Runner" read as
+        // near-synonyms, and "manifest v2" / "a local runtime" told a novice
+        // nothing about what they'd be signing up for.
+        //
+        // Every option now answers the same three questions in the same order,
+        // so they can be compared by reading down rather than decoded:
+        //   1. does it run when I'm not there?
+        //   2. what does it cost?
+        //   3. who starts, stops and watches it?
+        // Product jargon ("manifest v2", "runtime") is out; it named an
+        // implementation detail the chooser cannot act on.
         {
           id: "cowork",
-          label: "Cowork — a no-code assistant surface",
-          description: "You configure it in the assistant; it runs when the session is open.",
+          label: "Cowork — inside the assistant, nothing to install",
+          description:
+            "Runs only while this chat is open, so it cannot check on anything while you are " +
+            "away. Nothing to install, no bill. You change it by asking.",
         },
         ...(dashRunnerReachable
           ? [
               {
                 id: "dash_agent_runner",
-                label: "DASH Agent Runner — a local runtime on this computer",
+                label: "DASH Agent Runner — on this computer, with a dashboard",
                 description:
-                  "Uses a separately installed runner and manifest v2. Closing DASH does not stop it; sleep or power-off does.",
+                  "Needs the separately installed DASH app on this computer. Keeps running when " +
+                  "you close its window; sleep or power-off pauses it. No hosting bill. A " +
+                  "dashboard starts it, stops it and shows every run.",
                 scope_selection: {
                   runtime_recommendation_id: "dash_agent_runner_local",
                 },
@@ -4267,14 +4478,20 @@ function buildQuestionFlow(
         {
           // MAR-410: this read like a script on a cron and nobody recognised it
           // as "build me a local app". Say what you get, then the tradeoff.
+          // MAR-742/F4: and say what separates it from the DASH runner above —
+          // both are "on this computer", so the difference is who watches it.
           id: "self_host_local",
-          label: "A local app on your own computer — runs while your computer is on",
-          description: "Your code, your machine. It cannot run while the computer is asleep or off.",
+          label: "A local app you run yourself — on this computer, no dashboard",
+          description:
+            "Runs while this computer is awake — sleep or power-off stops it. No hosting bill. " +
+            "You start, stop and check on it yourself; no dashboard.",
         },
         {
           id: "self_host_hosted",
-          label: "Self-host hosted — always on",
-          description: "Runs on a schedule without you present. Needs a deploy, secrets and a bill.",
+          label: "An always-on server — keeps running while you are away",
+          description:
+            "Runs on schedule whether your computer is on or not. Costs a monthly hosting " +
+            "bill. You deploy it once with the passwords it needs.",
         },
         {
           id: "other",
@@ -4322,9 +4539,10 @@ function buildQuestionFlow(
           ? [
               {
                 id: "dash",
-                label: "DASH — monitor and control a compatible manifest v2 agent",
+                label: "DASH — a dashboard that shows every run and lets you stop it",
                 description:
-                  "DASH is the monitor/control surface. The separately selected local runner or external runtime still runs the agent.",
+                  "Shows each run, its result and its cost, and gives you a stop button. " +
+                  "DASH watches the agent; whatever you picked above still runs it.",
                 // DASH monitors an EXPORTED agent manifest; a Cowork build never
                 // produces one, so offering it there promises a link that can't exist.
                 hidden_when: { round: "build_surface", answer_in: ["cowork"] },
@@ -4342,7 +4560,14 @@ function buildQuestionFlow(
           description: "Your own monitoring, or none — a failed run then goes unnoticed.",
         },
       ],
-      recommended_option_id: recommendedMonitoringSurface(hm, recommendedSurface),
+      // MAR-742/F4: `dashMonitoringReachable` is the same flag that decides
+      // whether the DASH option is built at all, so the ⭐ and the option list
+      // cannot disagree.
+      recommended_option_id: recommendedMonitoringSurface(
+        hm,
+        recommendedSurface,
+        dashMonitoringReachable,
+      ),
       fold_answer_into_recall: false,
     },
   ];
@@ -4996,6 +5221,14 @@ function buildProductCardConnectList(
       add(connection.connection_id, connection.label);
       continue;
     }
+    // MAR-742/F3: when the recommended shape is a plain HTTP fetch there is no
+    // product to authorize, so listing rendering services here would name
+    // connections this plan is not asking for. The escalation path stays in
+    // `what_you_need.recommended_shape` and at technical depth.
+    if (need.recommended_shape_id === "plain_fetch") {
+      add(need.component_id, "Web page fetch — plain HTTP, no API key");
+      continue;
+    }
     const examples = formatExamples(need.product_examples);
     add(need.component_id, examples ? `${need.label} (${examples})` : need.label);
   }
@@ -5504,6 +5737,24 @@ function buildGuidedPlanMarkdown(
     ``,
   );
 
+  // MAR-742/F3: a metered connector's meter rides with the recommendation.
+  // Only when the meter applies to the shape actually being recommended —
+  // `shapeWebMonitorNeed` clears it when the answer is a plain fetch, because
+  // quoting a page quota at someone not using a paged service is the same
+  // dishonesty pointing the other way.
+  const assumptions = whatYouNeed
+    .filter((need) => need.quota_assumption !== undefined)
+    .filter((need) => cardConnections.includes(need.quota_assumption!.product))
+    .map((need) => need.quota_assumption!.note)
+    .filter((v, i, a) => a.indexOf(v) === i);
+  if (assumptions.length > 0) {
+    lines.push(
+      `**Usage assumption:** ${assumptions.join(" ")} — check that against your own ` +
+        `volume before you rely on the free tier.`,
+      ``,
+    );
+  }
+
   // ── MAR-402 card section 4: Recommended setup (⭐, card only — standard
   // renders the full operating bundle instead) ──
   if (!fullSteps) {
@@ -5536,10 +5787,37 @@ function buildGuidedPlanMarkdown(
     lines.push(...renderProductCardContinueMenu(goalToProductWizard, goal));
   }
 
-  lines.push(
-    `> 🟢 Registry-grounded, no LLM calls. 🔵 Additions are suggestions. ` +
-      `For full details, call \`output_depth: "technical"\`.`,
-  );
+  // MAR-742/F5 — name the deliverable the compact card leaves out.
+  //
+  // The card is sized to one screen on purpose, and `output_depth: "technical"`
+  // was the only escape hatch it named. But depth is not the same axis as
+  // DELIVERY: the full issue package — epic, milestones, per-issue fields and
+  // the rendered builder prompt — is `export_build_brief`'s
+  // `delivery_mode: 'full'`, and no depth setting on this tool produces it.
+  // Omitting a deliverable is fine; omitting the fact that it exists means a
+  // reader cannot tell "not included here" from "does not exist" — the same
+  // absent-vs-negative confusion `runnerEligibility.ts` refuses to make.
+  //
+  // Card only. At `standard`/`technical` the continue menu above already puts
+  // the export in front of the reader as a numbered choice, so repeating it
+  // here would be a second menu (MAR-397 AC3 forbids exactly that).
+  //
+  // Gated on `must_run_while_user_offline` — the same premise MAR-385 uses to
+  // decide whether this plan is a BUILD at all. A goal the chat can finish in
+  // one go has no issue package to be missing, so naming one would be the nag
+  // that test forbids, not a disclosure.
+  if (!fullSteps && goalToProductWizard.runtime_requirements.must_run_while_user_offline) {
+    lines.push(
+      `> 🟢 Registry-grounded, no LLM calls. 🔵 Additions are suggestions. ` +
+        `For full details, call \`output_depth: "technical"\`; for the full issue package, ` +
+        `\`export_build_brief\` with \`delivery_mode: "full"\`.`,
+    );
+  } else {
+    lines.push(
+      `> 🟢 Registry-grounded, no LLM calls. 🔵 Additions are suggestions. ` +
+        `For full details, call \`output_depth: "technical"\`.`,
+    );
+  }
 
   return lines.join("\n");
 
@@ -6113,7 +6391,7 @@ export function planWorkflow(
   );
 
   // ── MAR-208: what you'll need + target-aware next actions ──
-  const what_you_need = buildWhatYouNeed(routeComponentIds, registry);
+  const what_you_need = buildWhatYouNeed(routeComponentIds, registry, input.goal);
   // ── MAR-383: per-connection acquisition paths (Connect, UX spine step 4) ──
   // Full path prose at technical/deep; the decision-relevant fields at every
   // depth (see compactConnectionContract for what is and is not dropped).

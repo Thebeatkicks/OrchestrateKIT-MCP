@@ -3375,12 +3375,24 @@ export function matchCapabilities(
 
     for (const token of goalTokens) {
       if (MATCH_STOPWORDS.has(token) && !(token === "out" && hasExplicitFanOutContext)) continue;
-      // Capability substring match. MAR-596's bare `write` cannot by itself
-      // establish audit_log: the log needs its contextual audit/log hint, not a
-      // verb embedded in `record_external_write`.
+      // Capability match — word-aligned, NOT a bare substring. MAR-596's bare
+      // `write` cannot by itself establish audit_log: the log needs its
+      // contextual audit/log hint, not a verb embedded in
+      // `record_external_write`.
+      //
+      // MAR-742/F1: the long note above says the word-alignment fix applies to
+      // "the two remaining substring passes", but only the summary pass below
+      // ever got it — this one kept `.includes()` and so kept matching a goal
+      // token anywhere inside a capability id. That is how "my 14 year old"
+      // selected `threshold_router`: the token `old` sits inside
+      // `thresh·old·_evaluation`. It was never one stray word — the same hole
+      // reached `stakeh·old·er_notification` on `old`, `mess·age·`/`st·age·` on
+      // `age`, `cal·end·ar` on `end`, `gener·ate·` on `ate` and `scr·ape·r` on
+      // `ape`. Aligning this pass to the same rule as the summary pass closes
+      // the class, not just the reported token.
       for (const cap of component.capabilities) {
         if (component.id === "audit_log" && /^writ(?:e|es|ing|ten)$/.test(token)) continue;
-        if (cap.toLowerCase().includes(token)) {
+        if (matchesWordAligned(cap.toLowerCase(), token)) {
           bump(component.id, 1, token, "capability");
           break;
         }

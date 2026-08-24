@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "report_fingerprint": "9168f2755ebb7f53",
+  "report_fingerprint": "a1e292ef512cbda5",
   "methodology": {
     "name": "OrchestrateMCP public registry conformance benchmark",
     "kind": "deterministic_registry_conformance",
@@ -24,7 +24,7 @@
   "provenance": {
     "package_name": "orchestratekit-mcp",
     "package_version": "0.1.0",
-    "registry_fingerprint": "ef5f328df6682feb",
+    "registry_fingerprint": "dd1629d8b1880091",
     "registry_scope": "public_non_beta",
     "registry_build_mode": "source",
     "registry_counts": {
@@ -52,7 +52,7 @@
     "required_components_missing": 0,
     "forbidden_components_present": 0,
     "expected_playbooks_missing": 0,
-    "route_score_average": 71.6,
+    "route_score_average": 71.9,
     "route_score_min": 61,
     "route_score_max": 84,
     "candidate_or_blocked_routes": 3,
@@ -182,13 +182,12 @@
         "passed": true
       },
       "composition": {
-        "status": "candidate_route",
+        "status": "ok",
         "route_status": "validated",
-        "route_score": 68,
+        "route_score": 70,
         "components": [
           "content_idea_intake",
           "fan_out_collector",
-          "retry_policy",
           "schema_validation",
           "copy_generation",
           "design_brief_generation",
@@ -213,7 +212,7 @@
           "recommendation_type": "playbook",
           "playbook_id": "content_approval_pipeline",
           "recall": 1,
-          "precision": 0.64
+          "precision": 0.7
         }
       },
       "passed": true

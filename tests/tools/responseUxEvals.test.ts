@@ -984,7 +984,17 @@ describe("OUTPUT-06 (MAR-256) — worker_pipeline gated on depth, integrations d
   // measures 28,992. Paid deliberately — the step is the mechanism that makes
   // "Approval enforced" true rather than merely honestly qualified, and a route
   // step is the only place a reader will see that they have to build it.
-  const G1_DEFAULT_JSON_MAX_BYTES = 29_250;
+  // MAR-742/F3+F4: the residency options are a CHOICE, and the reported failure
+  // was that a novice could not tell "DASH Agent Runner" from "Self-host
+  // hosted" — the copy named implementations ("a local runtime", "manifest
+  // v2") instead of answering does-it-run-while-I'm-away / what-does-it-cost /
+  // who-controls-it. Answering all three on four options costs bytes, as does
+  // `what_you_need.recommended_shape` (F3), which is what stops a metered
+  // rendering service being recommended for a job a plain fetch does. G1
+  // measures 29,376 post-change. Same trade MAR-412/413 made: the bytes buy
+  // honesty, not boilerplate — and the ceiling stays a ceiling, raised to the
+  // measurement plus headroom rather than to a round number well above it.
+  const G1_DEFAULT_JSON_MAX_BYTES = 29_500;
 
   it(`default-depth G1 response JSON stays under ${G1_DEFAULT_JSON_MAX_BYTES} bytes`, () => {
     const bytes = Buffer.byteLength(JSON.stringify(planDepth(G1_EMAIL)), "utf8");
