@@ -24,6 +24,7 @@ components:
   - chat_trigger
   - schema_validation
   - human_approval_gate
+  - approval_binding
   - auth_failure_handler
   - teams_notification
   - audit_log
@@ -32,6 +33,9 @@ edges:
   - audit_log__recommended__chat_trigger
   - audit_log__recommended__teams_notification
   - teams_notification__safer_with__auth_failure_handler
+  - human_approval_gate__produces__approval_binding
+  - approval_binding__produces__teams_notification
+  - approval_binding__produces__audit_log
 
 best_for:
   - a support or ops bot that answers questions in a Microsoft Teams channel
@@ -63,6 +67,7 @@ deterministic_steps:
   - teams_notification
   - auth_failure_handler
   - audit_log
+  - approval_binding
 
 permissions:
   read:
@@ -79,6 +84,7 @@ guardrails:
   - The reply is an external write — keep human_approval_gate until the route earns validated status from logged sessions
   - Log who triggered which action, from which channel, and when — the audit trail is the only record of who asked
   - Use a Teams incoming webhook or a Graph API token scoped to only the required channel/team
+  - Bind the approval to the payload — digest exactly what the approver saw and have the write refuse to run when it no longer matches. An audit trail that faithfully records the wrong payload is not provenance
 
 failure_modes:
   - Unauthorized sender triggers a privileged action because the authorization check was skipped or misconfigured
@@ -99,7 +105,7 @@ implementation_steps:
   - "Step 2: On every event, verify the request signature/token and reject anything unsigned. Deduplicate on the message/event id."
   - "Step 3: Authorize the sender against an allowed user/role/channel list. Reject (and audit) anyone not on it BEFORE any further step."
   - "Step 4: Run schema_validation on the structured event, then do the bounded work for the request. Keep the agent's tool set fixed."
-  - "Step 5: Surface the proposed reply to human_approval_gate. On approval, post via teams_notification into the originating channel/thread."
+  - "Step 5: Surface the proposed reply to human_approval_gate. On approval, post via teams_notification into the originating channel/thread. Take the approval_binding digest over the reply text AND the destination channel/thread id — an approved message posted into an unapproved thread is drift."
   - "Step 6: Route credential failures (expired/revoked webhook or Graph token) to auth_failure_handler so a dead listener surfaces a named error instead of going silently offline."
   - "Step 7: Write an audit_log entry for every triggered action — sender id, authorization result, channel/thread, outcome."
 

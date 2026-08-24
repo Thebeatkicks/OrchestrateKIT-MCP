@@ -34,7 +34,12 @@ export const MIN_PLAYBOOKS = 12;
  * intentionally changed and re-released — recompute via
  * `contentFingerprint(readRawEntries())`.
  */
-export const EXPECTED_RELEASE_FINGERPRINT = "7b1edec52c349c78";
+// MAR-749: 7b1edec52c349c78 → ef5f328df6682feb. `approval_binding` plus its
+// thirteen edges (the gate produces it, it produces the audit log, and each of
+// the eleven gated writes consumes it), and the eleven route/playbook pairs that
+// pair a gate with a gated write now carry it. Recomputed from the YAML source
+// via contentFingerprint(readRawEntries()), not copied from a failing diff.
+export const EXPECTED_RELEASE_FINGERPRINT = "ef5f328df6682feb";
 
 /**
  * MAR-99: server-level instructions sent to AI clients on connect.

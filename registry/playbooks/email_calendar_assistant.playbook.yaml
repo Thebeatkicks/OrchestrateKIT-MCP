@@ -19,6 +19,7 @@ components:
   - calendar_write
   - gmail_draft_write
   - human_approval_gate
+  - approval_binding
   - audit_log
 edges:
   - email_read__produces__intent_classifier
@@ -32,6 +33,11 @@ edges:
   - audit_log__recommended__calendar_write
   - audit_log__recommended__gmail_draft_write
   - email_draft__compatible__calendar_lookup
+  - human_approval_gate__produces__approval_binding
+  - approval_binding__produces__optional_email_send
+  - approval_binding__produces__calendar_write
+  - approval_binding__produces__gmail_draft_write
+  - approval_binding__produces__audit_log
 stack_id: default_orchestratekit_stack
 best_for:
   - scheduling assistant that reads meeting requests and drafts replies with slot suggestions
@@ -64,6 +70,7 @@ deterministic_steps:
   - calendar_write
   - gmail_draft_write
   - audit_log
+  - approval_binding
 guardrails:
   - Never send email, save a mailbox draft, or create calendar events without explicit human approval
   - Approval UI must show the full draft and recipient list — not a summary
@@ -72,6 +79,7 @@ guardrails:
   - Do not build bulk email send flow with this playbook — it is for individual interactions only
   - A draft-only build requests gmail.compose and never gmail.send — if a build needs the send scope, some step other than the draft save is asking for it
   - Never let the draft save re-generate the text — save exactly the bytes the user approved, or the approval covered a different message
+  - Bind the approval to the payload — digest exactly what the approver saw and have the write refuse to run when it no longer matches. An audit trail that faithfully records the wrong payload is not provenance
 failure_modes:
   - Intent misclassification routes a scheduling email to reply flow, missing the calendar step
   - OAuth token expiry causes silent email read failure, returning empty inbox
@@ -97,7 +105,7 @@ implementation_steps:
   - "Step 2: Implement intent_classifier to distinguish: reply-only, schedule-meeting, decline-meeting, archive/no-action"
   - "Step 3: For schedule-meeting intent, run calendar_lookup to find free slots before drafting"
   - "Step 4: Implement email_draft prompt with tone instructions and any relevant context (meeting slots, previous messages). This step COMPOSES only — it must not call the provider"
-  - "Step 5: Surface draft to human_approval_gate — show full draft, recipient list, thread context, and the proposed event details (attendees, time, timezone). Everything downstream of this point is a real write"
+  - "Step 5: Surface draft to human_approval_gate — show full draft, recipient list, thread context, and the proposed event details (attendees, time, timezone). Everything downstream of this point is a real write. Take the approval_binding digest here, over the draft text, the recipient list and the event details together — steps 6 to 8 all refuse to run against a digest that no longer matches"
   - "Step 6: On approval, run gmail_draft_write to save the approved text via users.drafts.create (gmail.compose scope). Pass the source threadId so the draft threads onto the original message, and key on the source message id so a retry updates rather than duplicates"
   - "Step 7: On the same approval, run calendar_write. It is independent of the draft save — either order is fine, and neither failure should roll the other back"
   - "Step 8: Only if the build actually sends, offer optional_email_send behind its own second explicit approval. A draft-only assistant omits this step entirely and never requests gmail.send"

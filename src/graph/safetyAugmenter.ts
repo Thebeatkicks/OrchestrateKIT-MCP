@@ -5,6 +5,12 @@ const SAFETY_GATE_ID = "human_approval_gate";
 const AUDIT_LOG_ID = "audit_log";
 const SCHEMA_VALIDATION_ID = "schema_validation";
 const AUTH_FAILURE_HANDLER_ID = "auth_failure_handler";
+/**
+ * MAR-749: the approval identity. Exported because the Layer-1 "(bound)" /
+ * "(unbound)" qualifier in planWorkflow must read the same id this module
+ * injects — a chip that disagrees with the route is the defect MAR-540 filed.
+ */
+export const APPROVAL_BINDING_ID = "approval_binding";
 
 /**
  * External-integration components that authenticate with an expirable credential
@@ -135,6 +141,11 @@ export type AugmentResult = {
   /** true when auth_failure_handler was injected for an external-integration component (MAR-117). */
   added_auth_handler: boolean;
   /**
+   * true when approval_binding was injected because the route pairs a gate with
+   * a write the gate is supposed to guard (MAR-749).
+   */
+  added_binding: boolean;
+  /**
    * IDs of components added by the prerequisite chain walk (requires /
    * must_run_before edges on augmenter-added components).
    */
@@ -154,6 +165,8 @@ export type AugmentResult = {
  * 4. If any component is in ALWAYS_REQUIRES_VALIDATION → add schema_validation.
  * 5. If any component is in ALWAYS_RECOMMEND_AUDIT, or the route is a
  *    scheduled public-feed read, → add audit_log.
+ * 5c. If the route pairs human_approval_gate with a component in
+ *    ALWAYS_REQUIRES_GATE → add approval_binding (MAR-749).
  * 6. Walk requires + must_run_before chains for all augmenter-added components
  *    (worklist) until stable.
  */
@@ -227,6 +240,29 @@ export function augmentWithSafety(
     added_auth_handler = true;
   }
 
+  // ── Rule 5c: bind the approval to the payload that runs (MAR-749) ──
+  //
+  // A gate in front of a write proves a human SAW something. It does not prove
+  // that what they saw is what runs — the gate emits an approved/rejected
+  // decision with no identity attached, and audit_log records the EXECUTED
+  // payload with no reference to an approved one, so no consumer can compare
+  // them. Route composition ORDERS these components; until MAR-749 nothing
+  // RELATED them. Sequence is not provenance.
+  //
+  // Injected rather than hint-reachable, per docs/ADR-MAR-540-approval-
+  // provenance.md: the meaninglessness LAB's intake quote names ("human in the
+  // loop is meaningless unless we define what the human is approving") is the
+  // DEFAULT, so a component that only arrives when the goal asks for it leaves
+  // the population that needs it most untouched.
+  //
+  // The predicate is deliberately the SAME pair that drives the "(unbound)"
+  // qualifier in planWorkflow's Layer-1 header — an enforced gate plus a write
+  // in ALWAYS_REQUIRES_GATE. The chip and the component must never disagree
+  // about whether a plan carries the guarantee.
+  const bindingApplies =
+    selectedIds.has(SAFETY_GATE_ID) && selected.some((c) => ALWAYS_REQUIRES_GATE.has(c.id));
+  const added_binding = bindingApplies && inject(APPROVAL_BINDING_ID);
+
   // ── Rule 6: prerequisite chain walk for augmenter-added components ──
   //
   // Walk requires edges (comp → dep: comp needs dep) and reverse
@@ -244,6 +280,7 @@ export function augmentWithSafety(
     ...(added_validation ? [SCHEMA_VALIDATION_ID] : []),
     ...(added_audit ? [AUDIT_LOG_ID] : []),
     ...(added_auth_handler ? [AUTH_FAILURE_HANDLER_ID] : []),
+    ...(added_binding ? [APPROVAL_BINDING_ID] : []),
   ]);
 
   const worklist = [...augmenterAddedIds];
@@ -278,5 +315,13 @@ export function augmentWithSafety(
     }
   }
 
-  return { components: selected, added_gates, added_audit, added_validation, added_auth_handler, added_by_chain };
+  return {
+    components: selected,
+    added_gates,
+    added_audit,
+    added_validation,
+    added_auth_handler,
+    added_binding,
+    added_by_chain,
+  };
 }

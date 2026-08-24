@@ -46,6 +46,7 @@ components:
   - intent_classifier
   - email_draft
   - human_approval_gate
+  - approval_binding
   - gmail_draft_write
   - reviewer_notification
   - audit_log
@@ -58,6 +59,9 @@ edges:
   - gmail_draft_write__requires__human_approval_gate
   - audit_log__recommended__gmail_draft_write
   - audit_log__recommended__reviewer_notification
+  - human_approval_gate__produces__approval_binding
+  - approval_binding__produces__gmail_draft_write
+  - approval_binding__produces__audit_log
 
 best_for:
   - a scheduled morning agent that pre-sorts the inbox and drafts replies for a human to review and send
@@ -95,6 +99,7 @@ deterministic_steps:
   - human_approval_gate
   - reviewer_notification
   - audit_log
+  - approval_binding
 
 permissions:
   read:
@@ -107,6 +112,7 @@ permissions:
 
 guardrails:
   - NEVER send — request read + draft-create mail scopes and withhold the send
+  - Bind the approval to the draft text — a saved draft is indistinguishable from one the user typed, so a draft whose text changed after approval becomes a document they will later believe they wrote and approved
     scope so the no-send guarantee holds even if the agent is prompted to send
   - The approval gate SAVES drafts for human review; wiring "approve" to a send
     action voids the entire pattern — approve means save-as-draft, nothing more
@@ -145,7 +151,7 @@ implementation_steps:
   - "Step 3: Implement email_read to pull the unread/inbox window. Strip quoted reply chains before classifying. Distinguish an auth error from an empty inbox."
   - "Step 4: Implement intent_classifier to label each message urgent / FYI / needs-reply / spam with a confidence score. Flag low-confidence urgent/spam calls for the human."
   - "Step 5: For the needs-reply bucket only, implement email_draft with a standard model. Pass the original message + tone instructions; do not draft for FYI/spam."
-  - "Step 6: Save every draft behind human_approval_gate as an unsent draft in the mail client — approve means SAVE, never dispatch. There is no send step in this playbook."
+  - "Step 6: Save every draft behind human_approval_gate as an unsent draft in the mail client — approve means SAVE, never dispatch. There is no send step in this playbook. approval_binding digests the approved text and gmail_draft_write refuses to save anything else."
   - "Step 7: Post one reviewer_notification (a 'your morning triage is ready, N drafts await' ping). This is the only egress and is notification-class — it never contains or sends the replies."
   - "Step 8: Write an audit_log record per draft: message id, assigned class, draft id, run timestamp."
 

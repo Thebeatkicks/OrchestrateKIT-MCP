@@ -23,6 +23,7 @@ components:
   - schema_validation
   - data_normalizer
   - human_approval_gate
+  - approval_binding
   - auth_failure_handler
   - slack_notification
   - audit_log
@@ -33,6 +34,9 @@ edges:
   - stripe_data_read__safer_with__auth_failure_handler
   - audit_log__recommended__slack_notification
   - slack_notification__safer_with__auth_failure_handler
+  - human_approval_gate__produces__approval_binding
+  - approval_binding__produces__slack_notification
+  - approval_binding__produces__audit_log
 
 best_for:
   - a recurring internal Stripe digest — churn, billing, or subscription metrics posted to Slack on a schedule
@@ -67,6 +71,7 @@ deterministic_steps:
   - auth_failure_handler
   - slack_notification
   - audit_log
+  - approval_binding
 
 permissions:
   read:
@@ -84,6 +89,7 @@ guardrails:
   - Keep the approval gate as a visible advisory even though the goal waives enforcement — never silently drop the recommendation
   - Log every run (query window, validation outcome, post id) to audit_log with a timestamp
   - Never expose raw Stripe customer/subscription IDs in the audit log without anonymisation
+  - Bind the approval to the payload even while the gate is advisory — if a run is ever promoted to attended, the digest is already the thing that makes the approval mean something
 
 failure_modes:
   - Stripe API rate limit or a transient error returns a partial result and the report ships looking complete
@@ -107,7 +113,7 @@ implementation_steps:
   - "Step 4: Implement schema_validation on the normalised result — reject empty/partial results and unexpected shapes before anything renders."
   - "Step 5: Post via slack_notification to the internal channel. This is the only egress — notification-class, internal."
   - "Step 6: Wrap the Stripe read and the Slack post with auth_failure_handler — a credential failure escalates and the run is NOT marked successful."
-  - "Step 7: Keep human_approval_gate as a visible advisory in the run record even though the goal's unattended phrasing waives enforcement."
+  - "Step 7: Keep human_approval_gate as a visible advisory in the run record even though the goal's unattended phrasing waives enforcement. approval_binding travels with it: digest the report body and the destination channel at proposal time so an attended promotion needs no rework."
   - "Step 8: Write an audit_log record per run: query window, validation outcome, Slack message id, timestamp."
 
 sources:

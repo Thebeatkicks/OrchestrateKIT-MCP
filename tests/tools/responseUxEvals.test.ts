@@ -500,8 +500,15 @@ describe("MAR-345 — dogfood prompts feel like a product card, not a report", (
     );
     expect(md).toContain("## Email Lead → CRM + Slack");
     expect(md).toContain("**What you'll get:** Read new Gmail leads, draft a reply, update CRM, and alert sales in Slack after human approval.");
+    // MAR-749 moved two steps relative to each other. The binding is new, and
+    // it also releases both gated writes into the ready set at once, so the tie
+    // between two equal-rank irreversible writes is now broken by edge order
+    // rather than by selection order — CRM Note Write lands before Slack
+    // Notification. Both orders are valid (neither write depends on the other)
+    // and the new one matches the goal's own wording, "update CRM, and alert
+    // sales in Slack".
     expect(md).toMatch(
-      /\*\*Route:\*\* .*Schema Validation.*Email Draft.*Human Approval Gate.*Slack Notification.*CRM Note Write.*Audit Log/,
+      /\*\*Route:\*\* .*Schema Validation.*Email Draft.*Human Approval Gate.*Approval Binding.*CRM Note Write.*Slack Notification.*Audit Log/,
     );
     expect(md).toContain("**Connections:** Gmail inbox · CRM (HubSpot/Salesforce/Pipedrive) · Slack sales channel · optional email sender · Model provider.");
     expect(md).toContain("v1 should probably stay draft-only");
@@ -972,7 +979,12 @@ describe("OUTPUT-06 (MAR-256) — worker_pipeline gated on depth, integrations d
   // boilerplate. Conditional rounds still carry no descriptions.
   // GOLD-07 removes the duplicate process round: G1 now measures 26,993 bytes,
   // down from 27,550. The ceiling remains a ceiling rather than being weakened.
-  const G1_DEFAULT_JSON_MAX_BYTES = 28_500;
+  // MAR-749 adds one route step (`approval_binding`, ~430 bytes of step object)
+  // and swaps the Risks & safeguards clause for a slightly longer one: G1
+  // measures 28,992. Paid deliberately — the step is the mechanism that makes
+  // "Approval enforced" true rather than merely honestly qualified, and a route
+  // step is the only place a reader will see that they have to build it.
+  const G1_DEFAULT_JSON_MAX_BYTES = 29_250;
 
   it(`default-depth G1 response JSON stays under ${G1_DEFAULT_JSON_MAX_BYTES} bytes`, () => {
     const bytes = Buffer.byteLength(JSON.stringify(planDepth(G1_EMAIL)), "utf8");

@@ -2809,6 +2809,16 @@ const MATCH_STOPWORDS = new Set([
  */
 const HINT_ONLY_COMPONENTS = new Set([
   "human_approval_gate",
+  // MAR-749: approval_binding is hint-only AND deliberately has no KEYWORD_HINTS,
+  // which makes it the one component in the registry reachable ONLY through the
+  // safety augmenter. That is the decision recorded in
+  // docs/ADR-MAR-540-approval-provenance.md: a hint-reachable binding serves only
+  // users who already know to ask for it, which is precisely the population LAB's
+  // signal says is NOT the problem — the meaninglessness the intake quote names
+  // is the DEFAULT. Left fuzzy-matchable it would also be the worst offender in
+  // the registry, since "approval"/"approve"/"binding"/"payload" score on every
+  // gated goal and on plenty of ungated ones.
+  "approval_binding",
   // MAR-581: a privileged external ledger write. It is reachable only through
   // the direction-carrying accounting signal in Pass 1f; never through fuzzy
   // "write" / "transaction" / "accounting" words.

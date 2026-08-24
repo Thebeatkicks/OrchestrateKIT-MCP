@@ -14,6 +14,7 @@ components:
   - schema_validation
   - email_draft
   - human_approval_gate
+  - approval_binding
   - crm_note_write
   - optional_email_send
   - audit_log
@@ -24,6 +25,10 @@ edges:
   - crm_note_write__requires__human_approval_gate
   - optional_email_send__requires__human_approval_gate
   - audit_log__recommended__optional_email_send
+  - human_approval_gate__produces__approval_binding
+  - approval_binding__produces__optional_email_send
+  - approval_binding__produces__crm_note_write
+  - approval_binding__produces__audit_log
 risk_level: high
 confidence: 0.85
 failure_modes:

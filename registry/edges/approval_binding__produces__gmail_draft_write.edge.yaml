@@ -1,0 +1,17 @@
+id: approval_binding__produces__gmail_draft_write
+from: approval_binding
+to: gmail_draft_write
+relation: produces_input_for
+status: published
+reason: The write takes the approval receipt as an input and refuses to run when the approved digest does not cover the draft it is about to save. That is what this edge states and sequencing does not — the write CONSUMES the approval rather than merely running after it. A route can order gate, write and log correctly and still bind nothing — sequence is not provenance.
+severity: high
+notes: >
+  MAR-749 (MAR-540 bar #3). The odd one out — a saved draft is recoverable, so this is not an irreversible write in the literal sense. It belongs anyway: a draft in the mailbox is indistinguishable from one the user typed, so a draft whose text changed after approval is a document the user will later believe they wrote and approved.
+
+  Refusal, not logging. A payload that fails the check must not execute;
+  recording a mutated payload after the fact is the failure, not the
+  detection of it. See docs/ADR-MAR-540-approval-provenance.md.
+conditions: []
+tested: true
+test_refs:
+  - "tests/graph/approvalProvenance.test.ts > every gated write consumes the binding"

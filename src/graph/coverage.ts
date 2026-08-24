@@ -210,12 +210,20 @@ const APPROVAL_BINDING_PHRASES = [
 ];
 
 /**
- * Components that would genuinely bind an approval to the executed action.
- * Empty on purpose: no component in the registry produces or requires an
- * approval identity (a payload digest or approval token). `human_approval_gate`
- * is NOT a member — see the note above.
+ * Components that genuinely bind an approval to the executed action.
+ *
+ * MAR-749 flipped this switch. MAR-540 wrote the rule above keyed on the
+ * COMPONENT rather than on the phrase precisely so that building one would be
+ * the whole change — "a future component joining that set is all that is needed
+ * to make the gap report stop". `approval_binding` is that component: it issues
+ * a digest over the canonicalised payload plus a single-use token at gate time
+ * and refuses execution when the payload presented later does not match.
+ *
+ * `human_approval_gate` is still NOT a member, and must never become one — see
+ * the note above. The gate proves a human saw something; only the binding
+ * carries an identity for what they saw.
  */
-const APPROVAL_BINDING_COMPONENTS = new Set<string>();
+const APPROVAL_BINDING_COMPONENTS = new Set<string>(["approval_binding"]);
 
 /**
  * MAR-551 — proactive credential lifecycle is not reactive failure recovery.

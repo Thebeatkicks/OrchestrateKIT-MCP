@@ -98,6 +98,8 @@ describe("Teams/Telegram chat-egress parity with the existing Discord route (MAR
       "schema_validation",
       "human_approval_gate",
       "auth_failure_handler",
+      // MAR-749: the binding rides in with the gate on every gated egress.
+      "approval_binding",
       "teams_notification",
       "audit_log",
     ]);
@@ -111,6 +113,8 @@ describe("Teams/Telegram chat-egress parity with the existing Discord route (MAR
       "schema_validation",
       "human_approval_gate",
       "auth_failure_handler",
+      // MAR-749: the binding rides in with the gate on every gated egress.
+      "approval_binding",
       "telegram_notification",
       "audit_log",
     ]);

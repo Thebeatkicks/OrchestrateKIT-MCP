@@ -14,6 +14,7 @@ components:
   - copy_generation
   - design_brief_generation
   - human_approval_gate
+  - approval_binding
   - schema_validation
   - external_publish
   - audit_log
@@ -25,6 +26,9 @@ edges:
   - external_publish__requires__human_approval_gate
   - schema_validation__before__external_publish
   - audit_log__recommended__external_publish
+  - human_approval_gate__produces__approval_binding
+  - approval_binding__produces__external_publish
+  - approval_binding__produces__audit_log
 stack_id: default_orchestratekit_stack
 best_for:
   - social media post generation with brand voice enforcement
@@ -48,11 +52,13 @@ deterministic_steps:
   - schema_validation
   - external_publish
   - audit_log
+  - approval_binding
 guardrails:
   - Never publish without human approval — not even for internal drafts sent externally
   - Always validate schema before publish — silent truncation by the target platform is worse than a validation error
   - Audit log must be written synchronously with the publish, not as a follow-up task
   - Do not use a multi-agent swarm — a single orchestrator with approval gate is sufficient
+  - Bind the approval to the payload — digest exactly what the approver saw and have the write refuse to run when it no longer matches. An audit trail that faithfully records the wrong payload is not provenance
 failure_modes:
   - Brand voice guidelines not loaded into copy generation prompt, producing generic copy
   - Approval UI shows a summary instead of full copy, user approves without reviewing
@@ -69,7 +75,7 @@ evals:
 implementation_steps:
   - "Step 1: Implement content_idea_intake to parse brief and extract audience, tone, format, key messages and any constraints"
   - "Step 2: Implement copy_generation prompt with explicit brand voice instructions injected from a static brand guideline file"
-  - "Step 3: Surface copy variant to human_approval_gate — show full copy, not a summary"
+  - "Step 3: Surface copy variant to human_approval_gate — show full copy, not a summary; take the approval_binding digest over the exact copy shown, and have external_publish refuse to publish anything whose digest does not match (a re-run of copy_generation after approval produces bytes nobody approved)"
   - "Step 4: Implement design_brief_generation prompt that reads approved copy and brand guidelines to produce layout, colour, typography and imagery direction"
   - "Step 5: Surface design brief to human_approval_gate"
   - "Step 6: Implement schema_validation to check that the publish payload matches the target platform schema (e.g. CMS field schema)"

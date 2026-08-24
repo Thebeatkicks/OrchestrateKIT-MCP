@@ -1087,3 +1087,41 @@ probes:
     goal: "Extract line items from incoming PDF invoices and load them into a spreadsheet."
     via: plan
     forbidden_playbook: [scheduled_data_report]
+
+  # ── approval provenance (MAR-540 bars #2–#6, closed by MAR-749) ───────────
+  #
+  # The corpus contract for the binding. MAR-540's atlas acceptance asks that
+  # the probe goal stop returning the drift ask once a receipt-carrying
+  # component is in the route, and that a contract pin it so it cannot silently
+  # regress. These are the pins, presence paired with absence.
+
+  # The exact goal MAR-540 filed the bug against. Its central ask — "an audit
+  # trail proving what I approved is exactly what ran" — used to return
+  # `approval: ✅ enforced` with `unmatched_demand: []`.
+  - id: approval_binding_stated_drift_concern
+    goal: "When a customer emails a refund request, draft the refund in Stripe and require my approval before it executes, with an audit trail proving what I approved is exactly what ran."
+    must_have: [human_approval_gate, approval_binding, audit_log]
+    forbidden: []
+
+  # Bar #4: the DEFAULT path. This goal never says "provenance", "digest" or
+  # "drift" — it composes a gate and a write, and that pair alone is what makes
+  # the binding arrive. If this ever stops holding, the augmenter-injected shape
+  # has quietly reverted to the hint-reachable one the ADR rejected.
+  - id: approval_binding_default_path_unasked
+    goal: "Read new leads from Gmail and write a note to the CRM for each one after I approve."
+    must_have: [human_approval_gate, approval_binding, crm_note_write]
+    forbidden: []
+
+  # Absence twin 1: read-only. No write, no gate, nothing to bind.
+  - id: approval_binding_absent_on_readonly
+    goal: "Every morning read yesterday's signup rows from our Postgres database and store a short summary in the state store."
+    must_have: [db_read, state_store]
+    forbidden: [human_approval_gate, approval_binding]
+
+  # Absence twin 2: the sharper one — a gate IS composed, but it guards no
+  # external write. A binding here would be a component with no consumer, the
+  # same empty gesture as a gate with nothing to gate.
+  - id: approval_binding_absent_without_a_write
+    goal: "An agent that edits code in my repository, runs the test suite and writes a pull request summary, and checks with me before it changes anything."
+    must_have: [human_approval_gate]
+    forbidden: [approval_binding, external_publish, crm_note_write, slack_notification]
