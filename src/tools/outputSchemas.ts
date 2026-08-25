@@ -171,6 +171,14 @@ export const PlanWorkflowOutputShape = z
               .optional(),
             required_scopes: z.array(z.string()).optional(),
             gotchas: z.array(z.string()).optional(),
+            // MAR-742/F3: the free-tier meter on the recommended product, and
+            // the shape to build by default when it is not that product.
+            quota_assumption: z
+              .object({ product: z.string(), note: z.string() })
+              .passthrough()
+              .optional(),
+            recommended_shape: z.string().optional(),
+            recommended_shape_id: z.enum(["plain_fetch", "rendering_service"]).optional(),
           })
           .passthrough(),
       )
@@ -751,6 +759,10 @@ export const ExportBuildBriefOutputShape = z
       .object({
         contract: z.literal("orchestratekit.runner_eligibility.v1"),
         posture: z.enum(["attended", "unattended", "public"]),
+        // MAR-742/F2: where the posture came from, so a defaulted posture can
+        // never read as a declared one.
+        posture_source: z.enum(["declared", "derived", "default"]),
+        posture_reason: z.string(),
         decision: z.enum(["eligible", "ineligible", "needs_evidence"]),
         runner_reachable: z.boolean().nullable(),
         findings: z.array(

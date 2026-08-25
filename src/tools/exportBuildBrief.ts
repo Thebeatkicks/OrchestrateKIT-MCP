@@ -1346,6 +1346,62 @@ function buildPlanPassport(input: {
  * planner already constrained (audit 2026-07-01, live). Each detected class
  * shows the goal phrase that triggered it — the compiler shows its work.
  */
+/**
+ * Goal phrases that name OPEN reachability (MAR-742/F2).
+ *
+ * The supervision signals (`unattended` / `attended_required`) say whether a
+ * human watches a run. They say nothing about who can REACH the agent, and
+ * `public` posture is defined by reach, not by supervision — so an agent that
+ * strangers can trigger stays on the strictest bar however unattended it is.
+ * Deriving a narrower posture past one of these phrases is exactly the
+ * default-deny-becomes-default-allow slide `runnerEligibility.ts` exists to
+ * prevent, so they veto the derivation rather than competing with it.
+ */
+const PUBLIC_REACH_SIGNALS = [
+  "anyone can",
+  "anyone who",
+  "public endpoint",
+  "publicly reachable",
+  "publicly accessible",
+  "public url",
+  "public webhook",
+  "open to the internet",
+  "on the internet",
+  "customers can",
+  "customers trigger",
+  "users can trigger",
+  "visitors can",
+  "third parties can",
+  "shared with customers",
+];
+
+/**
+ * Read the runner posture out of the goal itself (MAR-742/F2).
+ *
+ * Returns `null` when the goal says nothing usable, which the caller turns into
+ * the strictest posture with a `default` source — absence is never a narrowing.
+ * The trigger phrase is carried back so the brief can quote the user's own
+ * words instead of asserting a posture from nowhere (grounded-prose rule).
+ */
+function derivePostureFromGoal(
+  goal: string,
+): { posture: RunnerPosture; trigger: string } | null {
+  const g = goal.toLowerCase();
+  if (PUBLIC_REACH_SIGNALS.some((s) => g.includes(s))) return null;
+
+  const sig = detectConstraintSignals(goal);
+  // Both stated at once is a conflict the planner already surfaces with a ⚠️.
+  // Narrowing on a contradiction would be picking a side silently, so don't.
+  if (sig.conflict) return null;
+  if (sig.unattended.detected && sig.unattended.trigger) {
+    return { posture: "unattended", trigger: sig.unattended.trigger };
+  }
+  if (sig.attended_required.detected && sig.attended_required.trigger) {
+    return { posture: "attended", trigger: sig.attended_required.trigger };
+  }
+  return null;
+}
+
 function s0Constraints(goal: string, approvalAdvisory: { reason: string } | null | undefined): string {
   const sig = detectConstraintSignals(goal);
   const lines = ["**§0 Constraints** _(stated in goal)_", ""];
@@ -3062,8 +3118,28 @@ export function exportBuildBrief(input: ExportBuildBriefInput): AnyBuildBriefOut
   // an export that says nothing about eligibility is exactly the silent "yes"
   // this issue removes. Default posture is the strictest ('public'), because an
   // undeclared posture is not evidence of a narrow one.
+  //
+  // MAR-742/F2 — the posture plumbing. `detectConstraintSignals` already reads
+  // "unattended" / "I approve each run" out of the goal and carries the user's
+  // own trigger phrase, but nothing connected that to the posture: a goal that
+  // said "unattended" in as many words was still assessed against `public`, all
+  // seven dimensions came back undecided, and the brief said only
+  // "(`public` posture)" — no way for the reader to tell a default from a
+  // declaration. Derive it, and record where it came from either way.
+  //
+  // The derivation only ever moves between supervision postures. `public` means
+  // reachable by people who do not own the agent, which is a REACHABILITY claim
+  // the supervision signals do not make, so any goal naming open reach stays at
+  // `public` no matter how unattended it is.
+  const derivedPosture = derivePostureFromGoal(input.goal);
   const runner_eligibility = assessRunnerEligibility({
-    posture: input.runner_posture ?? "public",
+    posture: input.runner_posture ?? derivedPosture?.posture ?? "public",
+    posture_source: input.runner_posture
+      ? "declared"
+      : derivedPosture
+      ? "derived"
+      : "default",
+    posture_trigger: derivedPosture?.trigger,
     profile: input.runner_capability_profile,
     runner_reachable: input.runner_reachable,
   });

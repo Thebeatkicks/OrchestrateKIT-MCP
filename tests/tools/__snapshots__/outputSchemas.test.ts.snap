@@ -611,8 +611,8 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
       "alternatives": [],
       "reason": "",
       "recommended": {
-        "id": "log_to_file",
-        "label": "Log runs to a file or table you already have",
+        "id": "dash_import",
+        "label": "DASH — a dashboard showing every run, with a stop button",
       },
     },
   },
@@ -679,7 +679,7 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
     {
       "action": "see:hosting_and_monitoring.monitoring",
       "id": "wire_monitoring",
-      "label": "Wire monitoring (recommended: log to file)",
+      "label": "Wire monitoring (recommended: DASH)",
     },
   ],
   "next_steps": [
@@ -787,27 +787,27 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
         "id": "build_surface",
         "options": [
           {
-            "description": "You configure it in the assistant; it runs when the session is open.",
+            "description": "[text]",
             "id": "cowork",
-            "label": "Cowork — a no-code assistant surface",
+            "label": "Cowork — inside the assistant, nothing to install",
           },
           {
             "description": "[text]",
             "id": "dash_agent_runner",
-            "label": "DASH Agent Runner — a local runtime on this computer",
+            "label": "DASH Agent Runner — on this computer, with a dashboard",
             "scope_selection": {
               "runtime_recommendation_id": "dash_agent_runner_local",
             },
           },
           {
-            "description": "Your code, your machine. It cannot run while the computer is asleep or off.",
+            "description": "[text]",
             "id": "self_host_local",
-            "label": "A local app on your own computer — runs while your computer is on",
+            "label": "A local app you run yourself — on this computer, no dashboard",
           },
           {
-            "description": "Runs on a schedule without you present. Needs a deploy, secrets and a bill.",
+            "description": "[text]",
             "id": "self_host_hosted",
-            "label": "Self-host hosted — always on",
+            "label": "An always-on server — keeps running while you are away",
           },
           {
             "description": "Somewhere this plan did not consider — say where and it is re-planned.",
@@ -861,7 +861,7 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
               "round": "build_surface",
             },
             "id": "dash",
-            "label": "DASH — monitor and control a compatible manifest v2 agent",
+            "label": "DASH — a dashboard that shows every run and lets you stop it",
             "scope_selection": {
               "control_surface_id": "dash_control",
               "monitoring_option_id": "dash_import",
@@ -874,7 +874,7 @@ exports[`MAR-163 — plan_workflow output schema > brief mode conforms + golden 
           },
         ],
         "question": "How do you want to watch it once it runs?",
-        "recommended_option_id": "local_logs",
+        "recommended_option_id": "dash",
       },
       {
         "fold_answer_into_recall": false,
@@ -1476,8 +1476,8 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
       "alternatives": [],
       "reason": "",
       "recommended": {
-        "id": "log_to_file",
-        "label": "Log runs to a file or table you already have",
+        "id": "dash_import",
+        "label": "DASH — a dashboard showing every run, with a stop button",
       },
     },
   },
@@ -1546,7 +1546,7 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
     {
       "action": "see:hosting_and_monitoring.monitoring",
       "id": "wire_monitoring",
-      "label": "Wire monitoring (recommended: log to file)",
+      "label": "Wire monitoring (recommended: DASH)",
     },
   ],
   "next_steps": [
@@ -1654,27 +1654,27 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
         "id": "build_surface",
         "options": [
           {
-            "description": "You configure it in the assistant; it runs when the session is open.",
+            "description": "[text]",
             "id": "cowork",
-            "label": "Cowork — a no-code assistant surface",
+            "label": "Cowork — inside the assistant, nothing to install",
           },
           {
             "description": "[text]",
             "id": "dash_agent_runner",
-            "label": "DASH Agent Runner — a local runtime on this computer",
+            "label": "DASH Agent Runner — on this computer, with a dashboard",
             "scope_selection": {
               "runtime_recommendation_id": "dash_agent_runner_local",
             },
           },
           {
-            "description": "Your code, your machine. It cannot run while the computer is asleep or off.",
+            "description": "[text]",
             "id": "self_host_local",
-            "label": "A local app on your own computer — runs while your computer is on",
+            "label": "A local app you run yourself — on this computer, no dashboard",
           },
           {
-            "description": "Runs on a schedule without you present. Needs a deploy, secrets and a bill.",
+            "description": "[text]",
             "id": "self_host_hosted",
-            "label": "Self-host hosted — always on",
+            "label": "An always-on server — keeps running while you are away",
           },
           {
             "description": "Somewhere this plan did not consider — say where and it is re-planned.",
@@ -1728,7 +1728,7 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
               "round": "build_surface",
             },
             "id": "dash",
-            "label": "DASH — monitor and control a compatible manifest v2 agent",
+            "label": "DASH — a dashboard that shows every run and lets you stop it",
             "scope_selection": {
               "control_surface_id": "dash_control",
               "monitoring_option_id": "dash_import",
@@ -1741,7 +1741,7 @@ exports[`MAR-163 — plan_workflow output schema > composed plan conforms + gold
           },
         ],
         "question": "How do you want to watch it once it runs?",
-        "recommended_option_id": "local_logs",
+        "recommended_option_id": "dash",
       },
       {
         "fold_answer_into_recall": false,
@@ -2501,8 +2501,8 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
       "alternatives": [],
       "reason": "",
       "recommended": {
-        "id": "log_to_file",
-        "label": "Log runs to a file or table you already have",
+        "id": "dash_import",
+        "label": "DASH — a dashboard showing every run, with a stop button",
       },
     },
   },
@@ -2569,7 +2569,7 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
     {
       "action": "see:hosting_and_monitoring.monitoring",
       "id": "wire_monitoring",
-      "label": "Wire monitoring (recommended: log to file)",
+      "label": "Wire monitoring (recommended: DASH)",
     },
   ],
   "next_steps": [
@@ -2677,27 +2677,27 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
         "id": "build_surface",
         "options": [
           {
-            "description": "You configure it in the assistant; it runs when the session is open.",
+            "description": "[text]",
             "id": "cowork",
-            "label": "Cowork — a no-code assistant surface",
+            "label": "Cowork — inside the assistant, nothing to install",
           },
           {
             "description": "[text]",
             "id": "dash_agent_runner",
-            "label": "DASH Agent Runner — a local runtime on this computer",
+            "label": "DASH Agent Runner — on this computer, with a dashboard",
             "scope_selection": {
               "runtime_recommendation_id": "dash_agent_runner_local",
             },
           },
           {
-            "description": "Your code, your machine. It cannot run while the computer is asleep or off.",
+            "description": "[text]",
             "id": "self_host_local",
-            "label": "A local app on your own computer — runs while your computer is on",
+            "label": "A local app you run yourself — on this computer, no dashboard",
           },
           {
-            "description": "Runs on a schedule without you present. Needs a deploy, secrets and a bill.",
+            "description": "[text]",
             "id": "self_host_hosted",
-            "label": "Self-host hosted — always on",
+            "label": "An always-on server — keeps running while you are away",
           },
           {
             "description": "Somewhere this plan did not consider — say where and it is re-planned.",
@@ -2751,7 +2751,7 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
               "round": "build_surface",
             },
             "id": "dash",
-            "label": "DASH — monitor and control a compatible manifest v2 agent",
+            "label": "DASH — a dashboard that shows every run and lets you stop it",
             "scope_selection": {
               "control_surface_id": "dash_control",
               "monitoring_option_id": "dash_import",
@@ -2764,7 +2764,7 @@ exports[`MAR-163 — plan_workflow output schema > playbook plan conforms + gold
           },
         ],
         "question": "How do you want to watch it once it runs?",
-        "recommended_option_id": "local_logs",
+        "recommended_option_id": "dash",
       },
       {
         "fold_answer_into_recall": false,
@@ -3735,7 +3735,7 @@ exports[`MAR-249 — export_build_brief output schema > compact structuredConten
     "provenance": {
       "generated_at": "[volatile]",
       "generated_by": "orchestratekit-mcp export_build_brief",
-      "registry_fingerprint": "ef5f328df6682feb",
+      "registry_fingerprint": "dd1629d8b1880091",
     },
     "safety_contract": {
       "automation_clearance": "L3",
@@ -4805,6 +4805,8 @@ exports[`MAR-249 — export_build_brief output schema > compact structuredConten
       "approval_enforcement",
     ],
     "posture": "public",
+    "posture_reason": "[text]",
+    "posture_source": "default",
     "rationale": "[text]",
     "refuted_dimensions": [],
     "required_dimensions": [
@@ -5234,7 +5236,7 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
     "provenance": {
       "generated_at": "[volatile]",
       "generated_by": "orchestratekit-mcp export_build_brief",
-      "registry_fingerprint": "ef5f328df6682feb",
+      "registry_fingerprint": "dd1629d8b1880091",
     },
     "safety_contract": {
       "automation_clearance": "L3",
@@ -5669,12 +5671,12 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
       "target": "code",
     },
     "contract": "orchestratekit.plan_passport.v1",
-    "contract_id": "plan_passport:3a0a590c68e7282d",
+    "contract_id": "plan_passport:85c395bfe573f142",
     "goal": "read emails, detect leads and write a note to the CRM for each lead",
     "lab_import": {
       "agent_name": "read-emails-detect-leads-and-write-a-note-to-the-crm-for-eac",
       "artifact": "plan_passport",
-      "contract_id": "plan_passport:3a0a590c68e7282d",
+      "contract_id": "plan_passport:85c395bfe573f142",
       "evidence_status": "planned",
       "route_components": [
         "email_read",
@@ -5696,7 +5698,7 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
       "read_only": false,
       "unattended": false,
     },
-    "registry_fingerprint": "ef5f328df6682feb",
+    "registry_fingerprint": "dd1629d8b1880091",
     "required_connections": [
       {
         "env": "GMAIL_CLIENT_ID",
@@ -6602,6 +6604,8 @@ exports[`MAR-249 — export_build_brief output schema > plan_passport delivery e
       "approval_enforcement",
     ],
     "posture": "public",
+    "posture_reason": "[text]",
+    "posture_source": "default",
     "rationale": "[text]",
     "refuted_dimensions": [],
     "required_dimensions": [
@@ -7031,7 +7035,7 @@ exports[`MAR-249 — export_build_brief output schema > runtime structuredConten
     "provenance": {
       "generated_at": "[volatile]",
       "generated_by": "orchestratekit-mcp export_build_brief",
-      "registry_fingerprint": "ef5f328df6682feb",
+      "registry_fingerprint": "dd1629d8b1880091",
     },
     "safety_contract": {
       "automation_clearance": "L3",
@@ -8271,6 +8275,8 @@ exports[`MAR-249 — export_build_brief output schema > runtime structuredConten
       "approval_enforcement",
     ],
     "posture": "public",
+    "posture_reason": "[text]",
+    "posture_source": "default",
     "rationale": "[text]",
     "refuted_dimensions": [],
     "required_dimensions": [

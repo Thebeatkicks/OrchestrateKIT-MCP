@@ -382,10 +382,14 @@ describe("MAR-427 — DASH Agent Runner and DASH control remain separate", () =>
     });
 
     expect(decision(compact)).toEqual(decision(technical));
+    // MAR-742/F4 rewrote the user-facing monitoring label: "monitor/control a
+    // compatible manifest v2 agent" named an implementation detail on the
+    // card's own Recommended-setup line. Both depths still have to name DASH as
+    // the runner AND as the monitor, which is what this test is actually for.
     expect(compact.summary_markdown).toContain("DASH Agent Runner");
-    expect(compact.summary_markdown).toContain("DASH — monitor/control");
+    expect(compact.summary_markdown).toContain("DASH — a dashboard");
     expect(technical.summary_markdown).toContain("DASH Agent Runner");
     expect(technical.summary_markdown).toContain("DASH — Recommended");
-    expect(technical.summary_markdown).toContain("recommended: DASH import");
+    expect(technical.summary_markdown).toContain("recommended: DASH");
   });
 });

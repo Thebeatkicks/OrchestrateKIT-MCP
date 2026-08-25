@@ -128,20 +128,27 @@ export const JOURNEY_FIXTURES: JourneyFixture[] = [
           {
             round_id: "build_surface",
             option_id: "dash_agent_runner",
-            label_includes: ["DASH Agent Runner", "local runtime"],
+            // MAR-742/F4 rewrote this copy so a novice can tell it apart from
+            // "an always-on server". The FACTS it must carry are unchanged: a
+            // separate install, it outlives the DASH window, and sleep or
+            // power-off stops it.
+            label_includes: ["DASH Agent Runner", "on this computer"],
             description_includes: [
-              "separately installed runner",
-              "Closing DASH does not stop it",
+              "separately installed DASH app",
+              "close its window",
               "power-off",
             ],
           },
           {
             round_id: "monitoring",
             option_id: "dash",
-            label_includes: ["DASH", "manifest v2"],
+            // MAR-742/F4: same rewrite. "manifest v2" told a chooser nothing;
+            // the load-bearing fact — DASH watches, something else runs — is
+            // still asserted.
+            label_includes: ["DASH", "dashboard"],
             description_includes: [
-              "monitor/control surface",
-              "still runs the agent",
+              "DASH watches the agent",
+              "still runs it",
             ],
           },
         ],

@@ -19,7 +19,6 @@ exports[`MAR-397 AC4 — verbatim vs paraphrase output is pinned > pins the shap
     "route": [
       "pdf_extraction",
       "stripe_data_read",
-      "job_queue",
       "human_approval_gate",
       "auth_failure_handler",
     ],

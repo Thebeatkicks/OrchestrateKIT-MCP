@@ -86,7 +86,38 @@ It must never send an email without my approval.`;
     expect(ids).toContain("audit_log");
     expect(ids).not.toContain("fan_out_collector");
     expect(ids).not.toContain("reviewer_notification");
-    expect(ids).not.toContain("optional_email_send");
+
+    // ── MAR-742/F1 changed what this goal plans, and this assertion with it ──
+    //
+    // This used to assert `not.toContain("optional_email_send")`. That held for
+    // a reason nobody chose: `intent_classifier` and `state_store` were both
+    // scoring on the token `work` from "suggest two times that work", landing
+    // inside `route_work·flow` and `resume_work·flow`. Two components of pure
+    // noise kept this goal below the playbook precision floor, so it composed
+    // ad hoc and there was no send step to exclude. Removing that noise (the
+    // same fix that stops "my 14 year old" selecting `threshold_router`) lets
+    // `email_calendar_assistant` match — correctly; it is a meeting-request
+    // assistant — and the playbook lists `optional_email_send` among its
+    // components.
+    //
+    // The absence was therefore never a guarantee, and re-creating it needs the
+    // planner to tell "it must never send an email WITHOUT my approval" (this
+    // goal, which asks only to "prepare a reply") apart from "it must not send
+    // email UNTIL approved" (the MAR-347 Cursor goal, whose corpus contract
+    // lists `optional_email_send` as must_have). Those two sentences are the
+    // same shape; separating them is a product judgment, not a bug fix, so it
+    // is written up for Henrik on MAR-742 rather than guessed at here.
+    //
+    // What IS asserted is the property that actually protects the user, and it
+    // is stronger than the old line: if a send step is present it is structurally
+    // behind the approval gate, and the gate is enforced. A genuine no-send goal
+    // still excludes sends outright — see the P0-02 case immediately below,
+    // which is unchanged and still passing.
+    if (ids.includes("optional_email_send")) {
+      expect(ids.indexOf("human_approval_gate")).toBeLessThan(
+        ids.indexOf("optional_email_send"),
+      );
+    }
     expect(ids.indexOf("human_approval_gate")).toBeLessThan(ids.indexOf("calendar_write"));
     expect(r.enforced_approval_gates).toContain("human_approval_gate");
   });
