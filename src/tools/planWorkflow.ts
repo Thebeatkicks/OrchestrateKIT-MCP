@@ -4985,12 +4985,19 @@ function renderCoverageBlock(
     const shown = genericUnmatched.slice(0, COVERAGE_MAX_SHOWN);
     const more = genericUnmatched.length - shown.length;
     lines.push(
-      `**Not covered by the registry:**`,
+      `**Not carried by this route:**`,
       ...shown.map((p) => `- "${p}"`),
     );
     if (more > 0) lines.push(`- …and ${more} more`);
     lines.push(
-      `> No registry component carries these steps. Mark them 🔵 unguided and spell them out for your builder/coding agent — this plan does not handle them.`,
+      // MAR-788: was "No registry component carries these steps" — false for a
+      // step like "tell me when it drops": the registry HAS notify components
+      // (Slack, Telegram, email…), the route just has none selected because no
+      // channel was named. That reads as "the registry can't do this" when the
+      // real gap is "you didn't say where". Said the one thing true either way —
+      // nothing in THIS route carries the step, full stop — rather than guessing
+      // which of the two the reader is looking at.
+      `> Mark them 🔵 unguided and spell out exactly what should happen for your builder/coding agent — nothing in this route carries these steps yet.`,
       ``,
     );
   }
@@ -5714,7 +5721,7 @@ function buildGuidedPlanMarkdown(
   // uncovered-demand heading alone: unsupported supply is surplus, not
   // shortfall, and constraint gaps have their own rows above.
   const saysMissing = coverageLines.some((line) =>
-    line.startsWith("**Not covered by the registry:**"),
+    line.startsWith("**Not carried by this route:**"),
   );
   if (!fullSteps && !saysMissing) {
     lines.push(

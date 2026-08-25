@@ -528,7 +528,7 @@ describe("MAR-345 — dogfood prompts feel like a product card, not a report", (
     expect(md.split("\n\n")[0]).toContain("Full coverage");
     expect(md).not.toContain("Quick checks to pin down the plan");
     expect(md).not.toContain("In the route but not asked for");
-    expect(md).not.toContain("Not covered by the registry");
+    expect(md).not.toContain("Not carried by this route");
   });
 });
 
@@ -555,7 +555,7 @@ describe("MAR-346 - first-run honesty for weak composed matches", () => {
     expect(r.coverage.coverage_label).toBe("full");
     expect(r.coverage.unmatched_demand).toEqual([]);
     expect(md.split("\n\n")[0]).toContain("Full coverage");
-    expect(md).not.toContain("**Not covered by the registry:**");
+    expect(md).not.toContain("**Not carried by this route:**");
   });
 
   it("still flags a real integration gap on the validated price-monitor playbook", () => {
@@ -572,7 +572,7 @@ describe("MAR-346 - first-run honesty for weak composed matches", () => {
     expect(r.coverage.unmatched_demand).toEqual([
       "uploads a backup to Dropbox",
     ]);
-    expect(r.summary_markdown).toContain("**Not covered by the registry:**");
+    expect(r.summary_markdown).toContain("**Not carried by this route:**");
     expect(r.summary_markdown).toContain('"uploads a backup to Dropbox"');
   });
 
@@ -599,7 +599,7 @@ describe("MAR-346 - first-run honesty for weak composed matches", () => {
     expect(md).toContain("**Route:** Scheduled Trigger");
     expect(md).toContain("Competitor price sources");
     expect(md).toContain("Sales notification channel");
-    expect(md).toContain("**Not covered by the registry:**");
+    expect(md).toContain("**Not carried by this route:**");
     expect(md).toContain('"I want something that checks competitor prices every morning"');
     expect(md).toContain('"tells sales if anything changed"');
     expect(md).not.toContain("No external product connection required");
@@ -633,7 +633,7 @@ describe("MAR-346 - first-run honesty for weak composed matches", () => {
     expect(md).toContain("## Read-Only PR Review");
     expect(md).toContain("**Route:** Reviewer Notification → Audit Log");
     expect(md).toContain("GitHub pull request / diff source");
-    expect(md).toContain("**Not covered by the registry:**");
+    expect(md).toContain("**Not carried by this route:**");
     expect(md).toContain('"When a PR opens"');
     expect(md).toContain('"review it for risky changes but don\'t edit anything"');
     // MAR-402: letters render only on the no-choice-UI fallback surface.
@@ -774,7 +774,7 @@ describe("MAR-250 — coverage honesty in the rendered output", () => {
       registry,
     );
     const md = r.summary_markdown;
-    expect(md).toContain("Not covered by the registry");
+    expect(md).toContain("Not carried by this route");
     expect(md.toLowerCase()).toContain("zendesk");
     // even with the gap block, Layer 1 stays under the brevity bound
     expect(md.length).toBeLessThanOrEqual(LAYER1_MAX_CHARS);
@@ -787,7 +787,7 @@ describe("MAR-250 — coverage honesty in the rendered output", () => {
     );
     const md = r.summary_markdown;
     // demand is covered — no false gap block…
-    expect(md).not.toContain("Not covered by the registry");
+    expect(md).not.toContain("Not carried by this route");
     // …and the fuzzy-matched extra (reviewer_notification, no phrase asked for
     // it) is still flagged: in the JSON, in the downgraded coverage label the
     // header carries, and by name from standard depth (moved, not dropped —
@@ -806,7 +806,7 @@ describe("MAR-250 — coverage honesty in the rendered output", () => {
 
   it("a plan with no unmatched demand renders no 'Not covered' block", () => {
     const md = plan("brief").summary_markdown;
-    expect(md).not.toContain("Not covered by the registry");
+    expect(md).not.toContain("Not carried by this route");
   });
 });
 
