@@ -1,8 +1,28 @@
 {
   "generated_by": "OrchestrateLab LAB-03 (MAR-106) corpus export",
   "version": 1,
-  "goal_count": 56,
+  "goal_count": 52,
   "goals": [
+    {
+      "slug": "adv_pay_invoices",
+      "goal": "Watch my inbox for incoming invoices and pay them for me.",
+      "domain": "data_etl",
+      "must_have": [
+        "human_approval_gate"
+      ],
+      "nice_to_have": [
+        "audit_log",
+        "email_read",
+        "pdf_extraction"
+      ],
+      "forbidden": [],
+      "missing_but_expected": [
+        "invoice_payment"
+      ],
+      "source": "adversarial:high-stakes-money",
+      "level": "raw",
+      "xfail": ""
+    },
     {
       "slug": "blog_social_variants_reviewer_notify",
       "goal": "Take a finished blog post, generate 3 different social-media variants of it, have a human reviewer approve them, and notify that reviewer when they're ready to check.",
@@ -1269,26 +1289,6 @@
       "xfail": ""
     },
     {
-      "slug": "adv_pay_invoices",
-      "goal": "Watch my inbox for incoming invoices and pay them for me.",
-      "domain": "data_etl",
-      "must_have": [
-        "human_approval_gate"
-      ],
-      "nice_to_have": [
-        "audit_log",
-        "email_read",
-        "pdf_extraction"
-      ],
-      "forbidden": [],
-      "missing_but_expected": [
-        "invoice_payment"
-      ],
-      "source": "adversarial:high-stakes-money",
-      "level": "raw",
-      "xfail": ""
-    },
-    {
       "slug": "unattended_alert_no_reviewer",
       "goal": "Keep an unattended watch on our service endpoints: run uptime checks, and track the API error rate as a metric. When an endpoint goes down or the metric exceeds its threshold, post an alert to the on-call Slack channel. Fully automated, no human review step.",
       "domain": "monitoring",
@@ -1327,86 +1327,6 @@
       ],
       "missing_but_expected": [],
       "source": "linear:P0-03",
-      "level": "raw",
-      "xfail": ""
-    },
-    {
-      "slug": "public_ai_news_feed_daily_digest",
-      "goal": "Watch public news feeds for stories about AI agents and write me a daily digest file on my computer.",
-      "domain": "monitoring",
-      "must_have": [
-        "public_feed_fetch",
-        "scheduled_trigger"
-      ],
-      "nice_to_have": [
-        "audit_log"
-      ],
-      "forbidden": [
-        "data_scraper",
-        "external_publish",
-        "page_monitor",
-        "source_retrieval"
-      ],
-      "missing_but_expected": [],
-      "source": "linear:MAR-455",
-      "level": "raw",
-      "xfail": ""
-    },
-    {
-      "slug": "public_rss_atom_feed_poll",
-      "goal": "Poll public RSS feeds and Atom feeds every morning for new AI agent stories.",
-      "domain": "monitoring",
-      "must_have": [
-        "public_feed_fetch",
-        "scheduled_trigger"
-      ],
-      "nice_to_have": [
-        "deduplication",
-        "source_freshness_check"
-      ],
-      "forbidden": [
-        "data_scraper",
-        "page_monitor",
-        "source_retrieval"
-      ],
-      "missing_but_expected": [],
-      "source": "linear:MAR-455",
-      "level": "raw",
-      "xfail": ""
-    },
-    {
-      "slug": "js_heavy_news_website_without_feed",
-      "goal": "Watch a JavaScript-heavy news website with no RSS or Atom feed for changes.",
-      "domain": "monitoring",
-      "must_have": [
-        "page_monitor"
-      ],
-      "nice_to_have": [
-        "state_store"
-      ],
-      "forbidden": [
-        "public_feed_fetch"
-      ],
-      "missing_but_expected": [],
-      "source": "linear:MAR-455",
-      "level": "raw",
-      "xfail": ""
-    },
-    {
-      "slug": "private_oauth_rss_feed_not_anonymous",
-      "goal": "Watch a private RSS feed that requires OAuth and summarize new items.",
-      "domain": "monitoring",
-      "must_have": [
-        "page_monitor"
-      ],
-      "nice_to_have": [
-        "research_synthesis"
-      ],
-      "forbidden": [
-        "public_feed_fetch"
-      ],
-      "missing_but_expected": [],
-      "source": "linear:MAR-455",
       "level": "raw",
       "xfail": ""
     }
