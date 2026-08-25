@@ -282,6 +282,156 @@ const PROACTIVE_TOKEN_LIFECYCLE = [
 const PROACTIVE_REFRESH_COMPONENTS = new Set<string>();
 
 /**
+ * MAR-786 — "tell me when it happens" is a delivery, and the watcher does not
+ * deliver.
+ *
+ * Reported case, Henrik's family-price-watch transcript (2026-08-24/25):
+ *
+ *   "Watch the prices of a few things my family wants … and TELL ME WHEN ONE
+ *    DROPS below the price I set."
+ *
+ * planned `page_monitor → state_store` and reported `coverage_label: "full"`,
+ * `unmatched_demand: []`, and a card whose §What's missing read "Nothing —
+ * every step in your goal is carried by this route." The person's central ask —
+ * being told — was in neither the route nor the gap list. Verified byte-identical
+ * on the pre-MAR-742 master, so pre-existing; F1 only unmasked it by removing the
+ * `reviewer_notification` that the `old` substring match had been papering over.
+ *
+ * The clause was ABSORBED, the same shape as MAR-540 and MAR-551.
+ * `page_monitor` matched the hint "watch the prices"; the words inside a
+ * multi-word hint enter `claimedTokens`, so the demand noun `price` in "tell me
+ * when one drops below THE PRICE I set" was claimed. Nouns anchor the verdict
+ * (`clauseIsUncovered`), and one claimed noun unit clears the whole clause — so
+ * the `tell` verb sitting right there was never consulted. The claimed noun
+ * belongs to the WATCHING half of the sentence; the TELLING half had nothing
+ * carrying it. "alert me" escaped only by an accident of vocabulary: `alert` is
+ * a KEYWORD_HINT, so a notification component scored and the clause read as
+ * partially covered. One phrasing working is not the rule working.
+ *
+ * So this is checked BEFORE the lexicon, and keyed on the COMPONENT that would
+ * satisfy the ask rather than on a claim — the MAR-551 pattern. Unlike MAR-540
+ * and MAR-551 the component set is NOT empty: the registry does deliver messages
+ * to people. What it has no component for is a channel nobody named, and
+ * inventing one ("we'll Slack you") is exactly the overclaim this layer exists
+ * to prevent. The honest answer is to say the ask is not carried and let the
+ * person name the channel.
+ */
+
+/**
+ * Verbs of TELLING applied to a first-person recipient. Each names an
+ * out-of-band delivery on its own: there is no reading of "notify me" that is
+ * satisfied by prose in the current chat.
+ *
+ * Matched with `containsPhrase` (whole words), never `includes` — MAR-742/F1's
+ * lesson. A bare substring reads "a weekly report my boss TELLS ME to make" as a
+ * notification ask, and "email me" out of "email message". Enumerated rather
+ * than pattern-matched, per this repo's phrase-table rule: a reader can see
+ * exactly what fires.
+ *
+ * `give me` and `show me` are deliberately absent — they are the in-channel
+ * delivery `USER_RECIPIENTS` above already treats as satisfied by construction.
+ */
+const NOTIFY_USER_PHRASES = [
+  "notify me", "notify us",
+  "alert me", "alert us",
+  "ping me", "ping us",
+  "text me", "text us",
+  "email me", "email us",
+  "message me", "message us",
+  "dm me", "dm us",
+  "warn me", "warn us",
+  "remind me", "remind us",
+  "send me", "send us",
+  "keep me posted", "keep us posted",
+  "keep me updated", "keep us updated",
+  "keep me in the loop", "keep us in the loop",
+  "give me a heads up", "give me a heads-up",
+  "give us a heads up", "give us a heads-up",
+];
+
+/**
+ * The same ask in verbs that are ALSO ordinary conversation. "Read the PDF and
+ * tell me the total" and "let me know what you find" are answered in this chat,
+ * and reporting them as gaps would make the honesty layer cry wolf on every
+ * read-only goal — the case `USER_RECIPIENTS` exists for.
+ *
+ * What separates them from the reported defect is that the delivery is at a
+ * moment the person is NOT present for. Two independent ways to establish that,
+ * either sufficient:
+ *
+ *   - the phrase is followed by an event trigger ("tell me WHEN the price
+ *     drops"), or
+ *   - the plan runs unattended anyway, because there is no chat to answer into
+ *     at 7am (`UNATTENDED_TRIGGER_COMPONENTS`).
+ *
+ * The second is what keeps the bare phrasings of the family — plain "notify me",
+ * plain "let me know" — from depending on the user happening to add a "when".
+ */
+const NOTIFY_USER_CONVERSATIONAL_PHRASES = [
+  "tell me", "tell us", "let me know", "let us know",
+];
+
+/** Words that turn a conversational telling into a future, event-bound one. */
+const NOTIFY_EVENT_FOLLOWERS = [
+  "when", "whenever", "if", "as soon as", "the moment", "each time", "every time",
+];
+
+/**
+ * Components that mean the workflow fires while nobody is watching a chat.
+ * `chat_trigger` is NOT a member — it means the person is right there.
+ */
+const UNATTENDED_TRIGGER_COMPONENTS = new Set([
+  "scheduled_trigger",
+  "page_monitor",
+  "webhook_trigger",
+  "github_trigger",
+  "uptime_check",
+  "log_monitor",
+  "metric_threshold_monitor",
+]);
+
+/**
+ * Components that genuinely deliver a message to a person.
+ *
+ * Deliberately NOT members, each for the same reason MAR-551 keeps
+ * `auth_failure_handler` out of the refresh set — they are a different
+ * guarantee that happens to sit nearby:
+ *
+ *   - `email_draft` / `gmail_draft_write` — a draft is not a delivery. It waits
+ *     in a folder until someone opens the folder, which is the thing the person
+ *     asked not to have to do.
+ *   - `reviewer_notification` — its declared job is signalling that an artifact
+ *     is ready for REVIEW, to a named reviewer. It is also this repo's standing
+ *     unsupported-supply fixture, so admitting it would let the ask be silenced
+ *     by a component the same plan reports as nobody-asked-for.
+ *   - `external_publish` — an audience, not the person.
+ *   - `calendar_write` — a record. Whether it pushes a reminder is the
+ *     calendar's setting, not something the plan carries.
+ *   - `state_store` / `audit_log` — recording is not telling. That pair IS the
+ *     reported route.
+ */
+const NOTIFY_USER_COMPONENTS = new Set<string>([
+  "slack_notification",
+  "discord_notification",
+  "teams_notification",
+  "telegram_notification",
+  "optional_email_send",
+]);
+
+/**
+ * `phrase` immediately followed by an event trigger — "tell me WHEN one drops",
+ * not "tell me the total". Compiled once; both tables hold plain words, so
+ * nothing needs escaping. The word boundaries are the point, for the same reason
+ * `containsPhrase` has them.
+ */
+const NOTIFY_EVENT_BOUND_PATTERNS = new Map<string, RegExp>(
+  NOTIFY_USER_CONVERSATIONAL_PHRASES.map((phrase) => [
+    phrase,
+    new RegExp(`(?<!\\w)${phrase}(?!\\w)\\s+(?:${NOTIFY_EVENT_FOLLOWERS.join("|")})(?!\\w)`),
+  ]),
+);
+
+/**
  * MAR-396 — structural action-clause detection, used ONLY for clauses the
  * demand lexicon did not recognise at all.
  *
@@ -578,6 +728,12 @@ export function computeCoverage(input: CoverageInput): Coverage {
     }
   }
 
+  // MAR-786: does this plan fire while nobody is watching a chat? If so, a
+  // conversational "tell me" cannot be answered in-channel and is a delivery.
+  const routeRunsUnattended = finalComponentIds.some((id) =>
+    UNATTENDED_TRIGGER_COMPONENTS.has(id),
+  );
+
   // ── unmatched demand: clause-by-clause ──
   const unmatched_demand: string[] = [];
   const unrecognized_demand: string[] = [];
@@ -628,6 +784,26 @@ export function computeCoverage(input: CoverageInput): Coverage {
         (p) => clauseLower.includes(p) && !isNegatedInContext(goalLower, p),
       ) &&
       !finalComponentIds.some((id) => PROACTIVE_REFRESH_COMPONENTS.has(id))
+    ) {
+      unmatched_demand.push(shown);
+      continue;
+    }
+
+    // MAR-786: an ask to be TOLD, which the route has no way to carry. Checked
+    // before the lexicon because a demand noun belonging to the other half of
+    // the sentence — `price`, claimed by the page monitor's "watch the prices"
+    // hint — was clearing the whole clause and taking the telling with it.
+    if (
+      !finalComponentIds.some((id) => NOTIFY_USER_COMPONENTS.has(id)) &&
+      (NOTIFY_USER_PHRASES.some(
+        (p) => containsPhrase(clauseLower, p) && !isNegatedInContext(goalLower, p),
+      ) ||
+        NOTIFY_USER_CONVERSATIONAL_PHRASES.some(
+          (p) =>
+            containsPhrase(clauseLower, p) &&
+            !isNegatedInContext(goalLower, p) &&
+            (routeRunsUnattended || NOTIFY_EVENT_BOUND_PATTERNS.get(p)!.test(clauseLower)),
+        ))
     ) {
       unmatched_demand.push(shown);
       continue;
