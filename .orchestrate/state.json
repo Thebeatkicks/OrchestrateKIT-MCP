@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "OrchestrateKit MCP",
-  "updated_at": "2026-08-24T00:00:00Z",
+  "updated_at": "2026-08-25",
   "current_wave": "MAR-749: approval provenance v2 — approval_binding binds an approval to the payload that runs (closes MAR-540 bars #2-#6, atlas Proposal 1)",
   "authority": {
     "implementation": "Git",
@@ -448,9 +448,9 @@
     },
     {
       "id": "MAR-742",
-      "lifecycle": "planned",
+      "lifecycle": "merged",
       "linear_status": "Backlog",
-      "commit": null,
+      "commit": "3ccc5e9",
       "proof": {
         "command": "pnpm verify",
         "exact_goal_command": "pnpm exec vitest run tests/graph/matcherTokenFloor.test.ts tests/lib/runnerPostureSource.test.ts tests/tools/connectorHonesty.test.ts tests/tools/residencyQuestionCopy.test.ts"
