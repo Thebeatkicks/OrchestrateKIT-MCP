@@ -87,7 +87,7 @@ describe("MAR-398 AC1 — brief renders a card, measurably shorter on all three 
       const md = out.summary_markdown;
       // "or explicitly nothing" — silence is the failure mode this card exists
       // to remove, so the block is never simply absent.
-      expect(md).toMatch(/\*\*(What's missing|Not covered by the registry|Gaps):\*\*/);
+      expect(md).toMatch(/\*\*(What's missing|Not carried by this route|Gaps):\*\*/);
     });
   }
 });

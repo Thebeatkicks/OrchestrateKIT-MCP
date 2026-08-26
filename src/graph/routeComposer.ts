@@ -679,8 +679,12 @@ export function composeRoute(
     injectedComponentIds: injectedForCoverage,
   });
   if (coverage.unmatched_demand.length > 0) {
+    // MAR-788: was "NOT covered by any registry component" — overclaims for a
+    // step like "tell me when it drops", where a registry component exists
+    // (Slack/Telegram/email notify) but none is selected because no channel was
+    // named. Say what is true of both causes: this ROUTE carries none of them.
     warnings.push(
-      `Goal steps NOT covered by any registry component: ` +
+      `Goal steps this route does not carry: ` +
         coverage.unmatched_demand.map((p) => `"${p}"`).join("; ") +
         `. Treat these as unguided (🔵) — tell the builder/coding agent explicitly; do not assume the route handles them.`,
     );
